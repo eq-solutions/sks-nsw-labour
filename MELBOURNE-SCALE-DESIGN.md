@@ -1372,14 +1372,26 @@ Eight questions. Each has a recommendation + reasoning, but the recommendations 
 
 ### Q3. Sub-org admin model — global supervisors only, or per-region admins?
 
-**Recommendation**: **Per-region admins** in Wave 4 (multi-region). RLS already requires `region_id` scoping for the data; layering a `users.region_id_admin` role onto that costs little extra.
+**Status**: 🔒 **DECIDED 2026-05-13** — per-region admins, Wave 4. Royce locked the recommendation.
+
+**Recommendation (now decided)**: **Per-region admins** in Wave 4 (multi-region). RLS already requires `region_id` scoping for the data; layering a `users.region_id_admin` role onto that costs little extra.
 
 **Reasoning**:
 - Melbourne's reality: the VIC office runs VIC; the NSW office runs NSW. A NSW supervisor who can edit a VIC roster is the wrong shape.
 - Implementation: add `users.role text` (`viewer` / `supervisor` / `admin`) and `users.region_id` (the region they admin). Cross-region admins flagged separately (`is_super_admin` from Section 5) for finance / IT roles.
 - Doesn't replace global supervisors — those are users with `region_id = NULL` and `role = 'admin'`.
+- **Sits cleanly on top of the existing 5-tier `eq_role` system** (manager / supervisor / employee / apprentice / labour_hire) — the tier tells you WHAT a user can do; `region_id` tells you WHO they can do it for. Orthogonal extension, not a replacement.
+- "manager" tier in Wave 4 becomes "org_admin" (existing role tier renamed). New tier "regional_manager" added between "manager" and "supervisor" — sees only their region's data.
 
 **Cost of NOT doing this**: tenants with multiple regions will share the supervisor PIN across the whole company, including data they shouldn't be editing. Privacy / governance issues.
+
+**Foundation state (2026-05-13)**:
+- ✅ `eq_role` enum + `people.role` column applied to BOTH Supabase projects (EQ + SKS)
+- ✅ Backfill: EQ has 19 employees / 1 supervisor; SKS has 52 employees / 7 supervisors
+- ❌ `regions` table — not yet created (Wave 4 deliverable)
+- ❌ `region_id` columns on people / sites / managers — not yet (Wave 4)
+- ❌ "regional_manager" tier — not yet added to enum (Wave 4)
+- ❌ Server-side RLS enforcement — not yet (security architecture v2.0 item, Wave 4-5)
 
 ### Q4. Labour-hire vendor portal — in scope or v3+?
 
@@ -1447,7 +1459,7 @@ Eight questions. Each has a recommendation + reasoning, but the recommendations 
 |---|---|---|---|
 | 1 | EQ → SEED forever or real? | Starter SEED forever | Before Wave 1 starts |
 | 2 | Per-region pricing? | No (v1) | Wave 4 design phase |
-| 3 | Sub-org admin model? | Per-region admins | Wave 4 (~Month 5) |
+| 3 | Sub-org admin model? | 🔒 **Per-region admins (DECIDED 2026-05-13)** | Wave 4 (~Month 5) |
 | 4 | Labour-hire vendor portal? | v3+ separate product | After Wave 4 ships |
 | 5 | SOC 2 certification? | When a customer asks | When a deal demands |
 | 6 | Self-serve onboarding? | Wave 5 (Month 7+) | After Waves 1-4 stable |
