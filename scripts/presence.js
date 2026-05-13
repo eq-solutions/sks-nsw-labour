@@ -129,14 +129,19 @@ function _presenceApplyChange(evType, record, oldRec) {
     return;
   }
   if (!record) return;
-  // Skip our own presence — we don't outline our own focused cell.
-  if (_isOwnPresence(record)) return;
+  // v3.4.60: keep own presence too, tagged with isSelf, so we render a
+  // dimmer "you-are-here" outline. Was previously hard-skipped here,
+  // which left single-user testing with no visual feedback that the
+  // feature was wired up. Other supervisors still get the bold purple
+  // outline + tooltip (different CSS class).
+  const isSelf = _isOwnPresence(record);
 
   const k = _presenceKey(record.week, record.cell_name, record.cell_day);
   _activePresence.set(k, {
     manager:    record.manager_name,
     focused_at: record.focused_at,
-    ts:         Date.now()
+    ts:         Date.now(),
+    isSelf
   });
   _presenceRender();
 }
@@ -147,9 +152,10 @@ function _presenceRender() {
   // Only run on pages with editor cells visible.
   if (typeof currentPage === 'undefined' || currentPage !== 'editor') return;
 
-  // Clear all existing outlines first — cheap; presence is rare.
-  document.querySelectorAll('#editor-content .presence-outline').forEach(el => {
-    el.classList.remove('presence-outline');
+  // v3.4.60: clear BOTH outline variants — other-supervisor (bold purple
+  // with tooltip) AND self (thin dashed, no tooltip).
+  document.querySelectorAll('#editor-content .presence-outline, #editor-content .presence-outline-self').forEach(el => {
+    el.classList.remove('presence-outline', 'presence-outline-self');
     el.removeAttribute('data-presence-by');
   });
 
@@ -168,8 +174,15 @@ function _presenceRender() {
     if (!inp) continue;
     const wrapper = inp.closest('.editor-day') || inp.parentElement;
     if (!wrapper) continue;
-    wrapper.classList.add('presence-outline');
-    wrapper.setAttribute('data-presence-by', v.manager + ' is editing');
+    // v3.4.60: self gets a different class — thin/dashed, no tooltip
+    // ("you-are-here" marker). Multi-user keeps the bold purple
+    // "X is editing" outline.
+    if (v.isSelf) {
+      wrapper.classList.add('presence-outline-self');
+    } else {
+      wrapper.classList.add('presence-outline');
+      wrapper.setAttribute('data-presence-by', v.manager + ' is editing');
+    }
   }
 }
 window._presenceRender = _presenceRender;

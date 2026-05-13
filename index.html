@@ -190,8 +190,35 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.59
+  EQ Solves — Field  v3.4.60
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.60  (sidebar reorg + self-presence outline)
+  ────────────────────────────────────────────────────────────
+  • Post-deploy feedback after v3.4.59 went live on both EQ + SKS.
+    Three small changes:
+  • SIDEBAR — "Forecast" section label renamed to "Operations".
+    Section actually contains current-week views, not forecast
+    views. Frees up "Forecast" for the Melbourne-scale 52-week
+    labour-forecast page when it ships (MELBOURNE-SCALE-DESIGN.md
+    §2). Desktop sidebar + mobile drawer.
+  • LEAVE PROMOTED — moved from BETA section at the bottom (past
+    Help / Job Numbers / Apprentices) up into Operations between
+    Weekly Roster and Timesheets. BETA chip dropped — feature has
+    been stable across v3.4.40-59 battle-testing.
+  • PRESENCE — self-outline added. presence.js was hard-skipping
+    your OWN presence rows, so single-user testing showed no
+    visual feedback even when DB INSERTs were succeeding. Now:
+    self gets a thin 1px dashed outline (no tooltip — it's
+    obviously you). Other supervisors keep the bold 2px purple
+    outline + "X is editing" tooltip.
+  • Both apps (EQ demo + SKS prod).
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.59 (history)
 
   CHANGES IN v3.4.59  (BATTLE-TEST Round 1 closeout: 5 fixes + 1 new bug + RLS migration)
   ────────────────────────────────────────────────────────────
@@ -1458,7 +1485,7 @@
   </div>
   <div class="nav">
     <div class="nav-section">
-      <div class="nav-label">Forecast</div>
+      <div class="nav-label">Operations</div>
       <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">◈</span> Dashboard</button>
       <button class="nav-item" onclick="showPage('schedule')" id="nav-schedule"><span class="nav-icon">◷</span> My Schedule</button>
       <button class="nav-item" onclick="showPage('calendar')" id="nav-calendar"><span class="nav-icon">📅</span> Calendar</button>
@@ -1466,6 +1493,7 @@
       <button class="nav-item" onclick="showPage('managers')" id="nav-managers"><span class="nav-icon">☎</span> Supervision <span class="nav-badge" id="badge-managers">0</span></button>
       <button class="nav-item" onclick="showPage('sites')" id="nav-sites"><span class="nav-icon">⬡</span> Sites</button>
       <button class="nav-item" onclick="showPage('roster')" id="nav-roster"><span class="nav-icon">⊞</span> Weekly Roster</button>
+      <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets</button>
     </div>
     <div class="nav-section">
@@ -1479,7 +1507,6 @@
     <div class="nav-section">
       <div class="nav-label">Testing (DO NOT USE)</div>
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
@@ -1876,12 +1903,13 @@
   <div id="mobile-drawer-backdrop" onclick="closeMobileDrawer()"></div>
   <div id="mobile-drawer-panel">
     <div class="drawer-handle"></div>
-    <div class="drawer-label">Forecast</div>
+    <div class="drawer-label">Operations</div>
     <button class="drawer-item" onclick="mobileNav('dashboard');closeMobileDrawer()" id="ditem-dashboard"><span class="d-icon">◈</span> Dashboard</button>
     <button class="drawer-item" onclick="mobileNav('calendar');closeMobileDrawer()" id="ditem-calendar"><span class="d-icon">📅</span> Calendar</button>
     <button class="drawer-item" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
     <button class="drawer-item" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
     <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
+    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave</button>
     <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets</button>
     <div class="drawer-divider"></div>
     <div class="drawer-label">Manage</div>
@@ -1890,8 +1918,7 @@
     <button class="drawer-item" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
     <button class="drawer-item" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
     <div class="drawer-divider"></div>
-    <div class="drawer-label">Testing (DO NOT USE)</div>
-    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences <span class="beta-tag">BETA</span></button>
+    <div class="drawer-label">Beta</div>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
