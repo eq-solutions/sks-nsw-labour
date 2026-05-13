@@ -864,10 +864,16 @@ async function triggerLeaveEmail(type, record) {
     } else return;
 
     const eqToken = sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_agent_token') || '';
+    // v3.4.59: BATTLE-TEST #18 — defensive CRLF strip on subjects. Resend
+    // encodes MIME headers server-side, but stripping CR/LF here means a
+    // requester_name containing newlines can't smuggle extra headers even
+    // if a future provider doesn't encode robustly. Cheap insurance against
+    // the SMTP header-injection class of bug.
+    const safeSubject = String(subject || '').replace(/[\r\n]+/g, ' ').trim();
     const resp = await fetch('/.netlify/functions/send-email', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'x-eq-token': eqToken },
-      body:    JSON.stringify({ to: [to], cc: cc.length ? cc : undefined, subject, html })
+      body:    JSON.stringify({ to: [to], cc: cc.length ? cc : undefined, subject: safeSubject, html })
     });
     const data = await resp.json();
     if (resp.ok) {

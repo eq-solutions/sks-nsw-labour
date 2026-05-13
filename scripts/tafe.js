@@ -57,11 +57,24 @@ function tafeWeekKeyToMonday(weekKey) {
 }
 
 // True if the given day of that week falls inside any TAFE holiday range.
+// v3.4.59: BATTLE-TEST #48 — was using `.toISOString().slice(0,10)` which
+// is the UTC date. tafeWeekKeyToMonday() above constructs a LOCAL midnight
+// (`new Date(year, month, day)`) — in any Australian timezone (+8 to +11)
+// the corresponding UTC instant is the PREVIOUS calendar day. So a TAFE
+// day of Monday 2026-04-27 (local) would convert to UTC "2026-04-26" and
+// the holiday-range comparison against the plaintext YYYY-MM-DD config
+// would always miss by one day. The server-side Edge Function does the
+// same work using all-UTC operations, so server-side was always correct;
+// this fix brings the client into agreement so the manual "🎓 Apply TAFE
+// Day" button respects holiday config the same way the Sunday cron does.
 function tafeIsHolidayForDay(monday, dayIdx /* 0=Mon..4=Fri */) {
   if (!monday) return false;
   const d = new Date(monday);
   d.setDate(d.getDate() + dayIdx);
-  const iso = d.toISOString().slice(0, 10);
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  const iso  = `${yyyy}-${mm}-${dd}`;
   return tafeHolidays.some(h => iso >= h.start && iso <= h.end);
 }
 

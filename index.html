@@ -194,6 +194,48 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.59
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.59  (BATTLE-TEST Round 1 closeout: 5 fixes + 1 new bug + RLS migration)
+  ────────────────────────────────────────────────────────────
+  • Round 1 closeout after Royce returned from holidays. Picked off
+    the deferred items + ran the DST/timezone edge-case probe.
+  • #45 (FIXED) — auth.js token mint was fire-and-forget IIFE.
+    Fast-clicker leave submissions in the first ~200ms of session
+    raced against the mint and sent without an x-eq-token, getting
+    silently rejected by send-email. Extracted helper, await with
+    3s AbortController bound. Login adds 100-300ms typical latency;
+    no more silent email drops.
+  • #47 (FIXED) — auth.js outer catch path left the typed PIN in
+    the DOM input on connection error. One-line clear added.
+  • #18 (FIXED) — leave.js triggerLeaveEmail subjects now CRLF-
+    stripped before send-email fetch. Defensive guard against
+    SMTP header injection if Resend ever stops encoding for us.
+  • #39 (FIXED) — digest-settings.js inline onchange="toggleDigest(
+    '${m.id}',…)" replaced with data-digest-id + delegated listener.
+    Eliminates the bug class if a future schema lets ids contain
+    quotes/backslashes.
+  • #48 (NEW + FIXED) — DST/timezone probe found that scripts/tafe.js
+    tafeIsHolidayForDay was using .toISOString().slice(0,10) on a
+    LOCAL-midnight Date. For any Australian timezone (UTC+8 to +11)
+    that's the PREVIOUS day, so the manual "🎓 Apply TAFE Day"
+    button IGNORED holiday config — filled TAFE on actual school-
+    holiday days. Server Edge Function (Sunday cron) was always
+    correct (all-UTC ops); only the client was off. Replaced with
+    manual local-date format (getFullYear/getMonth/getDate).
+  • #4 (MIGRATION WRITTEN) — roster_presence INSERT policy now
+    requires manager_name to exist in the managers table. Eliminates
+    ghost-manager creation. UPDATE/DELETE stay open (anon-key auth
+    model can't enforce per-user mutation; full fix is the Wave 5+
+    SSO conversation). Migration not yet applied — Royce to run on
+    both EQ + SKS Supabase projects.
+  • Demo only.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
   EQ Solves — Field  v3.4.58
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 

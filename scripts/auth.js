@@ -15,6 +15,44 @@ let staffTsPerson = null;
 let agencyMode    = false;
 let agencyName    = '';
 
+// v3.4.59: BATTLE-TEST #45 — bounded token mint so checkPin() can await
+// the verify-pin → sessionToken roundtrip before showing the app. Was
+// fire-and-forget which raced fast-clicker leave submissions (the
+// triggerLeaveEmail fetch fires before the token lands in localStorage,
+// send-email rejects on missing x-eq-token, email silently drops).
+// AbortController bounds the wait to 3s so a dead verify-pin can't
+// hang the login UI — failure path just proceeds without a token,
+// matching the original "non-fatal" intent.
+async function _mintAndStoreEqToken(code, name) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const resp = await fetch('/.netlify/functions/verify-pin', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ code, name, remember: false }),
+      signal:  controller.signal
+    });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (data && data.valid && data.sessionToken) {
+      localStorage.setItem('eq_agent_token', data.sessionToken);
+      sessionStorage.setItem('eq_session_token', data.sessionToken);
+      console.info('EQ[auth] agent token minted');
+      return data.sessionToken;
+    }
+    console.warn('EQ[auth] agent token NOT minted — verify-pin returned', data);
+  } catch (e) {
+    clearTimeout(timer);
+    if (e && e.name === 'AbortError') {
+      console.warn('EQ[auth] agent token mint timed out (3s) — proceeding without');
+    } else {
+      console.warn('EQ[auth] agent token mint failed:', e && e.message || e);
+    }
+  }
+  return null;
+}
+
 // ── Gate dropdown ─────────────────────────────────────────────
 
 let gateNameList = [];
@@ -203,33 +241,16 @@ async function checkPin() {
       // ── Mint a server-side session token for protected features ──
       // The local code-gate doesn't talk to the server, so features like
       // send-email and EQ Agent (which call Netlify functions) have nothing
-      // to authenticate with. Fire-and-forget the same code to verify-pin,
-      // which compares against STAFF_CODE/MANAGER_CODE env vars per-tenant
-      // and returns a signed 7-day session token. Failures are silent —
+      // to authenticate with. Mint the same code via verify-pin, which
+      // compares against STAFF_CODE/MANAGER_CODE env vars per-tenant and
+      // returns a signed 7-day session token. Failures are silent —
       // core app functionality doesn't depend on this.
       // v3.4.37: lifted eq/demo exclusion — both tenants now have Netlify
       // backends and need tokens for send-email to work.
-      {
-        (async () => {
-          try {
-            const resp = await fetch('/.netlify/functions/verify-pin', {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ code: val, name, remember: false })
-            });
-            const data = await resp.json();
-            if (data && data.valid && data.sessionToken) {
-              localStorage.setItem('eq_agent_token', data.sessionToken);
-              sessionStorage.setItem('eq_session_token', data.sessionToken);
-              console.info('EQ[auth] agent token minted');
-            } else {
-              console.warn('EQ[auth] agent token NOT minted — verify-pin returned', data);
-            }
-          } catch (e) {
-            console.warn('EQ[auth] agent token mint failed:', e && e.message || e);
-          }
-        })();
-      }
+      // v3.4.59: BATTLE-TEST #45 — await the mint (3s bounded) so subsequent
+      // protected fetches have a token. Was IIFE fire-and-forget which
+      // raced fast-clicker leave submissions on slow connections.
+      await _mintAndStoreEqToken(val, name);
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
@@ -252,26 +273,9 @@ async function checkPin() {
       if (role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
       // Mint a server-side session token so demo can call protected
       // endpoints (send-email etc). Demo only — eq tenant has no backend.
+      // v3.4.59: BATTLE-TEST #45 — await (was IIFE fire-and-forget).
       if (TENANT.ORG_SLUG === 'demo') {
-        (async () => {
-          try {
-            const resp = await fetch('/.netlify/functions/verify-pin', {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ code: val, name, remember: false })
-            });
-            const data = await resp.json();
-            if (data && data.valid && data.sessionToken) {
-              localStorage.setItem('eq_agent_token', data.sessionToken);
-              sessionStorage.setItem('eq_session_token', data.sessionToken);
-              console.info('EQ[auth] demo agent token minted');
-            } else {
-              console.warn('EQ[auth] demo agent token NOT minted — verify-pin returned', data);
-            }
-          } catch (e) {
-            console.warn('EQ[auth] demo agent token mint failed:', e && e.message || e);
-          }
-        })();
+        await _mintAndStoreEqToken(val, name);
       }
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
@@ -329,6 +333,13 @@ async function checkPin() {
   } catch (e) {
     const btn = document.querySelector('.gate-btn');
     btn.textContent = 'Enter'; btn.disabled = false;
+    // v3.4.59: BATTLE-TEST #47 — clear the PIN input on the outer catch
+    // path. Success + known-failure paths already clear it; only the
+    // network-error / JSON-parse-fail path was leaving the typed PIN
+    // visible in the DOM (browser dev-tools / accidental screen-share /
+    // form auto-fill exposure).
+    const pinInput = document.getElementById('gate-pin');
+    if (pinInput) pinInput.value = '';
     document.getElementById('gate-err').textContent = 'Connection error: ' + e.message;
   }
 }
