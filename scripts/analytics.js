@@ -243,14 +243,56 @@ function _reset() {
 }
 
 // ── Day-one event helpers ─────────────────────────────────────
-// See plan §5.1. Keep the taxonomy tight: 11 events. Don't add more
+// See plan §5.1. Keep the taxonomy tight: 12 events. Don't add more
 // without updating the doc. Call sites fire via EQ_ANALYTICS.events.*.
+//
+// v3.4.66: pageViewed added. Required because the app is a SPA — the
+// URL never changes when navigating between Dashboard / Leave / Roster
+// etc. PostHog's auto $pageview only fires on initial load, so without
+// this hook every event landed under '/' and "Top pages" / heatmaps /
+// funnels were useless. pageViewed fires from showPage() in index.html
+// on every navigation, AND mirrors the event into a synthetic $pageview
+// (with a virtual URL like /#leave) so PostHog's built-in path + time
+// reports also work. Also tags the Clarity session so per-page
+// heatmaps separate properly.
 const _events = {
   sessionStarted: function (p) {
     _track('session_started', {
       device_type:   (p && p.device_type)   || _deviceTypeGuess(),
       pwa_installed: (p && p.pwa_installed) || _isPwaInstalled(),
     });
+  },
+
+  pageViewed: function (p) {
+    var page = (p && p.page) || 'unknown';
+    // 1. Structured event — for funnels + simple counts.
+    _track('page_viewed', { page: page });
+    // 2. Super-property — every subsequent event also tagged with the
+    //    current page (lets you filter ANY event in PostHog by page).
+    try {
+      if (window.posthog && typeof window.posthog.register === 'function') {
+        window.posthog.register({ current_page: page });
+      }
+    } catch (_) { /* PostHog stub may not support register yet */ }
+    // 3. Synthetic $pageview — PostHog's built-in path/funnel/time-on-page
+    //    reports key off $pageview events with $current_url. Virtual URL
+    //    has #<page> so each section appears as its own entry. Real URL
+    //    stays the same so user-facing links and referrers don't break.
+    try {
+      if (window.posthog && typeof window.posthog.capture === 'function') {
+        var virtualUrl = window.location.origin + window.location.pathname + '#' + page;
+        window.posthog.capture('$pageview', {
+          $current_url: virtualUrl,
+          page: page,
+        });
+      }
+    } catch (_) { /* noop */ }
+    // 4. Clarity session tag — separates heatmaps + recordings per page.
+    try {
+      if (typeof window.clarity === 'function') {
+        window.clarity('set', 'page', page);
+      }
+    } catch (_) { /* noop */ }
   },
 
   timesheetViewed: function (p) {

@@ -194,7 +194,38 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.65
+  EQ Solves — Field  v3.4.66
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.66  (SPA pageview tracking — fix PostHog/Clarity blind spot)
+  ────────────────────────────────────────────────────────────
+  • Royce flagged that PostHog/Clarity were seeing everything as
+    one URL. Confirmed: this app is a SPA — showPage(id) updates
+    the DOM but never changes the URL, so PostHog's auto
+    $pageview only fired on initial load and every event landed
+    under '/'. Top-pages report, heatmaps, funnels: all useless.
+  • Fix: new `pageViewed` helper in EQ_ANALYTICS.events (the 12th
+    canonical event in the taxonomy). Fires from showPage() on
+    every navigation. Does four things at once:
+    1. _track('page_viewed', { page: id }) — structured event
+       for funnels + counts (e.g. "users who viewed Leave →
+       submitted a request")
+    2. posthog.register({ current_page: id }) — super-property
+       attached to all subsequent events (filter ANY event by
+       current_page in PostHog)
+    3. posthog.capture('$pageview', { $current_url: virtualUrl })
+       with a virtual URL like /#leave — unlocks PostHog's
+       built-in path-analysis, time-on-page, and pageleave reports
+    4. clarity('set', 'page', id) — tags the Clarity session so
+       heatmaps + recordings separate per page
+  • Existing events (roster_viewed, timesheet_viewed, etc.)
+    continue to fire independently — page_viewed is additive.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.65 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.65  (send-email.js — bigint leave_id coercion for SKS)
@@ -2307,6 +2338,18 @@ function showPage(id) {
   const lb = document.getElementById('legend-bar');
   if (lb) lb.style.display = (id === 'roster') ? '' : 'none';
   renderCurrentPage();
+  // v3.4.66: synthetic SPA pageview. URL doesn't change when navigating
+  // between pages in this app — without this hook PostHog/Clarity see
+  // everything under '/' and "Top pages" / heatmaps / funnels are useless.
+  // pageViewed fires a `page_viewed` event, registers `current_page` as
+  // a super-property (tags all subsequent events), AND mirrors a synthetic
+  // $pageview with a virtual URL so PostHog's built-in path/time reports
+  // also work. Plus a clarity('set', 'page', id) tag for heatmap separation.
+  try {
+    if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events && window.EQ_ANALYTICS.events.pageViewed) {
+      window.EQ_ANALYTICS.events.pageViewed({ page: id });
+    }
+  } catch (e) { /* analytics must never break navigation */ }
 }
 
 function renderCurrentPage() {
