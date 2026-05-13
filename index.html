@@ -190,8 +190,52 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.61
+  EQ Solves — Field  v3.4.63
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.63  (one-click email approval — magic-link Approve/Reject)
+  ────────────────────────────────────────────────────────────
+  • New feature ported from the `nervous-joliot` WIP branch (which
+    was on its own a parallel design that never shipped). Productionised
+    because every loop iteration this morning ended with Royce asking
+    "could approval just be done from the email?" — yes, now it can.
+  • SUPERVISOR EMAIL — leave request email now has ✓ Approve and
+    ✕ Reject buttons. One tap on a phone, no app login. The link is
+    valid for 7 days, single-use (idempotent — second click shows
+    "already actioned"), and bound to the named approver email so
+    a requester can't redirect their own approval link.
+  • FRIDAY DIGEST — section 1 "Pending your approval" now has the
+    same Approve/Reject buttons inline per row. Graceful degrade:
+    if EQ_SECRET_SALT isn't set on the Supabase function, the
+    Action column is hidden and v3.4.62 behaviour persists.
+  • SECURITY DESIGN — HMAC-SHA256 tokens signed server-side only
+    (browser never sees the token before send), `kind:'leave-action'`
+    field disambiguates from session tokens, constant-time HMAC
+    compare, 7-day expiry, audit log entry per click. send-email.js
+    overrides `to:` with the canonical approver email so a malicious
+    caller can't redirect the link to their own inbox.
+  • FILES SHIPPED
+    - netlify/functions/approve-leave.js (NEW, 314 lines)
+    - netlify/functions/send-email.js (magic-link mode added)
+    - scripts/leave.js (Approve/Reject buttons in new_request email)
+    - supabase/functions/supervisor-digest/index.ts (signing helpers
+      + Action column; requires manual `supabase functions deploy
+      supervisor-digest` for the Friday digest piece to work)
+  • ENV VARS REQUIRED on Netlify (both SKS + EQ projects):
+    - EQ_SECRET_SALT (already set; same as verify-pin)
+    - AUDIT_SB_URL    (NEW — Supabase REST URL, https://*.supabase.co)
+    - AUDIT_SB_KEY    (NEW — publishable key for that project)
+    - APP_ORIGIN      (already set on each project's domain)
+  • ENV VARS REQUIRED on Supabase functions (both projects):
+    - EQ_SECRET_SALT (same value as Netlify)
+    - APP_ORIGIN     (the relevant Netlify origin — used to build the
+                      magic-link URLs in the Friday digest)
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.61 (history)
 
   CHANGES IN v3.4.61  (auth.js — Executive supervisors can unlock again)
   ────────────────────────────────────────────────────────────

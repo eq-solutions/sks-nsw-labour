@@ -86,6 +86,45 @@ function escHtml(s: unknown): string {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// ── Magic-link signing (v3.4.63) ─────────────────────────────
+// Mints a token verified by netlify/functions/approve-leave.js.
+// EQ_SECRET_SALT must be the SAME value as the Netlify project's
+// EQ_SECRET_SALT (set as a Supabase function secret too) — otherwise
+// the signatures won't match and every click lands on "expired".
+//
+// Token format mirrors verify-pin's session token:
+//   base64(JSON payload) + '.' + hex(HMAC-SHA256)
+// `kind: 'leave-action'` makes the signing-key reuse explicit —
+// the same key signs session tokens, but those have no `kind` and
+// approve-leave.js refuses anything that isn't 'leave-action'.
+const LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function utf8ToBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+function bytesToHex(buf: ArrayBuffer): string {
+  const arr = new Uint8Array(buf);
+  let hex = "";
+  for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, "0");
+  return hex;
+}
+async function signLeaveActionToken(secret: string, leaveId: string, action: "approve" | "reject", approverEmail: string): Promise<string> {
+  const payload = JSON.stringify({
+    kind: "leave-action",
+    leave_id: leaveId,
+    action,
+    approver_email: approverEmail,
+    exp: Date.now() + LEAVE_ACTION_TTL_MS,
+  });
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+  return utf8ToBase64(payload) + "." + bytesToHex(sigBuf);
+}
+
 async function sendEmail(opts: { to: string; subject: string; html: string }): Promise<{ ok: boolean; detail: string }> {
   const transport = (Deno.env.get("DIGEST_TRANSPORT") || "resend").toLowerCase();
   if (transport === "resend") {
@@ -123,6 +162,9 @@ function buildDigestHtml(params: {
   weekKeyPrev: string;
   leaveNextWeek: LeaveReq[];
   pendingForMe: LeaveReq[];
+  // v3.4.63: per-pending-leave magic-link URLs keyed by leave id.
+  // When provided, each row gets ✓ Approve / ✕ Reject buttons.
+  pendingActions: Record<string, { approveUrl: string; rejectUrl: string }>;
   unrosteredSummary: { total: number; byGroup: Array<{ group: string; n: number }> };
   tsCompletion: {
     submitted: number; expected: number;
@@ -131,7 +173,7 @@ function buildDigestHtml(params: {
   };
   appOrigin: string;
 }): string {
-  const { orgName, supervisorName, weekKeyNext, weekKeyPrev, leaveNextWeek, pendingForMe, unrosteredSummary, tsCompletion, appOrigin } = params;
+  const { orgName, supervisorName, weekKeyNext, weekKeyPrev, leaveNextWeek, pendingForMe, pendingActions, unrosteredSummary, tsCompletion, appOrigin } = params;
 
   const nextMondayISO = fmtISODate(mondayDate(weekKeyNext));
   const nextSundayDate = new Date(mondayDate(weekKeyNext));
@@ -148,9 +190,24 @@ function buildDigestHtml(params: {
     ? leaveNextWeek.map((r) => `<tr><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${escHtml(r.requester_name)}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${escHtml(r.leave_type || "—")}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${fmtPrettyDate(r.date_start)} → ${fmtPrettyDate(r.date_end)}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB;color:#6B7280">${escHtml(r.approver_name || "—")}</td></tr>`).join("")
     : `<tr><td colspan="4" style="padding:12px 10px;color:#6B7280;border-top:1px solid #E5E7EB;font-style:italic">Nobody approved off next week.</td></tr>`;
 
+  // v3.4.63: per-row Approve/Reject magic-link buttons when pendingActions
+  // is populated. Falls back to dash when token-mint failed (e.g. salt
+  // missing) so the email still renders. Single colspan = 5 (one extra
+  // column for buttons) when ANY row has actions; otherwise 4 (legacy).
+  const hasActions = !!(pendingActions && Object.keys(pendingActions).length);
+  const colspan = hasActions ? 5 : 4;
   const pendingRows = pendingForMe.length
-    ? pendingForMe.map((r) => `<tr><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${escHtml(r.requester_name)}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${escHtml(r.leave_type || "—")}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${fmtPrettyDate(r.date_start)} → ${fmtPrettyDate(r.date_end)}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB;color:#6B7280">${escHtml((r.note || "").slice(0, 80))}</td></tr>`).join("")
-    : `<tr><td colspan="4" style="padding:12px 10px;color:#6B7280;border-top:1px solid #E5E7EB;font-style:italic">No pending requests waiting on you.</td></tr>`;
+    ? pendingForMe.map((r) => {
+        const actions = pendingActions && pendingActions[r.id];
+        const actionCell = hasActions
+          ? `<td style="padding:8px 10px;border-top:1px solid #E5E7EB;white-space:nowrap">${actions
+              ? `<a href="${escHtml(actions.approveUrl)}" style="display:inline-block;background:#16A34A;color:white;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:600;margin-right:4px">✓ Approve</a><a href="${escHtml(actions.rejectUrl)}" style="display:inline-block;background:#DC2626;color:white;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:600">✕ Reject</a>`
+              : `<span style="color:#9CA3AF;font-size:11px">—</span>`
+            }</td>`
+          : "";
+        return `<tr><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${escHtml(r.requester_name)}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${escHtml(r.leave_type || "—")}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB">${fmtPrettyDate(r.date_start)} → ${fmtPrettyDate(r.date_end)}</td><td style="padding:8px 10px;border-top:1px solid #E5E7EB;color:#6B7280">${escHtml((r.note || "").slice(0, 80))}</td>${actionCell}</tr>`;
+      }).join("")
+    : `<tr><td colspan="${colspan}" style="padding:12px 10px;color:#6B7280;border-top:1px solid #E5E7EB;font-style:italic">No pending requests waiting on you.</td></tr>`;
 
   // v3.4.9.3-preserved: unrostered is a group summary (not a name list)
   // — keeps the digest scannable at SKS scale (50+ names is too much).
@@ -189,7 +246,7 @@ function buildDigestHtml(params: {
 
     <div style="background:white;padding:20px 24px;border:1px solid #E5E7EB;border-top:none">
       <h3 style="margin:0 0 6px;font-size:15px;color:#1F335C">1. Pending your approval <span style="color:#D97706">${pendingForMe.length ? `(${pendingForMe.length})` : ""}</span></h3>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;color:#374151"><thead><tr style="text-align:left;color:#6B7280;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 10px">Who</th><th style="padding:6px 10px">Type</th><th style="padding:6px 10px">Dates</th><th style="padding:6px 10px">Note</th></tr></thead><tbody>${pendingRows}</tbody></table>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;color:#374151"><thead><tr style="text-align:left;color:#6B7280;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 10px">Who</th><th style="padding:6px 10px">Type</th><th style="padding:6px 10px">Dates</th><th style="padding:6px 10px">Note</th>${hasActions ? `<th style="padding:6px 10px">Action</th>` : ""}</tr></thead><tbody>${pendingRows}</tbody></table>
       ${pendingForMe.length ? `<div style="margin-top:14px"><a href="${escHtml(appOrigin)}" style="display:inline-block;background:#1F335C;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review in App →</a></div>` : ""}
     </div>
 
@@ -315,6 +372,11 @@ async function runForOrg(sb: SupabaseClient, orgId: string, orgName: string, opt
       email: emailByName[name] || null,
     }));
 
+  // v3.4.63: optional magic-link signing — populated when EQ_SECRET_SALT
+  // is set on the function. Tokens are minted per-supervisor per-leave so
+  // each link is bound to the right approver email + leave id.
+  const secret = Deno.env.get("EQ_SECRET_SALT") || "";
+
   let sent = 0;
   const errors: string[] = [];
   const sendIntervalMs = Math.max(0, parseInt(Deno.env.get("DIGEST_SEND_INTERVAL_MS") || "600", 10));
@@ -323,6 +385,26 @@ async function runForOrg(sb: SupabaseClient, orgId: string, orgName: string, opt
     if (!mgr.email) continue;
     const pendingForMe = pendingAll.filter((r) => r.approver_name === mgr.name).sort((a, b) => (a.date_start || "").localeCompare(b.date_start || ""));
 
+    // v3.4.63: mint a pair of magic-link URLs per pending request for this
+    // approver. Empty object when secret isn't set, which disables the
+    // Action column entirely (graceful degrade to v3.4.62 behaviour).
+    const pendingActions: Record<string, { approveUrl: string; rejectUrl: string }> = {};
+    if (secret && pendingForMe.length) {
+      for (const r of pendingForMe) {
+        if (!r.id) continue;
+        try {
+          const approveTok = await signLeaveActionToken(secret, r.id, "approve", String(mgr.email).toLowerCase());
+          const rejectTok  = await signLeaveActionToken(secret, r.id, "reject",  String(mgr.email).toLowerCase());
+          pendingActions[r.id] = {
+            approveUrl: `${opts.appOrigin}/.netlify/functions/approve-leave?t=${encodeURIComponent(approveTok)}`,
+            rejectUrl:  `${opts.appOrigin}/.netlify/functions/approve-leave?t=${encodeURIComponent(rejectTok)}`,
+          };
+        } catch (e) {
+          console.warn("supervisor-digest: token-mint failed for leave", r.id, e instanceof Error ? e.message : e);
+        }
+      }
+    }
+
     const html = buildDigestHtml({
       orgName,
       supervisorName: mgr.name,
@@ -330,6 +412,7 @@ async function runForOrg(sb: SupabaseClient, orgId: string, orgName: string, opt
       weekKeyPrev,
       leaveNextWeek: leaveOverlap.slice().sort((a, b) => (a.date_start || "").localeCompare(b.date_start || "")),
       pendingForMe,
+      pendingActions,
       unrosteredSummary,
       tsCompletion: { submitted, expected, missing, scopeLabel: tsScopeLabel },
       appOrigin: opts.appOrigin,

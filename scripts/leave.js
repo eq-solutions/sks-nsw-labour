@@ -785,6 +785,11 @@ async function triggerLeaveEmail(type, record) {
       to      = mgr.email;
       cc      = leaveCCList.filter(e => e && e !== to);
       subject = `Leave Request: ${record.requester_name} — ${typeLabels[record.leave_type] || record.leave_type} (${record.date_start} to ${record.date_end})`;
+      // v3.4.63: magic-link Approve/Reject buttons. The {{APPROVE_URL}} and
+      // {{REJECT_URL}} placeholders are substituted server-side by send-email.js
+      // — the browser never sees the signed tokens, so the requester can't
+      // mint their own approval link. The function also overrides the to:
+      // with the canonical approver email resolved from leave_requests.approver_name.
       html    = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto">
         <div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">
           <h2 style="color:white;margin:0;font-size:18px">Leave Request</h2>
@@ -797,8 +802,16 @@ async function triggerLeaveEmail(type, record) {
             <tr><td style="padding:8px 0;color:#6B7280">Dates</td><td style="padding:8px 0;font-weight:600">${record.date_start} to ${record.date_end}</td></tr>
             ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
           </table>
-          <div style="margin-top:20px">
-            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review in App →</a>
+          <div style="margin:20px 0 8px;padding:14px;background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px">
+            <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600">One-click action — link is valid for 7 days</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <a href="{{APPROVE_URL}}" style="display:inline-block;background:#16A34A;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">✓ Approve</a>
+              <a href="{{REJECT_URL}}" style="display:inline-block;background:#DC2626;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">✕ Reject</a>
+            </div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:8px">Rejecting from email won't capture a reason — open the app to add one.</div>
+          </div>
+          <div style="margin-top:14px">
+            <a href="${window.location.origin}" style="display:inline-block;background:transparent;color:#1F335C;padding:8px 0;text-decoration:none;font-size:12px;font-weight:600">Or review in app →</a>
           </div>
         </div>
       </div>`;
@@ -870,10 +883,17 @@ async function triggerLeaveEmail(type, record) {
     // if a future provider doesn't encode robustly. Cheap insurance against
     // the SMTP header-injection class of bug.
     const safeSubject = String(subject || '').replace(/[\r\n]+/g, ' ').trim();
+    // v3.4.63: only the new_request email contains magic-link placeholders;
+    // the server-side substitution + to: override only runs when
+    // leaveActionContext is present, so other email types pass through unchanged.
+    const reqBody = { to: [to], cc: cc.length ? cc : undefined, subject: safeSubject, html };
+    if (type === 'new_request' && record && record.id) {
+      reqBody.leaveActionContext = { leave_id: record.id };
+    }
     const resp = await fetch('/.netlify/functions/send-email', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'x-eq-token': eqToken },
-      body:    JSON.stringify({ to: [to], cc: cc.length ? cc : undefined, subject: safeSubject, html })
+      body:    JSON.stringify(reqBody)
     });
     const data = await resp.json();
     if (resp.ok) {

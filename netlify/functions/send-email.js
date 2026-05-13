@@ -2,15 +2,32 @@
 // netlify/functions/send-email.js
 // Sends emails via Resend API. Authenticated — requires a valid
 // x-eq-token header (same HMAC session token from verify-pin).
+//
+// Magic-link mode (v3.4.63 — leaveActionContext):
+//   Pass { leaveActionContext: { leave_id } } and use the
+//   placeholders {{APPROVE_URL}} and {{REJECT_URL}} in the html
+//   body. The function fetches the leave row + named approver,
+//   mints two HMAC-signed tokens (kind: 'leave-action'),
+//   substitutes the placeholders with full URLs to
+//   /.netlify/functions/approve-leave, AND overrides `to:` with
+//   the canonical approver email — so a malicious caller can't
+//   redirect the magic link to their own inbox.
+//
 // Env vars required:
-//   RESEND_API_KEY   — your Resend API key (re_...)
-//   EQ_SECRET_SALT   — HMAC signing key (must match verify-pin)
+//   RESEND_API_KEY   — Resend API key
+//   EQ_SECRET_SALT   — HMAC signing key (verify-pin + approve-leave)
+//   AUDIT_SB_URL     — Supabase REST URL (only for magic-link mode)
+//   AUDIT_SB_KEY     — Supabase publishable key (only magic-link mode)
+//   APP_ORIGIN       — origin used to build magic-link URLs
+//                      (optional; falls back to request Origin header)
 // ─────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
 
 // ── Config from env vars (no fallbacks) ──────────────────────
 const SECRET_SALT = process.env.EQ_SECRET_SALT;
+const SB_URL      = process.env.AUDIT_SB_URL;
+const SB_KEY      = process.env.AUDIT_SB_KEY;
 
 if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
 
@@ -63,6 +80,51 @@ function validateEmails(arr, fieldName, max) {
   return null;
 }
 
+// ── Magic-link minting (v3.4.63 — leaveActionContext) ────────
+// Sign a token of shape { kind, leave_id, action, approver_email, exp }.
+// Tokens are minted server-side ONLY — the requester's browser never
+// sees them, which is what stops a requester from minting their own
+// approve-link to bypass the named approver.
+const LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function signLeaveActionToken(leaveId, action, approverEmail) {
+  const payload = JSON.stringify({
+    kind: 'leave-action',
+    leave_id: leaveId,
+    action,                                // 'approve' | 'reject'
+    approver_email: approverEmail,
+    exp: Date.now() + LEAVE_ACTION_TTL_MS,
+  });
+  const sig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
+  return Buffer.from(payload).toString('base64') + '.' + sig;
+}
+
+async function sbGet(path) {
+  const headers = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, { method: 'GET', headers });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { /* malformed, leave null */ }
+  return { ok: res.ok, status: res.status, data };
+}
+
+// Resolve approver name → email and return both, alongside a basic
+// validity check. Returns null when the request is malformed or the
+// approver can't be looked up — the caller falls back to plain HTML
+// (no buttons) rather than failing the whole email.
+async function resolveLeaveActionContext(leaveId) {
+  if (!SB_URL || !SB_KEY) return { error: 'Magic-link mode requires AUDIT_SB_URL and AUDIT_SB_KEY' };
+  if (!leaveId || typeof leaveId !== 'string') return { error: 'leave_id required' };
+  const lvRes = await sbGet(`leave_requests?id=eq.${encodeURIComponent(leaveId)}&select=id,requester_name,approver_name,status`);
+  if (!lvRes.ok || !Array.isArray(lvRes.data) || !lvRes.data.length) return { error: 'leave row not found' };
+  const lv = lvRes.data[0];
+  if (lv.status && lv.status !== 'Pending') return { error: 'leave already actioned' };
+  const mgrRes = await sbGet(`managers?name=eq.${encodeURIComponent(lv.approver_name)}&select=email`);
+  const mgr = (mgrRes.ok && Array.isArray(mgrRes.data) && mgrRes.data[0]) || null;
+  if (!mgr || !mgr.email) return { error: 'approver has no email on file' };
+  return { leave: lv, approverEmail: String(mgr.email).toLowerCase() };
+}
+
 // ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -82,14 +144,14 @@ exports.handler = async (event) => {
     }
 
     const body = JSON.parse(event.body);
-    const { to, cc, subject, html } = body;
+    const { to, cc, subject, html, leaveActionContext } = body;
 
     // ── Input validation ──────────────────────────────────────
     if (!to || !subject || !html) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields: to, subject, html' }) };
     }
 
-    const toArr = Array.isArray(to) ? to : [to];
+    let toArr = Array.isArray(to) ? to : [to];
     const toErr = validateEmails(toArr, 'to', MAX_TO);
     if (toErr) return { statusCode: 400, headers, body: JSON.stringify({ error: toErr }) };
 
@@ -107,6 +169,33 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: `HTML body exceeds maximum size of ${MAX_HTML} characters` }) };
     }
 
+    // ── Magic-link mode: substitute {{APPROVE_URL}} / {{REJECT_URL}}
+    // and override `to:` with the canonical approver email so the
+    // sender can't redirect the link to their own inbox.
+    let finalHtml = html;
+    if (leaveActionContext && typeof leaveActionContext === 'object') {
+      const ctx = await resolveLeaveActionContext(leaveActionContext.leave_id);
+      if (ctx.error) {
+        // Strip placeholders so the email still goes through, just
+        // without buttons. Log the reason so it's debuggable from
+        // the function logs without surfacing internals to callers.
+        console.warn('send-email: magic-link context not resolved:', ctx.error);
+        finalHtml = finalHtml.replace(/\{\{APPROVE_URL\}\}/g, '#').replace(/\{\{REJECT_URL\}\}/g, '#');
+      } else {
+        // Force the to-list to exactly the named approver. Defends
+        // against a caller passing a different `to:` and lying about
+        // the leave_id to receive a working approve link themselves.
+        toArr = [ctx.approverEmail];
+        const originHeader = event.headers['origin'] || event.headers['Origin'] || '';
+        const appOrigin = process.env.APP_ORIGIN || originHeader || '';
+        const approveTok = signLeaveActionToken(ctx.leave.id, 'approve', ctx.approverEmail);
+        const rejectTok  = signLeaveActionToken(ctx.leave.id, 'reject',  ctx.approverEmail);
+        const approveUrl = `${appOrigin}/.netlify/functions/approve-leave?t=${encodeURIComponent(approveTok)}`;
+        const rejectUrl  = `${appOrigin}/.netlify/functions/approve-leave?t=${encodeURIComponent(rejectTok)}`;
+        finalHtml = finalHtml.replace(/\{\{APPROVE_URL\}\}/g, approveUrl).replace(/\{\{REJECT_URL\}\}/g, rejectUrl);
+      }
+    }
+
     // ── Send via Resend ───────────────────────────────────────
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
@@ -117,7 +206,7 @@ exports.handler = async (event) => {
       from: process.env.EMAIL_FROM || 'Leave Request <noreply@eq.solutions>',
       to: toArr,
       subject,
-      html
+      html: finalHtml
     };
     if (cc && cc.length) payload.cc = Array.isArray(cc) ? cc : [cc];
 
