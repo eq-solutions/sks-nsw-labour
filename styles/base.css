@@ -491,6 +491,18 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   z-index: 2;
 }
 
+/* v3.4.60 — self-presence: subtle "you-are-here" outline on your own
+   focused cell. Confirms presence wiring is alive in single-user mode
+   and gives a spatial hint of where you are in the editor. No tooltip
+   (it's you — already obvious). Multi-user purple outline above is
+   unchanged for OTHER supervisors. */
+.editor-day.presence-outline-self {
+  position: relative;
+  outline: 1px dashed rgba(124, 119, 185, 0.55);
+  outline-offset: -1px;
+  z-index: 1;
+}
+
 .editor-actions {
   display: flex;
   gap: 2px;
