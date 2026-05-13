@@ -52,7 +52,10 @@
 <script src="scripts/flags.js"></script>
 <script src="scripts/permission-matrix.js"></script>
 <script src="scripts/permissions.js"></script>
-<script src="scripts/project-hours.js"></script>
+<!-- v3.4.71: project-hours.js removed. Feature was gated behind a PostHog flag
+     and surfaced a "schema not applied" warning on the dashboard. Pulled per
+     Royce 13 May. Backend column `sites.track_hours` still exists in EQ schema
+     and the JS file is preserved in repo for future revival. -->
 <script src="scripts/utils.js"></script>
 <script src="scripts/supabase.js"></script>
 <script src="scripts/roster.js"></script>
@@ -194,7 +197,104 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.66
+  EQ Solves — Field  v3.4.71
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.71  (remove Project Hours panel + fix EQ→SKS logo flash)
+  ────────────────────────────────────────────────────────────
+  Two dashboard polish fixes Royce flagged on 13 May:
+
+  1. Project Hours panel removed from the dashboard.
+     • Was a Phase 1 burn-down widget gated by feat_project_hours_v1
+       + EQ_PERMS.can('ph.view_dashboard'). When the gates opened
+       but the schema migration wasn't applied (SKS) or no sites
+       had track_hours=true, it surfaced a loud "schema is being
+       set up" placeholder that added nothing useful.
+     • Removed: #project-hours-panel from index.html + the
+       <script src="scripts/project-hours.js"> tag.
+     • Kept: the JS file itself (parked for future revival) and
+       the sites.track_hours column on the EQ schema.
+
+  2. EQ→SKS logo flash on initial page load — fixed.
+     • SKS users used to see the EQ sky-blue logo for ~200-600ms
+       before the SKS dark-blue logo snapped in. Cause:
+       loadTenantConfig() was called from window.onload (after
+       first paint), and the visible branding (logo, gate copy,
+       body class) only updated at the end of that async function,
+       AFTER two Supabase round-trips for organisations + app_config.
+     • Fix: new earlyBootBranding() IIFE at the bottom of
+       scripts/app-state.js fires on DOMContentLoaded (DOM parsed
+       but BEFORE first paint), detects the tenant slug
+       synchronously, and applies the static TENANT_BRANDING map
+       immediately. Logo is correct from the first frame.
+     • loadTenantConfig still runs at window.onload to load
+       Supabase-driven access codes — applyTenantBranding is
+       idempotent so the second call just refreshes those.
+     • All branding data (logo HTML, colors, gate copy) is static
+       per tenant — never required a network call. Why this was
+       waiting on Supabase at all was historic accident.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.70 (history)
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.70  (supervisor parity + Excel date import + archive)
+  ────────────────────────────────────────────────────────────
+  Four fixes Royce flagged after the 13 May supervisor CSV review:
+
+  1. Supervisors get DOB + start_date fields (parity with people).
+     • New columns on `managers`: dob_day, dob_month, start_date.
+     • Edit-supervisor modal exposes them so birthdays + work
+       anniversaries surface on the supervision page the same way
+       they already do for people (added in v3.4.16).
+     • Migration: 2026-05-13_managers_dob_start_date_archived.sql
+       (applied to both EQ + SKS Supabase projects).
+
+  2. Excel/CSV upload now accepts AU-formatted dates.
+     • _parseCsvBirthday previously only matched DD-MMM (e.g.
+       25-Dec) or numeric DD/MM with no year. Royce's Excel
+       exports use DD/MM/YYYY (25/12/1997) which silently failed
+       and stored null. Fixed: regex extended to allow optional
+       2-or-4-digit year (year ignored — we still store day+month
+       only).
+     • New _parseStartDate helper handles ISO (2024-01-15),
+       DD/MM/YYYY (15/01/2024), AND Excel serial numbers
+       (e.g. 45932). Serial path uses the 1900 epoch trick
+       (subtract 25569 → days since unix epoch).
+
+  3. Archive (reversible soft-hide) for people + managers.
+     • New `archived` boolean column on both tables. Default false.
+     • Filter row gets a "Show archived" checkbox; default hides
+       archived rows. Toggle reveals them with a faint tint +
+       "ARCHIVED" chip.
+     • Archived rows show ↺ Restore + ✕ Delete actions instead of
+       Edit. Restore flips archived back to false. Delete remains
+       the permanent option (kept for typo / test-row cleanup).
+     • Badges (Contacts / Supervision counts) reflect active rows
+       only.
+     • Different semantic from the existing deleted_at soft-delete:
+       archive is user-driven + reversible; deleted_at is the
+       audit trail for hard-delete operations.
+
+  4. Contacts ↔ Supervisors double-up — confirmed by design.
+     Different roles (callable contact vs scheduleable supervisor)
+     so the same person legitimately appears in both lists. Tighter
+     FK linkage is a Wave 4 item (Melbourne data-model expansion),
+     not a v3.4.70 fix.
+
+  Hard rule: behaviour-preserving for existing flows. Empty
+  archived field = unchanged (defaults to false). Existing
+  supervisor rows render exactly as before until someone fills
+  in DOB / start date.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.66 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.66  (SPA pageview tracking — fix PostHog/Clarity blind spot)
@@ -1770,6 +1870,10 @@
     <div class="filter-row">
       <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="contacts-search" placeholder="Search contacts…" oninput="renderContacts()"></div>
       <select class="filter-select" id="contacts-group" onchange="renderContacts()"><option value="">All Groups</option><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select>
+      <!-- v3.4.70: archive filter — default hides archived rows. -->
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);user-select:none;cursor:pointer">
+        <input type="checkbox" id="contacts-show-archived" onchange="renderContacts()" style="width:14px;height:14px;accent-color:var(--navy)"> Show archived
+      </label>
       <button class="btn btn-secondary btn-sm" onclick="openAddManager()" style="margin-left:auto">＋ Add Contact</button>
       <button class="btn btn-secondary btn-sm" onclick="exportContactsCSV()">↓ CSV</button>
     </div>
@@ -1791,6 +1895,10 @@
     <div class="filter-row">
       <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="managers-search" placeholder="Search name, role or company…" oninput="renderManagers()"></div>
       <select class="filter-select" id="managers-category" onchange="renderManagers()"><option value="">All Categories</option><option value="Executive">Executive</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select>
+      <!-- v3.4.70: archive filter — default hides archived rows. -->
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);user-select:none;cursor:pointer">
+        <input type="checkbox" id="managers-show-archived" onchange="renderManagers()" style="width:14px;height:14px;accent-color:var(--navy)"> Show archived
+      </label>
       <button class="btn btn-secondary btn-sm" onclick="openAddManager()">＋ Add Contact</button>
     </div>
     <div id="managers-content"></div>
@@ -2178,7 +2286,7 @@
 </div>
 
 <!-- Manager modal -->
-<div class="modal-overlay" id="modal-manager"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="modal-manager-title">Add Contact</h3><button class="modal-close" onclick="closeModal('modal-manager')">✕</button></div><div class="modal-body"><input type="hidden" id="manager-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Name</label><input class="form-input" id="manager-name" placeholder="e.g. Ian Marston"></div><div class="form-group"><label class="form-label">Category</label><select class="form-select" id="manager-category"><option value="Executive">Executive</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select></div></div><div class="form-group"><label class="form-label">Role</label><input class="form-input" id="manager-role" placeholder="e.g. Project Manager"></div><div class="form-row"><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="manager-phone" placeholder="04XX XXX XXX"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="manager-email" placeholder="name@example.com" type="email"></div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager')">Cancel</button><button class="btn btn-primary" onclick="saveManager()">Save</button></div></div></div>
+<div class="modal-overlay" id="modal-manager"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="modal-manager-title">Add Contact</h3><button class="modal-close" onclick="closeModal('modal-manager')">✕</button></div><div class="modal-body"><input type="hidden" id="manager-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Name</label><input class="form-input" id="manager-name" placeholder="e.g. Ian Marston"></div><div class="form-group"><label class="form-label">Category</label><select class="form-select" id="manager-category"><option value="Executive">Executive</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select></div></div><div class="form-group"><label class="form-label">Role</label><input class="form-input" id="manager-role" placeholder="e.g. Project Manager"></div><div class="form-row"><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="manager-phone" placeholder="04XX XXX XXX"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="manager-email" placeholder="name@example.com" type="email"></div></div><!-- v3.4.70: Birthday + Start Date on supervisors (parity with people) --><div class="form-row"><div class="form-group"><label class="form-label">Birthday <span style="font-size:10px;color:var(--ink-3);font-weight:400">(day + month)</span></label><div style="display:flex;gap:8px"><select class="form-select" id="manager-dob-day" style="flex:1"><option value="">Day</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option></select><select class="form-select" id="manager-dob-month" style="flex:1.5"><option value="">Month</option><option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option><option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option><option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option></select></div><div class="form-hint">Year is not stored — day + month only.</div></div><div class="form-group"><label class="form-label">Start Date <span style="font-size:10px;color:var(--ink-3);font-weight:400">(for work anniversaries)</span></label><input class="form-input" id="manager-start-date" type="date"><div class="form-hint">Used by the Dashboard anniversaries widget.</div></div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager')">Cancel</button><button class="btn btn-primary" onclick="saveManager()">Save</button></div></div></div>
 
 <!-- Supervisor password modal -->
 <div class="modal-overlay" id="modal-manager-pw"><div class="modal" style="max-width:380px"><div class="modal-header"><h3>🔓 Supervision Access</h3><button class="modal-close" onclick="closeModal('modal-manager-pw')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="manager-name-select" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Password</label><input class="form-input" id="manager-pw-input" type="password" placeholder="Enter supervision password" onkeydown="if(event.key==='Enter') submitManagerPassword()"></div><div id="manager-pw-error" style="display:none;color:#EF4444;font-size:12px;margin-top:6px">Incorrect password or no name selected.</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager-pw')">Cancel</button><button class="btn btn-primary" onclick="submitManagerPassword()">Unlock</button></div></div></div>
@@ -2261,10 +2369,10 @@ async function loadFromSupabase() {
 
   // Demo / EQ tenant — load from SEED, no Supabase
   if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
-    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null }));
+    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
     STATE.sites     = SEED.sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:'', site_lead_phone:'' }));
     STATE.schedule  = SEED.schedule.map(r => ({ id:r.id||Math.random(), name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:'', sun:'' }));
-    STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
     STATE.timesheets = [];
     // PERF: Build O(1) schedule index
     STATE.scheduleIndex = {};
@@ -2283,7 +2391,7 @@ async function loadFromSupabase() {
       sbFetch('timesheets?select=*'),
     ]);
 
-    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null }));
+    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));
     STATE.sites  = sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:r.site_lead||'', site_lead_phone:r.site_lead_phone||'' }));
 
     // BUG-004 FIX: raw string key — esc() breaks names with & < > chars
@@ -2299,7 +2407,7 @@ async function loadFromSupabase() {
     STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
 
     STATE.timesheets = tsRows;
-    STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
     hideLoadingOverlay();
     updateLastUpdated();
     return true;
@@ -2605,8 +2713,9 @@ async function initApp() {
 
   updateWeekLabel();
   refreshPersonSelects();
-  document.getElementById('badge-contacts').textContent = STATE.people.length;
-  document.getElementById('badge-managers').textContent = (STATE.managers||[]).length;
+  // v3.4.70: badges count active (non-archived) rows only.
+  document.getElementById('badge-contacts').textContent = STATE.people.filter(p => !p.archived).length;
+  document.getElementById('badge-managers').textContent = (STATE.managers||[]).filter(m => !m.archived).length;
   updateTopStats();
   if (typeof applyManagerMode === 'function') applyManagerMode();
 
@@ -3159,11 +3268,8 @@ const eqAgent = (function() {
 <!-- TAFE holidays modal -->
 <div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addTafeHoliday()">Add range</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-tafe-holidays')">Done</button></div></div></div>
 
-<!-- Project Hours panel (Phase 1, gated by feat_project_hours_v1 + EQ_PERMS.can('ph.view_dashboard')) -->
-<div id="project-hours-panel" hidden style="padding:24px; max-width:1200px; margin:0 auto; font-family:'Plus Jakarta Sans',system-ui,sans-serif">
-  <h2 style="margin:0 0 4px; font-size:22px; font-weight:700; letter-spacing:-0.01em">Project Hours</h2>
-  <p style="margin:0 0 20px; color:#666666; font-size:13px">Burn-down for sites you've ticked for hours tracking.</p>
-  <div id="project-hours-content"></div>
-</div>
+<!-- v3.4.71: Project Hours panel removed from dashboard. Backend column
+     sites.track_hours stays in EQ schema; revival = restore this block +
+     re-add scripts/project-hours.js script tag. -->
 </body>
 </html>

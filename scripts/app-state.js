@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.66';
+const APP_VERSION = '3.4.71';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -97,6 +97,10 @@ function denormaliseGroupForDb(g) {
 
 async function loadTenantConfig() {
   TENANT.ORG_SLUG = _detectTenantSlug();
+  // v3.4.71: earlyBootBranding() at the bottom of this file already applied
+  // the static branding from DOMContentLoaded so the logo is correct from the
+  // first frame. Subsequent applyTenantBranding() calls below refresh the
+  // codes + org name once Supabase responds (idempotent).
 
   // Demo / EQ tenant — no Supabase needed
   if (TENANT.ORG_SLUG === 'demo') {
@@ -298,6 +302,28 @@ function applyTenantBranding() {
   // Document title
   if (brand.orgName) document.title = brand.orgName;
 }
+
+// v3.4.71: early-boot branding apply. loadTenantConfig() is async + runs from
+// window.onload (after first paint), so SKS users used to see the EQ logo
+// briefly before the swap. This handler fires on DOMContentLoaded (DOM parsed
+// but BEFORE first paint in most browsers) and applies the static branding
+// synchronously. All visible branding (logo, gate copy, body class) lives in
+// the static TENANT_BRANDING map — no network call required. loadTenantConfig
+// still runs at onload to load Supabase-driven access codes; applyTenantBranding
+// is idempotent so the second call just refreshes those.
+(function earlyBootBranding() {
+  function apply() {
+    try {
+      TENANT.ORG_SLUG = _detectTenantSlug();
+      applyTenantBranding();
+    } catch (e) { /* never break boot on branding */ }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
 
 // ── App state ─────────────────────────────────────────────────
 const STATE = {

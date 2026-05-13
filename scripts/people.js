@@ -250,7 +250,7 @@ function savePerson() {
 
   closeModal('modal-person');
   refreshPersonSelects();
-  document.getElementById('badge-contacts').textContent = STATE.people.length;
+  document.getElementById('badge-contacts').textContent = STATE.people.filter(p => !p.archived).length;
   updateTopStats();
   renderCurrentPage();
   auditLog(id ? `Updated: ${name}` : `Added: ${name}`, 'People', `Group: ${group}`, null);
@@ -300,7 +300,7 @@ function removePerson(id, name) {
 
   closeModal('modal-confirm');
   refreshPersonSelects();
-  document.getElementById('badge-contacts').textContent = STATE.people.length;
+  document.getElementById('badge-contacts').textContent = STATE.people.filter(p => !p.archived).length;
   updateTopStats();
   renderCurrentPage();
   showToast(`${name} removed`);
@@ -311,14 +311,68 @@ function removePerson(id, name) {
   sbFetch('schedule?name=eq.' + encodeURIComponent(name), 'DELETE').catch(() => {});
 }
 
+// v3.4.70: archive — reversible soft-hide. Sets archived=true, keeps row +
+// schedule entries intact. Different from the delete path (which wipes the
+// person + clears schedule entries permanently).
+function archivePerson(id, name) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const p = STATE.people.find(x => String(x.id) === String(id));
+  if (!p) return;
+  p.archived = true;
+  document.getElementById('badge-contacts').textContent =
+    STATE.people.filter(x => !x.archived).length;
+  renderCurrentPage();
+  archivePersonInSB(id, true).catch(() => {
+    p.archived = false;
+    document.getElementById('badge-contacts').textContent =
+      STATE.people.filter(x => !x.archived).length;
+    renderCurrentPage();
+    showToast('Archive failed — check connection');
+  });
+  showToast(`${name} archived`);
+  auditLog(`Archived: ${name}`, 'People', null, null);
+}
+
+function restorePerson(id, name) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const p = STATE.people.find(x => String(x.id) === String(id));
+  if (!p) return;
+  p.archived = false;
+  document.getElementById('badge-contacts').textContent =
+    STATE.people.filter(x => !x.archived).length;
+  renderCurrentPage();
+  archivePersonInSB(id, false).catch(() => {
+    p.archived = true;
+    document.getElementById('badge-contacts').textContent =
+      STATE.people.filter(x => !x.archived).length;
+    renderCurrentPage();
+    showToast('Restore failed — check connection');
+  });
+  showToast(`${name} restored`);
+  auditLog(`Restored: ${name}`, 'People', null, null);
+}
+
 // ── Contacts render ───────────────────────────────────────────
 
 // v3.4.46: shared cell helpers used by both renderContacts() branches
 // (mobile cards + desktop table). Adding/changing an action button or
 // the no-phone fallback styling now updates one place instead of two.
 function _personActions(p) {
+  // v3.4.70: archived rows show Restore + Delete (no edit). Active rows show
+  // Edit + Archive + Delete. Archive = reversible; Delete = permanent.
+  if (p.archived) {
+    return `<button class="btn-icon" title="Restore from archive"
+        data-pid="${p.id}" data-pname="${esc(p.name)}"
+        onclick="restorePerson(this.dataset.pid, this.dataset.pname)" style="color:var(--green)">↺</button>
+      <button class="btn-icon" style="color:var(--red)" title="Delete permanently"
+        data-pid="${p.id}" data-pname="${esc(p.name)}"
+        onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>`;
+  }
   return `<button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
-    <button class="btn-icon" style="color:var(--red)" title="Remove"
+    <button class="btn-icon" title="Archive (reversible)"
+      data-pid="${p.id}" data-pname="${esc(p.name)}"
+      onclick="archivePerson(this.dataset.pid, this.dataset.pname)" style="color:var(--ink-3)">📦</button>
+    <button class="btn-icon" style="color:var(--red)" title="Delete permanently"
       data-pid="${p.id}" data-pname="${esc(p.name)}"
       onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>`;
 }
@@ -352,8 +406,11 @@ function setContactsSort(col) {
 function renderContacts() {
   const search = document.getElementById('contacts-search').value.toLowerCase();
   const group  = document.getElementById('contacts-group').value;
+  // v3.4.70: archive filter — checkbox toggles inclusion of archived rows.
+  const showArchived = !!(document.getElementById('contacts-show-archived') || {}).checked;
   let people   = STATE.people;
 
+  if (!showArchived) people = people.filter(p => !p.archived);
   if (search) people = people.filter(p =>
     p.name.toLowerCase().includes(search) ||
     (p.phone && p.phone.includes(search)) ||
@@ -419,9 +476,14 @@ function renderContacts() {
       if (!gp.length) return;
       html += `<div style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${gColors[g]};padding:10px 4px 6px">${g} (${gp.length})</div>`;
       gp.forEach(p => {
-        html += `<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+        // v3.4.70: archived rows visually distinct (faint tint + chip).
+        const archStyle = p.archived ? 'background:#F8FAFC;opacity:.7' : 'background:white';
+        const archChip  = p.archived
+          ? '<span style="background:#E5E7EB;color:#6B7280;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px">ARCHIVED</span>'
+          : '';
+        html += `<div style="${archStyle};border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}${todayBadges(p)}</div>
+            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}${todayBadges(p)}${archChip}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               ${_personPhone(p, 'mobile')}
               ${_personEmail(p, 'mobile')}
@@ -446,15 +508,22 @@ function renderContacts() {
       ${th('name', 'Name')}${th('group', 'Group')}${th('phone', 'Phone')}${th('email', 'Email')}${th('agency', 'Agency')}
       <th class="center" style="width:90px">Actions</th>
     </tr></thead>
-    <tbody>${people.map(p => `
-      <tr>
-        <td class="name-col">${esc(p.name)}</td>
+    <tbody>${people.map(p => {
+      // v3.4.70: archived rows get faint tint + chip in desktop table too.
+      const rowStyle = p.archived ? 'background:#F8FAFC;opacity:.7' : '';
+      const archChip = p.archived
+        ? '<span style="background:#E5E7EB;color:#6B7280;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px">ARCHIVED</span>'
+        : '';
+      return `
+      <tr style="${rowStyle}">
+        <td class="name-col">${esc(p.name)}${archChip}</td>
         <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}${todayBadges(p)}</td>
         <td class="phone-col">${_personPhone(p, 'desktop')}</td>
         <td class="meta-col">${_personEmail(p, 'desktop')}</td>
         <td class="meta-col">${p.agency || '—'}</td>
         <td class="center" style="white-space:nowrap">${_personActions(p)}</td>
-      </tr>`).join('')}
+      </tr>`;
+    }).join('')}
     </tbody>
   </table></div></div>`;
   document.getElementById('contacts-content').innerHTML = html;

@@ -97,10 +97,19 @@ function _parseCsvBirthday(raw) {
   if (!raw) return { dob_day: null, dob_month: null };
   const s = String(raw).trim();
   if (!s) return { dob_day: null, dob_month: null };
-  // Accept "DD-MMM", "DD/MM", "D Mon", "5-Mar", "5 March"
+  // Accept: "DD-MMM", "DD/MM", "D Mon", "5-Mar", "5 March",
+  //         "DD/MM/YYYY" (Excel AU default — v3.4.70), "DD-MM-YYYY"
   const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12,
                    january:1, february:2, march:3, april:4, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
-  let m = s.match(/^(\d{1,2})[\s\-\/](\d{1,2})$/);
+  // v3.4.70: DD/MM/YYYY or DD-MM-YYYY (year ignored — we store day+month only).
+  // Royce's SKS Contacts.xlsx exports Birthday as "25/12/1997" — the
+  // previous regex (^DD/MM$ with no year) silently dropped it.
+  let m = s.match(/^(\d{1,2})[\s\-\/](\d{1,2})[\s\-\/]\d{2,4}$/);
+  if (m) {
+    const d = parseInt(m[1],10), mo = parseInt(m[2],10);
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) return { dob_day: d, dob_month: mo };
+  }
+  m = s.match(/^(\d{1,2})[\s\-\/](\d{1,2})$/);
   if (m) {
     const d = parseInt(m[1],10), mo = parseInt(m[2],10);
     if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) return { dob_day: d, dob_month: mo };
@@ -111,6 +120,47 @@ function _parseCsvBirthday(raw) {
     if (d >= 1 && d <= 31 && mo) return { dob_day: d, dob_month: mo };
   }
   return { dob_day: null, dob_month: null };
+}
+
+// v3.4.70: Robust ISO-date extractor for start-date columns. Accepts:
+//   • "2025-05-13"           (already ISO — passthrough)
+//   • "13/05/2025" / "13-05-2025"  (Excel AU default DD/MM/YYYY)
+//   • 45932                  (Excel serial: days since 1900-01-01 with
+//                             the 1900-as-leap-year bug — offset via
+//                             the 1899-12-30 epoch trick)
+//
+// AU vs US locale: we treat the first slot as day (DD/MM/YYYY) since
+// this app's tenants are AU. Returns ISO "YYYY-MM-DD" or null.
+function _parseStartDate(raw) {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  // ISO passthrough
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // DD/MM/YYYY or DD-MM-YYYY (AU default)
+  let m = s.match(/^(\d{1,2})[\s\-\/](\d{1,2})[\s\-\/](\d{2,4})$/);
+  if (m) {
+    const d  = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    let y    = parseInt(m[3], 10);
+    if (y < 100) y += 2000;
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
+      return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+  }
+  // Excel serial (positive integer or float). Convert via the
+  // 1899-12-30 epoch which absorbs the 1900-as-leap-year bug.
+  if (/^\d{4,6}(?:\.\d+)?$/.test(s)) {
+    const serial = parseFloat(s);
+    if (serial > 0 && serial < 80000) {
+      const ms = (serial - 25569) * 86400 * 1000;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      }
+    }
+  }
+  return null;
 }
 
 function exportPeopleCSV() {
@@ -182,8 +232,9 @@ function importPeopleCSV(input) {
         if (!name) return;
         if (!valid.includes(group)) { errors.push(`Row ${i + 2}: unknown group "${group}" for ${name}`); return; }
         const bday = iBday >= 0 ? _parseCsvBirthday(r[iBday]) : { dob_day: null, dob_month: null };
-        const startRaw = iStart >= 0 ? (r[iStart] || '').trim() : '';
-        const startDate = /^\d{4}-\d{2}-\d{2}$/.test(startRaw) ? startRaw : null;
+        // v3.4.70: route start-date through _parseStartDate which handles
+        // DD/MM/YYYY (AU Excel), Excel serial numbers, and ISO.
+        const startDate = iStart >= 0 ? _parseStartDate(r[iStart]) : null;
         people.push({
           id:     i + 1, name, group,
           phone:  iPhone  >= 0 ? cleanPhone(r[iPhone])                    : '',
@@ -200,7 +251,7 @@ function importPeopleCSV(input) {
       showImportConfirm('import-people-preview', people.length + ' contacts', () => {
         STATE.people = people;
         refreshPersonSelects();
-        document.getElementById('badge-contacts').textContent = STATE.people.length;
+        document.getElementById('badge-contacts').textContent = STATE.people.filter(p => !p.archived).length;
         updateTopStats();
         showToast('Importing ' + people.length + ' contacts…');
         importPeopleToSB(people)

@@ -392,7 +392,9 @@ async function savePersonToSB(person) {
     dob_day:    person.dob_day    || null,
     dob_month:  person.dob_month  || null,
     start_date: person.start_date || null,
-    pin:      person.pin     || null
+    pin:      person.pin     || null,
+    // v3.4.70: archived flag — reversible soft-hide alongside deleted_at.
+    archived: !!person.archived
   });
 }
 
@@ -577,17 +579,34 @@ async function saveRowToSB(name, week, dayVals) {
 }
 
 async function saveManagerToSB(mgr) {
+  // v3.4.70: include dob_day/dob_month/start_date + archived so supervisor
+  // birthdays/anniversaries persist and archive state survives reload.
+  // Columns added via 2026-05-13 migration.
   return _upsertById('managers', mgr, {
-    name:     mgr.name,
-    role:     mgr.role     || null,
-    category: mgr.category || null,
-    phone:    mgr.phone    || null,
-    email:    mgr.email    || null
+    name:       mgr.name,
+    role:       mgr.role     || null,
+    category:   mgr.category || null,
+    phone:      mgr.phone    || null,
+    email:      mgr.email    || null,
+    dob_day:    (mgr.dob_day   != null && !isNaN(mgr.dob_day))   ? mgr.dob_day   : null,
+    dob_month:  (mgr.dob_month != null && !isNaN(mgr.dob_month)) ? mgr.dob_month : null,
+    start_date: mgr.start_date || null,
+    archived:   !!mgr.archived
   });
 }
 
 async function deleteManagerFromSB(id) {
   await sbFetch(`managers?id=eq.${id}`, 'DELETE');
+}
+
+// v3.4.70: soft-archive (reversible) — sets archived=true rather than DELETE.
+async function archiveManagerInSB(id, archived = true) {
+  await sbFetch(`managers?id=eq.${id}`, 'PATCH', { archived: !!archived });
+}
+
+// v3.4.70: same pattern for people. Archive vs the existing deleted_at soft-delete.
+async function archivePersonInSB(id, archived = true) {
+  await sbFetch(`people?id=eq.${id}`, 'PATCH', { archived: !!archived });
 }
 
 // ── Bulk import helpers ───────────────────────────────────────
