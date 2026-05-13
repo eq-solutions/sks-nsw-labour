@@ -194,8 +194,33 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.60
+  EQ Solves — Field  v3.4.61
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.61  (auth.js — Executive supervisors can unlock again)
+  ────────────────────────────────────────────────────────────
+  • 🔴 SKS bug spotted post-v3.4.60 deploy. Royce tried to unlock
+    supervisor mode and his own name was missing from the "YOUR NAME"
+    dropdown. Same for Jonathan Ryan + Mark Brame (also Executive).
+  • Root cause: auth.js line 448 hardcoded a category allowlist
+    — ['Operations','Project Management','Construction','Supervisor',
+    'Internal']. When v3.4.42 added "Executive" to managers.js
+    catOrder, this duplicate allowlist was missed. Executive-category
+    supervisors silently fell off the unlock dropdown. Latent bug —
+    took until SKS shipped at v3.4.59-60 for anyone to try unlocking.
+  • Fix: extracted to SUPERVISOR_CATEGORIES const matching managers.js
+    catOrder. Added comment so the next category addition keeps both
+    files in sync.
+  • Data hygiene note for SKS: David Boyd has category "SKS Internal"
+    (one-off — should probably be "Internal"). Stays excluded until
+    renamed via Supervision page.
+  • Both apps.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.60 (history)
 
   CHANGES IN v3.4.60  (sidebar reorg + self-presence outline)
   ────────────────────────────────────────────────────────────

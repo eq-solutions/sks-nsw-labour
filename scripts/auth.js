@@ -444,8 +444,17 @@ function toggleManagerMode() {
     return;
   }
   const sel  = document.getElementById('manager-name-select');
+  // v3.4.61: keep this list in sync with `catOrder` in scripts/managers.js.
+  // BUG history: when "Executive" was added in v3.4.42 (so Mark/John/Royce
+  // could be grouped together on the Supervision page), this duplicate
+  // allowlist was missed. Effect: Executive-category supervisors couldn't
+  // unlock supervisor mode — their names didn't appear in this dropdown.
+  // Spotted on SKS where Royce (Executive) tried to unlock and his own
+  // name was missing from the picker. Long-term fix: extract to a shared
+  // constant. Short-term: mirror managers.js exactly.
+  const SUPERVISOR_CATEGORIES = ['Executive','Operations','Project Management','Construction','Supervisor','Internal','Other'];
   const mgrs = (STATE.managers || []).filter(m =>
-    ['Operations','Project Management','Construction','Supervisor','Internal'].includes(m.category)
+    SUPERVISOR_CATEGORIES.includes(m.category)
   );
   sel.innerHTML = '<option value="">— Select your name —</option>' +
     [...mgrs].sort((a, b) => a.name.localeCompare(b.name))
