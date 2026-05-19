@@ -1,0 +1,22 @@
+name = "supabase-backup-worker"
+main = "src/index.ts"
+compatibility_date = "2026-05-19"
+account_id = "b3bacbcba05d806286c67a2913a37f12"
+
+# Weekly Wednesday 10:00 UTC = 20:00 AEST (winter) / 21:00 AEDT (summer).
+# CF cron is UTC-only — no DST handling. Documented in README.
+[triggers]
+crons = ["0 10 * * 3"]
+
+[[r2_buckets]]
+binding = "BACKUP_BUCKET"
+bucket_name = "sks-assets"
+
+[vars]
+SUPABASE_URL = "https://nspbmirochztcjijmcrx.supabase.co"
+BACKUP_PREFIX = "backups"
+RETENTION_WEEKS = "12"
+
+# Secrets (set via `wrangler secret put <NAME>` — never commit values):
+#   SUPABASE_SERVICE_ROLE_KEY   service-role JWT for the SKS project,
+#                               required so PostgREST bypasses RLS.

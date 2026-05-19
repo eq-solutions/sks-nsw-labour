@@ -1,0 +1,16 @@
+{
+  "name": "supabase-backup-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Weekly SKS Supabase tenant snapshot to R2 (sks-assets/backups/YYYY-MM-DD/).",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "typescript": "^5.4.0",
+    "wrangler": "^3.80.0"
+  }
+}
