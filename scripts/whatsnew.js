@@ -60,7 +60,10 @@ function _renderWhatsNew() {
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;color:var(--navy);line-height:1.3">${h.title}</div>
         <div style="font-size:12px;color:var(--ink-2);line-height:1.45;margin-top:3px">${h.body}</div>
-        ${h.credit ? `<div style="font-size:11px;color:var(--purple);margin-top:5px;font-weight:600">— suggested by ${h.credit}</div>` : ''}
+        ${h.credit ? `<div style="margin-top:8px;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--ink-3);font-weight:500">— suggested by</span>
+          <span style="font-size:15px;color:var(--purple);font-weight:700;letter-spacing:.2px">${h.credit}</span>
+        </div>` : ''}
       </div>
     </div>`;
 
