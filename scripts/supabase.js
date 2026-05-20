@@ -82,6 +82,324 @@ function _sbLog(level, stage, details) {
   else                         console.info(prefix, details);
 }
 
+// ── IndexedDB write queue persistence ────────────────────────
+// v3.4.74: localStorage was the previous backing store but has two
+// problems on mobile — it's ~5MB capped and the browser can clear it
+// under storage pressure or after a hard tab-kill. IDB survives both,
+// and pairs with the Background Sync registration in index.html so a
+// closed-tab user still has their writes replayed once the device
+// comes back online.
+const _IDB_NAME        = 'eq-offline';
+const _IDB_STORE       = 'write_queue';
+const _IDB_STATE_STORE = 'state_cache';      // v3.4.75
+const _IDB_VERSION     = 2;                  // bumped from 1 in v3.4.75
+let   _idb             = null;
+
+function _idbOpen() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(_IDB_NAME, _IDB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      // Idempotent: each createObjectStore guarded by a contains() check so
+      // this is safe for both fresh installs (no stores yet) and the
+      // v3.4.74 → v3.4.75 upgrade (write_queue already exists, state_cache
+      // is new). Don't drop or recreate write_queue — pending writes
+      // belong to the user, not the schema.
+      if (!db.objectStoreNames.contains(_IDB_STORE))
+        db.createObjectStore(_IDB_STORE, { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains(_IDB_STATE_STORE))
+        db.createObjectStore(_IDB_STATE_STORE, { keyPath: 'key' });
+    };
+    req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function _idbSaveQueue() {
+  const db = await _idbOpen();
+  const tx = db.transaction(_IDB_STORE, 'readwrite');
+  const st = tx.objectStore(_IDB_STORE);
+  st.clear();
+  _writeQueue.forEach(item => st.put(item));
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  });
+}
+
+async function _idbRestoreQueue() {
+  try {
+    // Migrate any legacy localStorage queue from <= v3.4.73 once.
+    try {
+      const legacy = localStorage.getItem('eq_write_queue');
+      if (legacy) {
+        const arr = JSON.parse(legacy);
+        if (Array.isArray(arr)) _writeQueue.push(...arr);
+        localStorage.removeItem('eq_write_queue');
+      }
+    } catch (_) {}
+    const db = await _idbOpen();
+    const tx = db.transaction(_IDB_STORE, 'readwrite');
+    const st = tx.objectStore(_IDB_STORE);
+    const all = await new Promise((resolve, reject) => {
+      const req = st.getAll();
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+    if (all && all.length) {
+      _writeQueue.push(...all);
+      st.clear();
+    }
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror    = e => reject(e.target.error);
+    });
+  } catch (e) {
+    _sbLog('warn', 'idb-restore', e && e.message || e);
+  }
+}
+
+// ── IndexedDB STATE snapshot (v3.4.75) ───────────────────────
+// On successful loadFromSupabase we persist the full STATE so the app
+// can render last-known data when Supabase is unreachable on next
+// launch. Single-row store (key: 'snapshot') for atomicity — readers
+// either see a whole consistent snapshot or none at all.
+async function _idbSaveStateSnapshot(snapshot) {
+  try {
+    const db = await _idbOpen();
+    const tx = db.transaction(_IDB_STATE_STORE, 'readwrite');
+    const st = tx.objectStore(_IDB_STATE_STORE);
+    st.put({ key: 'snapshot', cachedAt: Date.now(), data: snapshot });
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror    = e => reject(e.target.error);
+    });
+  } catch (e) {
+    _sbLog('warn', 'idb-save-state', e && e.message || e);
+  }
+}
+
+async function _idbLoadStateSnapshot() {
+  try {
+    const db = await _idbOpen();
+    const tx = db.transaction(_IDB_STATE_STORE, 'readonly');
+    const st = tx.objectStore(_IDB_STATE_STORE);
+    return await new Promise((resolve, reject) => {
+      const req = st.get('snapshot');
+      req.onsuccess = e => resolve(e.target.result || null);
+      req.onerror   = e => reject(e.target.error);
+    });
+  } catch (e) {
+    _sbLog('warn', 'idb-load-state', e && e.message || e);
+    return null;
+  }
+}
+
+// ── Undo / Redo (v3.4.76) ────────────────────────────────────
+// Ring buffer of recent supervisor edits, persisted to localStorage
+// so it survives reload. Each entry describes ONE user action
+// (which may touch multiple cells, e.g. fillWeek) with the before
+// values to replay on undo. Single-source-of-truth for both the
+// keyboard shortcut (Ctrl-Z) and the topbar Undo button.
+//
+// Shape of an action:
+//   {
+//     id:        unique number (timestamp + jitter),
+//     type:      'cell' | 'fill-week' | 'clear-week',
+//     ts:        ms epoch,
+//     who:       supervisor name at the time of the edit,
+//     week:      affected week string (for navigation on undo),
+//     changes:   [{ table, recordId, field, before, after, name }],
+//     navTarget: { week }       // where to navigate before flashing
+//   }
+const _undoStack       = [];
+const _redoStack       = [];
+const MAX_UNDO_DEPTH   = 20;
+const _UNDO_LS_KEY     = 'eq_undo_stack_v1';
+const _REDO_LS_KEY     = 'eq_redo_stack_v1';
+
+function _persistUndoStacks() {
+  try {
+    localStorage.setItem(_UNDO_LS_KEY, JSON.stringify(_undoStack));
+    localStorage.setItem(_REDO_LS_KEY, JSON.stringify(_redoStack));
+  } catch (e) {}
+}
+
+(function _restoreUndoStacks() {
+  try {
+    const u = localStorage.getItem(_UNDO_LS_KEY);
+    const r = localStorage.getItem(_REDO_LS_KEY);
+    if (u) { const a = JSON.parse(u); if (Array.isArray(a)) _undoStack.push(...a); }
+    if (r) { const a = JSON.parse(r); if (Array.isArray(a)) _redoStack.push(...a); }
+  } catch (e) {}
+})();
+
+function _pushUndo(action) {
+  if (!action || !Array.isArray(action.changes) || !action.changes.length) return;
+  action.id = action.id || (Date.now() + Math.random());
+  _undoStack.push(action);
+  // Cap depth — drop oldest entry once full.
+  while (_undoStack.length > MAX_UNDO_DEPTH) _undoStack.shift();
+  // New user action invalidates the redo path.
+  _redoStack.length = 0;
+  _persistUndoStacks();
+  _updateUndoButton();
+}
+
+function _undoTooltipFor(action) {
+  if (!action) return '';
+  const c = action.changes[0];
+  if (action.type === 'fill-week')  return 'Undo: Fill ' + c.name + ' (' + action.week + ')';
+  if (action.type === 'clear-week') return 'Undo: Clear ' + c.name + ' (' + action.week + ')';
+  return 'Undo: ' + c.name + ' ' + (c.field || '').toUpperCase() + ' → ' + (c.before || '(empty)');
+}
+
+function _updateUndoButton() {
+  const btn = document.getElementById('topbar-undo-btn');
+  if (!btn) return;
+  const next = _undoStack[_undoStack.length - 1];
+  if (next && (typeof isManager === 'undefined' || isManager)) {
+    btn.style.display = '';
+    btn.disabled      = false;
+    btn.title         = _undoTooltipFor(next);
+  } else {
+    btn.style.display = '';
+    btn.disabled      = true;
+    btn.title         = 'Nothing to undo';
+  }
+  const rbtn = document.getElementById('topbar-redo-btn');
+  if (rbtn) {
+    const nx = _redoStack[_redoStack.length - 1];
+    rbtn.disabled = !nx || (typeof isManager !== 'undefined' && !isManager);
+    rbtn.title    = nx ? ('Redo: ' + _undoTooltipFor(nx).replace(/^Undo: /, '')) : 'Nothing to redo';
+  }
+}
+
+function _flashUndoneCell(name, week, day) {
+  // Find the matching <input> in the roster grid and pulse it briefly.
+  // Best-effort — selector misses are silent (different page rendered etc).
+  try {
+    const sel = `input.cell[data-name="${(name||'').replace(/"/g, '\\"')}"][data-week="${week}"][data-day="${day}"]`;
+    const el  = document.querySelector(sel);
+    if (!el) return;
+    el.classList.remove('cell-undone-flash');
+    void el.offsetWidth; // restart animation
+    el.classList.add('cell-undone-flash');
+    setTimeout(() => el.classList.remove('cell-undone-flash'), 1500);
+  } catch (e) {}
+}
+
+async function _applyReverseChange(ch, week, useBeforeValue) {
+  // Replay one change. useBeforeValue=true → write `before` (undo);
+  // false → write `after` (redo).
+  const target = useBeforeValue ? (ch.before || '') : (ch.after || '');
+  // Update STATE so the UI reflects immediately.
+  let row = STATE.schedule.find(r => r.name === ch.name && r.week === week);
+  if (!row) {
+    row = { name: ch.name, week, mon:'', tue:'', wed:'', thu:'', fri:'', sat:'', sun:'' };
+    STATE.schedule.push(row);
+    if (STATE.scheduleIndex) STATE.scheduleIndex[`${ch.name}||${week}`] = row;
+  }
+  row[ch.field] = target;
+  // Persist via existing single-cell path; skipUndo prevents the replay
+  // from getting pushed back onto the undo stack as a new action.
+  await saveCellToSB(ch.name, week, ch.field, target, { skipUndo: true });
+  _flashUndoneCell(ch.name, week, ch.field);
+}
+
+async function performUndo() {
+  if (typeof isManager !== 'undefined' && !isManager) {
+    if (typeof showToast === 'function') showToast('Supervision access required to undo');
+    return;
+  }
+  if (!_undoStack.length) {
+    if (typeof showToast === 'function') showToast('Nothing to undo');
+    return;
+  }
+  const action = _undoStack.pop();
+  _persistUndoStacks();
+
+  // Navigate to the affected week first so the user sees what changed.
+  if (action.navTarget && action.navTarget.week && action.navTarget.week !== STATE.currentWeek) {
+    const sel = document.getElementById('globalWeek');
+    if (sel) {
+      sel.value = action.navTarget.week;
+      if (typeof onWeekChange === 'function') onWeekChange();
+    }
+  }
+
+  for (const ch of action.changes) {
+    try { await _applyReverseChange(ch, action.week, true); }
+    catch (e) { _sbLog('warn', 'undo-apply', e && e.message || e); }
+  }
+
+  _redoStack.push(action);
+  _persistUndoStacks();
+  _updateUndoButton();
+
+  if (typeof renderCurrentPage === 'function') renderCurrentPage();
+  if (typeof updateLastUpdated === 'function') updateLastUpdated();
+
+  // Audit the undo itself so the trail records who reversed what.
+  if (typeof auditLog === 'function') {
+    const summary = action.changes.map(c => c.name + ' ' + (c.field || '').toUpperCase()).join(', ');
+    auditLog('Undo: ' + action.type, 'Roster', summary, action.week);
+  }
+  if (typeof showToast === 'function') {
+    const c = action.changes[0];
+    showToast('Undid ' + action.type + ' — ' + c.name + ' (' + action.week + ')');
+  }
+}
+
+async function performRedo() {
+  if (typeof isManager !== 'undefined' && !isManager) {
+    if (typeof showToast === 'function') showToast('Supervision access required to redo');
+    return;
+  }
+  if (!_redoStack.length) {
+    if (typeof showToast === 'function') showToast('Nothing to redo');
+    return;
+  }
+  const action = _redoStack.pop();
+  _persistUndoStacks();
+
+  if (action.navTarget && action.navTarget.week && action.navTarget.week !== STATE.currentWeek) {
+    const sel = document.getElementById('globalWeek');
+    if (sel) {
+      sel.value = action.navTarget.week;
+      if (typeof onWeekChange === 'function') onWeekChange();
+    }
+  }
+
+  for (const ch of action.changes) {
+    try { await _applyReverseChange(ch, action.week, false); }
+    catch (e) { _sbLog('warn', 'redo-apply', e && e.message || e); }
+  }
+
+  _undoStack.push(action);
+  while (_undoStack.length > MAX_UNDO_DEPTH) _undoStack.shift();
+  _persistUndoStacks();
+  _updateUndoButton();
+
+  if (typeof renderCurrentPage === 'function') renderCurrentPage();
+  if (typeof updateLastUpdated === 'function') updateLastUpdated();
+
+  if (typeof auditLog === 'function') {
+    const summary = action.changes.map(c => c.name + ' ' + (c.field || '').toUpperCase()).join(', ');
+    auditLog('Redo: ' + action.type, 'Roster', summary, action.week);
+  }
+  if (typeof showToast === 'function') {
+    const c = action.changes[0];
+    showToast('Redid ' + action.type + ' — ' + c.name + ' (' + action.week + ')');
+  }
+}
+
+// Refresh the topbar button state once the DOM is parsed.
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', _updateUndoButton);
+}
+
 // ── Write queue indicator ────────────────────────────────────
 let _pendingWriteCount = 0;
 let _saveIndicatorTimer = null;
@@ -203,7 +521,7 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
       // Queue non-GETs so we don't lose user edits — this is safe for both
       // network blips AND transient 5xx.
       _writeQueue.push({ path, method, body, prefer, retries: 0 });
-      try { localStorage.setItem('eq_write_queue', JSON.stringify(_writeQueue)); } catch (e) {}
+      _idbSaveQueue().catch(() => {});
       if (!isDemo) {
         _pendingWriteCount = Math.max(0, _pendingWriteCount - 1);
         _setSaveIndicator('error');
@@ -221,15 +539,10 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
 }
 
 // ── Write queue ───────────────────────────────────────────────
-// Restore queued writes from a previous session
-try {
-  const saved = localStorage.getItem('eq_write_queue');
-  if (saved) {
-    const arr = JSON.parse(saved);
-    if (Array.isArray(arr)) _writeQueue.push(...arr);
-    localStorage.removeItem('eq_write_queue');
-  }
-} catch (e) {}
+// Restore queued writes from a previous session (IDB-backed; v3.4.74).
+// _idbRestoreQueue also migrates any legacy localStorage queue from
+// <= v3.4.73, so no users lose pending writes on upgrade.
+(async () => { await _idbRestoreQueue(); updateOnlineStatus(); })();
 
 async function flushWriteQueue() {
   if (!_writeQueue.length) return;
@@ -252,7 +565,7 @@ async function flushWriteQueue() {
     }
   }
   updateOnlineStatus();
-  try { localStorage.setItem('eq_write_queue', JSON.stringify(_writeQueue)); } catch (e) {}
+  _idbSaveQueue().catch(() => {});
 }
 
 // ── Connection monitoring ─────────────────────────────────────
@@ -416,7 +729,11 @@ async function deleteSiteFromSB(id) {
   await sbFetch(`sites?id=eq.${id}`, 'DELETE');
 }
 
-async function saveCellToSB(name, week, day, val) {
+async function saveCellToSB(name, week, day, val, _opts) {
+  // _opts is internal — { skipUndo } is set by performUndo/performRedo so
+  // the replay doesn't get re-recorded onto the undo stack. Callers from
+  // roster.js etc. omit it; the undo recording lives at those call sites
+  // because they have the before-value before STATE has been mutated.
   const existing = STATE.schedule.find(r => r.name === name && r.week === week);
 
   if (existing && _isRealDbId(existing.id)) {

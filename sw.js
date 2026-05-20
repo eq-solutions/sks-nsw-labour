@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.73
-const CACHE = 'eq-field-v3.4.73';
+// EQ Solves — Field  ·  Service Worker  v3.4.77
+const CACHE = 'eq-field-v3.4.77';
 
 const PRECACHE = [
   '/',
@@ -102,4 +102,21 @@ self.addEventListener('fetch', event => {
       })
       .catch(() => caches.match(event.request))
   );
+});
+
+// ── Background Sync — replay write queue ─────────────────────
+// v3.4.74: pairs with the IDB-backed queue in scripts/supabase.js.
+// When the device comes back online (even if the tab was killed) the
+// browser fires this event, we wake any open client and have it call
+// flushWriteQueue(). If no client is open, the page will pick up the
+// queued writes via _idbRestoreQueue() on next launch.
+self.addEventListener('sync', event => {
+  if (event.tag === 'eq-write-queue') {
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+        .then(clients => {
+          if (clients.length) clients[0].postMessage({ type: 'FLUSH_WRITE_QUEUE' });
+        })
+    );
+  }
 });

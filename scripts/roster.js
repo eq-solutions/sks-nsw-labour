@@ -307,7 +307,13 @@ function fillWeek(name, week) {
   }
   const val = entry.mon;
   if (!val) { showToast('No Monday value to fill from'); return; }
-  ['tue','wed','thu','fri'].forEach(d => { entry[d] = val; });
+  // v3.4.76: capture per-day before-values before mutating so undo can
+  // restore the exact pre-fill state cell-by-cell.
+  const fillDays  = ['tue','wed','thu','fri'];
+  const undoChanges = fillDays
+    .map(d => ({ table: 'schedule', recordId: entry.id, field: d, before: entry[d] || '', after: val, name }))
+    .filter(c => c.before !== c.after);
+  fillDays.forEach(d => { entry[d] = val; });
   // v3.4.52: refresh stats + cross-page renders so top-of-page badges
   // and dashboard widgets don't go stale after a Fill. Matches updateCell.
   renderEditor();
@@ -318,6 +324,18 @@ function fillWeek(name, week) {
   showToast(`Filled Mon–Fri with ${val}`);
   auditLog(`Filled Mon–Fri with "${val}"`, 'Roster', name, week);
   updateLastUpdated();
+  // v3.4.76: undoable as a single action — Ctrl-Z reverses all four
+  // cells at once. Only the cells that actually changed are recorded.
+  if (typeof _pushUndo === 'function' && currentManagerName && undoChanges.length) {
+    _pushUndo({
+      type: 'fill-week',
+      ts:   Date.now(),
+      who:  currentManagerName,
+      week,
+      changes:   undoChanges,
+      navTarget: { week }
+    });
+  }
 }
 
 // ── Clear week ──────────────────────────────────────────────
@@ -336,6 +354,11 @@ function clearWeek(name, week) {
   const days = ['mon','tue','wed','thu','fri','sat','sun'];
   let entry = STATE.schedule.find(r => r.name === name && r.week === week);
   if (!entry) { closeModal('modal-confirm'); showToast('Nothing to clear'); return; }
+  // v3.4.76: capture per-day before-values pre-mutation so undo can
+  // restore the entire week verbatim from a single Ctrl-Z.
+  const undoChanges = days
+    .map(d => ({ table: 'schedule', recordId: entry.id, field: d, before: entry[d] || '', after: '', name }))
+    .filter(c => c.before !== '');
   days.forEach(d => { entry[d] = ''; });
   closeModal('modal-confirm');
   renderEditor();
@@ -347,6 +370,16 @@ function clearWeek(name, week) {
   showToast(`${name} — week cleared`);
   auditLog('Week cleared', 'Roster', name, week);
   updateLastUpdated();
+  if (typeof _pushUndo === 'function' && currentManagerName && undoChanges.length) {
+    _pushUndo({
+      type: 'clear-week',
+      ts:   Date.now(),
+      who:  currentManagerName,
+      week,
+      changes:   undoChanges,
+      navTarget: { week }
+    });
+  }
 }
 
 // ── Editor helpers ────────────────────────────────────────────
@@ -385,6 +418,10 @@ function updateCell(el) {
   inputColor(el);
   let entry = STATE.schedule.find(r => r.name === name && r.week === week);
   if (!entry) { entry = { name, week, mon:'', tue:'', wed:'', thu:'', fri:'', sat:'', sun:'' }; STATE.schedule.push(entry); if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = entry; }
+  // v3.4.76: capture before-value BEFORE the STATE mutation so the undo
+  // stack + audit row record the pre-edit state. Bail on no-op edits to
+  // avoid spamming the undo stack with empty entries.
+  const beforeVal = entry[day] || '';
   if (entry[day] === val) return;
   entry[day] = val;
   saveCurrentWeek();
@@ -392,8 +429,27 @@ function updateCell(el) {
   if (currentPage === 'roster') renderRoster();
   if (currentPage === 'dashboard') renderDashboard();
   showToast(`${name} → ${day.toUpperCase()}: ${val || 'cleared'}`);
-  auditLog(`${day.toUpperCase()} → ${val || 'cleared'}`, 'Roster', name, STATE.currentWeek);
+  auditLog(`${day.toUpperCase()} → ${val || 'cleared'}`, 'Roster', name, STATE.currentWeek, {
+    before:       beforeVal,
+    after:        val,
+    target_table: 'schedule',
+    target_id:    entry.id,
+    target_field: day
+  });
   updateLastUpdated();
+  // v3.4.76: record the action on the local undo stack. _pushUndo guards
+  // against missing currentManagerName and empty change lists; it's a
+  // no-op when called outside a supervisor session.
+  if (typeof _pushUndo === 'function' && currentManagerName) {
+    _pushUndo({
+      type: 'cell',
+      ts:   Date.now(),
+      who:  currentManagerName,
+      week,
+      changes: [{ table: 'schedule', recordId: entry.id, field: day, before: beforeVal, after: val, name }],
+      navTarget: { week }
+    });
+  }
   saveCellToSB(name, week, day, val).catch(() => showToast('Save failed — check connection'));
 }
 

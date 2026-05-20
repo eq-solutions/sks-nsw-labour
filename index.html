@@ -191,14 +191,178 @@
 #access-gate > .gate-card > div:last-of-type {
   border-top: 1px solid rgba(61,168,216,.12) !important;
 }
+
+/* v3.4.76 — Undo/Redo + audit revert styling */
+@keyframes cellUndoneFlash {
+  0%   { background: rgba(124, 119, 185, .55); box-shadow: 0 0 0 3px rgba(124, 119, 185, .35); }
+  60%  { background: rgba(124, 119, 185, .15); box-shadow: 0 0 0 3px rgba(124, 119, 185, .0); }
+  100% { background: transparent; box-shadow: none; }
+}
+.cell-undone-flash {
+  animation: cellUndoneFlash 1.4s ease-out;
+}
+.audit-revert-btn {
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  color: #1F335C;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.audit-revert-btn:hover { background: #E2E8F0; }
+.audit-revert-btn:disabled { opacity: .5; cursor: not-allowed; }
+.audit-reverted-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #FEF3C7;
+  color: #92400E;
+  letter-spacing: .3px;
+}
+#topbar-undo-btn:disabled, #topbar-redo-btn:disabled {
+  opacity: .4;
+  cursor: default;
+}
 </style>
 </head>
 <body>
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.73
+  EQ Solves — Field  v3.4.77
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.77  (What's-new credit page + SKS-only fallback)
+  ────────────────────────────────────────────────────────────
+  Two small but strategic changes:
+
+  1. What's-new banner now credits the person who asked for each
+     change. Two entries in this release:
+      • Just shipped — Undo button (credited to Matt Miller)
+      • Coming next  — Teams roster filter (credited to Ben Ritchie)
+     The point is the feedback flywheel: when someone sees their
+     name attached to a shipped feature, the next idea comes
+     more freely. Banner is re-accessible at any time via the
+     "What's new" link added to the sidebar footer (next to
+     Logout / Audit / Privacy). Bottom of the banner has a
+     mailto link to dev@eq.solutions so ideas have somewhere
+     concrete to go.
+
+  2. Tenant detection now falls back to 'sks' (not 'eq') in this
+     repo. The 2026-05-20 repo split made this an SKS-only
+     codebase — the original EQ default protected against
+     multi-tenant ambiguity that no longer exists here. Effect:
+     deploy previews and any non-recognised hostname now render
+     the SKS palette + logo + access codes correctly. Production
+     hostnames (sks-nsw-labour.netlify.app + deploy-preview-*)
+     were never affected; this only changes the fallback case.
+
+  CHANGES IN v3.4.76  (Undo / Redo + audit-log Revert button)
+  ────────────────────────────────────────────────────────────
+  Field request from SKS — "someone accidentally changed Monday,
+  pressed next-week, and didn't know what it used to be." This
+  release adds two layers of recovery:
+
+  Layer A — Local undo stack (works the moment you upload):
+   • Ctrl-Z / Cmd-Z + topbar ↶ Undo / ↷ Redo buttons.
+   • Last 20 supervisor edits persisted to localStorage so the
+     stack survives reload (key: eq_undo_stack_v1).
+   • Each entry stores per-cell before-values, so undo restores
+     the exact pre-edit state even after week navigation.
+   • Covers: single-cell edits, Fill Mon→Fri, Clear Week. Multi-
+     cell actions undo as one Ctrl-Z (not 4–7 separate ones).
+   • If you've navigated to a different week since the edit, undo
+     navigates back to the affected week before flashing the cell.
+   • Reverted cells pulse purple (cell-undone-flash) so the
+     supervisor sees what just changed.
+   • Buttons are supervisor-only — hidden in view-only mode and
+     for the staff-TS / agency self-entry gates.
+
+  Layer B — Audit-log Revert (per row, once DB migration runs):
+   • New columns on audit_log: before_value, after_value,
+     target_table, target_id, target_field, is_reverted,
+     reverted_by. Migration SQL ships in migrations/.
+   • Single-cell schedule edits now capture before/after into the
+     audit row alongside the human-readable summary.
+   • Audit modal grows a ↶ Revert button per qualifying row.
+     Click → confirm → applies the before-value, marks the
+     original row as reverted, drops a fresh "Revert: …" audit
+     row so the chain stays traceable.
+   • Conflict-aware: if the cell has been edited again since the
+     audit row was written, you get a second confirm with the
+     current-vs-after diff. No silent stomping.
+   • Gated by a runtime probe (_AUDIT_HAS_REVERT_COLS). Before
+     the migration runs the new fields are dropped from the POST
+     and the Revert button stays hidden — safe to upload first.
+
+  Carried forward (not in v3.4.76):
+   • Multi-cell revert from the audit log (fill-week / clear-week
+     audit rows still show but don't expose Revert — undo stack
+     handles those locally).
+   • Revert for people / managers / sites tables. Schedule only.
+   • Cross-supervisor undo (each browser has its own stack).
+
+  CHANGES IN v3.4.75  (offline reads: persist STATE to IndexedDB + hydrate on launch)
+  ────────────────────────────────────────────────────────────
+  Resilience-stack follow-up. v3.4.74 fixed offline WRITES (IDB
+  queue + Background Sync). This release fixes offline READS:
+  during a Supabase outage the app used to log in fine but show
+  empty pages — because STATE was in-memory only and the toast
+  claiming "showing last known data" had nothing to show.
+
+  Changes:
+   • scripts/supabase.js — IDB DB version bumped 1 → 2 with a new
+     `state_cache` object store (single 'snapshot' row, atomic).
+     New helpers: _idbSaveStateSnapshot / _idbLoadStateSnapshot.
+     Upgrade is non-destructive — write_queue store is preserved
+     so any pending writes from v3.4.74 still flush correctly.
+   • index.html (loadFromSupabase) — on each successful load we
+     persist {people, sites, schedule, managers, timesheets} to
+     IDB. On startup (when STATE is empty) we hydrate from IDB
+     BEFORE the network call so the page paints instantly with
+     last-known data; the live fetch refreshes in the background.
+   • index.html (failure toast) — when the network fetch fails
+     but we already hydrated cached STATE, the toast now reads
+     "Offline — showing data from <N min/h> ago. Edits will sync
+     when reconnected." rather than the old misleading copy.
+   • index.html (updateLastUpdated) — accepts an optional Date.
+     When supplied the topbar label reads "Cached DD/MM HH:MM"
+     so it's obvious at a glance the page is stale-offline.
+
+  Known gaps (carried forward to a future release):
+   • Leave requests / job numbers / TAFE holidays / apprentice
+     payload not yet in the IDB snapshot — the v3.4.75 cache
+     covers loadFromSupabase's five tables only.
+   • Staff-TS self-entry PIN check still requires live Supabase.
+
+  CHANGES IN v3.4.74  (offline write queue: localStorage → IndexedDB + Background Sync)
+  ────────────────────────────────────────────────────────────
+  Resilience-stack Layer 2 (the 2026-05-19 Netlify outage exposed
+  that the offline write queue used localStorage as its backing
+  store — ~5MB cap, browser can evict under storage pressure, and
+  it doesn't reliably survive a tab close + crash on mobile).
+
+  Changes:
+   • scripts/supabase.js — write queue now persists to IndexedDB
+     ('eq-offline' DB, 'write_queue' store). Legacy localStorage
+     queue from <= v3.4.73 is migrated in once on first load.
+   • sw.js — adds a 'sync' event listener for tag 'eq-write-queue'
+     so closed-tab users still have writes replayed once their
+     device comes back online. (Falls back gracefully on iOS
+     Safari, which doesn't implement Background Sync — the
+     existing window.online handler still flushes.)
+   • index.html — registers the sync tag on coming back online
+     and listens for FLUSH_WRITE_QUEUE postMessage from the SW.
+
+  In-memory _writeQueue array is unchanged — UI sync badge and
+  flushWriteQueue() logic continue to read from it. Only the
+  persistence layer has been swapped.
 
   CHANGES IN v3.4.73  (widen week-picker — "(this week)" no longer truncates)
   ────────────────────────────────────────────────────────────
@@ -1830,6 +1994,8 @@
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
       &nbsp;·&nbsp;
       <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
+      &nbsp;·&nbsp;
+      <button onclick="openWhatsNew()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">What's new</button>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.32);font-size:9px;line-height:1.5">
         Property of EQ
       </div>
@@ -1857,6 +2023,11 @@
     <span class="pill pill-amber" id="stat-leave">— on leave</span>
     <span class="pill pill-blue" id="stat-total">— total</span>
     <div class="topbar-actions">
+      <!-- v3.4.76: Undo / Redo for supervisor edits. Visible to managers
+           only (script enables on isManager flip). Ctrl-Z / Cmd-Z does
+           the same thing from anywhere outside an input. -->
+      <button class="btn btn-secondary btn-sm" id="topbar-undo-btn" onclick="performUndo()" disabled title="Nothing to undo" style="display:none"><span class="hide-mobile">↶ Undo</span><span class="show-mobile">↶</span></button>
+      <button class="btn btn-secondary btn-sm" id="topbar-redo-btn" onclick="performRedo()" disabled title="Nothing to redo" style="display:none"><span class="hide-mobile">↷ Redo</span><span class="show-mobile">↷</span></button>
       <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshData()" title="Refresh data"><span class="hide-mobile">↻ Sync</span><span class="show-mobile">↻</span></button>
       <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print</button>
       <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ CSV</button>
@@ -2439,6 +2610,31 @@ async function loadFromSupabase() {
     return true;
   }
 
+  // v3.4.75: hydrate from IDB snapshot when STATE is empty (first paint
+  // after gate). Lets the user see last-known data immediately while the
+  // live fetch runs in the background — and means an offline launch
+  // shows the roster instead of empty pages.
+  const _stateEmpty = !STATE.people || !STATE.people.length;
+  if (_stateEmpty && typeof _idbLoadStateSnapshot === 'function') {
+    try {
+      const snap = await _idbLoadStateSnapshot();
+      if (snap && snap.data) {
+        const d = snap.data;
+        STATE.people     = d.people     || [];
+        STATE.sites      = d.sites      || [];
+        STATE.schedule   = d.schedule   || [];
+        STATE.managers   = d.managers   || [];
+        STATE.timesheets = d.timesheets || [];
+        STATE.scheduleIndex = {};
+        STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
+        STATE.cachedAt = snap.cachedAt;
+        hideLoadingOverlay();
+        updateLastUpdated(snap.cachedAt);
+        if (typeof renderCurrentPage === 'function') renderCurrentPage();
+      }
+    } catch (e) { console.warn('EQ[idb] state hydrate failed:', e && e.message || e); }
+  }
+
   try {
     const [people, sites, schedule, managers, tsRows] = await Promise.all([
       sbFetch('people?select=*&order=name'),
@@ -2465,13 +2661,39 @@ async function loadFromSupabase() {
 
     STATE.timesheets = tsRows;
     STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
+    STATE.cachedAt = null;
     hideLoadingOverlay();
     updateLastUpdated();
+
+    // v3.4.75: persist a snapshot for next launch. Fire-and-forget;
+    // a failed save (storage quota, private mode) must not impact the
+    // fresh data that's already in STATE.
+    if (typeof _idbSaveStateSnapshot === 'function') {
+      _idbSaveStateSnapshot({
+        people:     STATE.people,
+        sites:      STATE.sites,
+        schedule:   STATE.schedule,
+        managers:   STATE.managers,
+        timesheets: STATE.timesheets
+      }).catch(() => {});
+    }
     return true;
   } catch(e) {
     hideLoadingOverlay();
     if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
-      showToast('⚠ Connection error — showing last known data. Do not edit until connection restored.');
+      // v3.4.75: friendlier toast — if we hydrated cached data above,
+      // tell the user how stale it is and that edits will queue. Old
+      // toast claimed "showing last known data" even when STATE was
+      // empty, which was misleading.
+      const cachedAt = STATE.cachedAt;
+      const hasCachedData = STATE.people && STATE.people.length;
+      if (hasCachedData && cachedAt) {
+        const mins = Math.round((Date.now() - cachedAt) / 60000);
+        const age  = mins < 60 ? mins + ' min ago' : Math.round(mins/60) + ' h ago';
+        showToast('⚠ Offline — showing data from ' + age + '. Edits will sync when reconnected.');
+      } else {
+        showToast('⚠ Connection error — try again when reconnected.');
+      }
     }
     return false;
   }
@@ -2575,12 +2797,16 @@ function updateTopStats() {
 }
 
 // ── Last updated ──────────────────────────────────────────────
-function updateLastUpdated() {
+function updateLastUpdated(when) {
+  // v3.4.75: optional `when` (ms epoch or Date) — when supplied, label
+  // becomes "Cached DD/MM HH:MM" so users can tell at a glance that the
+  // page is showing offline-cached data rather than the live state.
   const el  = document.getElementById('last-updated');
   const mgr = document.getElementById('last-updated-manager');
   if (!el) return;
-  const now = new Date();
-  el.textContent  = `Updated ${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const d      = when ? new Date(when) : new Date();
+  const prefix = when ? 'Cached '       : 'Updated ';
+  el.textContent  = `${prefix}${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   if (mgr) mgr.textContent = currentManagerName ? `by ${currentManagerName}` : '';
 }
 
@@ -2932,7 +3158,45 @@ if ('serviceWorker' in navigator) {
       .then(reg => console.log('SW registered:', reg.scope))
       .catch(err => console.warn('SW registration failed:', err));
   });
+
+  // v3.4.74: SW asks us to flush the IDB-backed write queue once the
+  // device comes back online — see the 'sync' listener in sw.js.
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'FLUSH_WRITE_QUEUE' && typeof flushWriteQueue === 'function') {
+      flushWriteQueue();
+    }
+  });
 }
+
+// v3.4.74: Background Sync registration — fires sw.js 'sync' handler
+// once the device has network again, even if the tab was killed.
+// SyncManager isn't on iOS Safari, so the existing window.online
+// listener in scripts/supabase.js still flushes there.
+window.addEventListener('online', () => {
+  if ('serviceWorker' in navigator && 'SyncManager' in window) {
+    navigator.serviceWorker.ready
+      .then(sw => sw.sync.register('eq-write-queue'))
+      .catch(() => {});
+  }
+});
+
+// v3.4.76: Ctrl-Z / Cmd-Z → undo, Ctrl-Shift-Z (or Cmd-Shift-Z) → redo.
+// Guarded against firing inside any input/textarea/contentEditable so the
+// browser's built-in undo for text fields still works there. The performUndo /
+// performRedo functions live in scripts/supabase.js and handle isManager
+// permission + empty-stack toasts internally.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'z' && e.key !== 'Z') return;
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  e.preventDefault();
+  if (e.shiftKey) {
+    if (typeof performRedo === 'function') performRedo();
+  } else {
+    if (typeof performUndo === 'function') performUndo();
+  }
+});
 
 </script>
 

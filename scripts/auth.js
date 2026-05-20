@@ -555,6 +555,14 @@ function applyManagerMode() {
   const status   = document.getElementById('lock-status');
   const btn      = document.getElementById('manager-lock-btn');
   const auditBtn = document.getElementById('audit-log-btn');
+  // v3.4.76: undo / redo are supervisor-only — flip visibility every
+  // time the lock state changes so view-only users never see the
+  // controls. _updateUndoButton handles tooltip + disabled state.
+  const undoBtn  = document.getElementById('topbar-undo-btn');
+  const redoBtn  = document.getElementById('topbar-redo-btn');
+  if (undoBtn) undoBtn.style.display = isManager ? '' : 'none';
+  if (redoBtn) redoBtn.style.display = isManager ? '' : 'none';
+  if (typeof _updateUndoButton === 'function') _updateUndoButton();
 
   if (isManager) {
     document.body.classList.add('manager-mode');

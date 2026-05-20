@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.73';
+const APP_VERSION = '3.4.77';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -38,7 +38,14 @@ function _detectTenantSlug() {
   // e.g. deploy-preview-1--sks-nsw-labour.netlify.app, v3-3-2-test--sks-nsw-labour.netlify.app
   if (h.indexOf('sks-nsw-labour') !== -1) return 'sks';
   if (h.indexOf('eq-solves-field') !== -1) return 'eq';
-  return 'eq';
+  // v3.4.77: fallback flipped from 'eq' to 'sks'. The 2026-05-20 repo
+  // split made this an SKS-only codebase — the original EQ default
+  // was protection against a multi-tenant ambiguity that no longer
+  // exists here. Effect: unknown hosts (file://, localhost, any new
+  // CDN we add later) render the SKS palette + logo + access codes
+  // rather than EQ defaults. Production hostnames hit the exact /
+  // substring matches above; this only changes the fallback case.
+  return 'sks';
 }
 
 // ── Tenant config (populated by loadTenantConfig) ─────────────
