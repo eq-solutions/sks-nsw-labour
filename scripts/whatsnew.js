@@ -20,30 +20,35 @@
 // their localStorage.
 // ─────────────────────────────────────────────────────────────
 
-const WHATSNEW_KEY     = 'eq.whatsnew.v3.4.77.seen';
-const WHATSNEW_VERSION = 'v3.4.77';
+const WHATSNEW_KEY     = 'eq.whatsnew.v3.4.78.seen';
+const WHATSNEW_VERSION = 'v3.4.78';
 
 // Two sections — "shipped" (live in this release) and "coming"
 // (in the pipeline, credited to the requester so they know their
 // idea is being worked on). Both feed the same "your feedback
 // ships" story.
+//
+// v3.4.78: Teams promoted from "Coming next" → "Just shipped".
+// Ben's credit moves with it — the whole point of the credit line
+// is to follow the request all the way through, so the person who
+// asked sees their name appear when it lands. Undo (Matt) stays as
+// recently-shipped reminder.
 const WHATSNEW_SHIPPED = [
   {
+    icon:  '👥',
+    title: 'Teams — filter the roster to your crew',
+    body:  'New "Team" pill row above the roster and contacts pages. Click a team to show just those people. A person can be in more than one team (Equinix Crew AND Apprentice Pool both work). Coloured stripe down each row matches the team. ⚙ Manage Teams lets you create, recolour, and edit memberships.',
+    credit: 'Ben Ritchie'
+  },
+  {
     icon:  '↶',
-    title: 'Undo button (Ctrl-Z)',
-    body:  'Edited Monday by accident and pressed next-week? Hit the new ↶ Undo button in the top bar — or just Ctrl-Z — and the previous value comes back. Works for fill-week and clear-week too. Last 20 edits remembered, even after you reload.',
+    title: 'Undo button (Ctrl-Z) — shipped in v3.4.76',
+    body:  'Still here — hit ↶ Undo in the top bar or Ctrl-Z to reverse your last roster edit. Now even more useful when you accidentally re-shuffle a whole crew\'s week.',
     credit: 'Matt Miller'
   }
 ];
 
-const WHATSNEW_COMING = [
-  {
-    icon:  '👥',
-    title: 'Teams (filter the roster to your crew)',
-    body:  'Name your own teams (Equinix Crew, AirTrunk day shift, etc.) and filter the roster to just that group. A person can sit in more than one team. Targeted for the next release.',
-    credit: 'Ben Ritchie'
-  }
-];
+const WHATSNEW_COMING = [];
 
 function _renderWhatsNew() {
   const el = document.getElementById('whatsnew-banner');
@@ -68,14 +73,21 @@ function _renderWhatsNew() {
     </div>`;
 
   const shippedRows = WHATSNEW_SHIPPED.map(renderEntry).join('');
+  // v3.4.78: "Coming next" section only renders when there's actually
+  // something credited in the pipeline. Empty section with a stale
+  // heading reads like the product is stalled — better to drop it and
+  // let the feedback CTA at the bottom do the "what's next?" work.
   const comingRows  = WHATSNEW_COMING.map(renderEntry).join('');
+  const headerSubtitle = WHATSNEW_COMING.length
+    ? 'Two updates — both from your feedback.'
+    : 'Your idea, shipped. What\'s next?';
 
   el.innerHTML = `
     <div style="background:var(--purple-lt);border-left:4px solid var(--purple);border-radius:6px;padding:14px 18px;margin-bottom:20px">
       <div style="display:flex;align-items:flex-start;gap:12px">
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">What's new — ${WHATSNEW_VERSION}</div>
-          <div style="font-size:14px;font-weight:600;color:var(--navy);margin-top:2px">Two updates — both from your feedback.</div>
+          <div style="font-size:14px;font-weight:600;color:var(--navy);margin-top:2px">${headerSubtitle}</div>
         </div>
         <button onclick="dismissWhatsNew()" title="Dismiss"
           style="background:none;border:none;font-size:18px;color:var(--ink-3);cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0">✕</button>
@@ -86,10 +98,10 @@ function _renderWhatsNew() {
         ${shippedRows}
       </div>
 
-      <div style="margin-top:8px">
+      ${WHATSNEW_COMING.length ? `<div style="margin-top:8px">
         <div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-top:10px">Coming next</div>
         ${comingRows}
-      </div>
+      </div>` : ''}
 
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(124,119,185,.18);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:0">

@@ -60,6 +60,7 @@
 <script src="scripts/supabase.js"></script>
 <script src="scripts/roster.js"></script>
 <script src="scripts/people.js"></script>
+<script src="scripts/teams.js"></script>
 <script src="scripts/sites.js"></script>
 <script src="scripts/managers.js"></script>
 <script src="scripts/dashboard.js"></script>
@@ -235,8 +236,58 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.77
+  EQ Solves — Field  v3.4.78
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.78  (Teams — named filter groups for the roster)
+  ────────────────────────────────────────────────────────────
+  Field request from Ben Ritchie (promoted from v3.4.77's
+  "Coming next" → "Just shipped" — the feedback flywheel doing
+  its job).
+
+  What's new for supervisors:
+   • New "Team" pill row above the roster and contacts pages:
+     All • <each team> • Unassigned • ⚙ Manage. Click a pill
+     to filter the visible roster / contacts list down to just
+     that team's people. Active filter persists across reloads
+     (localStorage). Pseudo-team "Unassigned" surfaces anyone
+     who hasn't been placed yet so supervisors can triage.
+   • Many-to-many membership — a person can sit in Equinix
+     Crew AND Apprentice Pool simultaneously. Filtering
+     "Apprentice Pool" shows all apprentices regardless of
+     which site crew they're currently on.
+   • ⚙ Manage Teams modal (supervisor-only): create / rename /
+     recolor / delete teams; multi-select members from the
+     full people list. Save is explicit — checkbox edits buffer
+     until you click "Save changes" so a stray click can't
+     scatter memberships.
+   • 4px coloured left-border on each roster row in the team's
+     colour. Visible when "All" is showing (first team alpha
+     wins for people in multiple teams). When a specific team
+     is filtered, every visible row wears that team's stripe.
+
+  Under the hood:
+   • New tables: `teams` (id, name, color, org_id, created_at,
+     UNIQUE org_id+name) and `team_members` (team_id, person_id,
+     org_id) with ON DELETE CASCADE on both FKs. Anon RLS
+     matches the existing pattern (SELECT(true), writes require
+     org_id). Migration:
+     migrations/2026-05-20_teams_and_members.sql.
+   • STATE.teams + STATE.teamMembers loaded alongside the other
+     five tables in loadFromSupabase. Persisted to the IDB
+     snapshot (v3.4.75 layer) so offline launches keep their
+     team filter working.
+   • currentTeamFilter persisted to localStorage so a refresh
+     remembers which crew the supervisor was looking at.
+   • personInActiveTeam(id) is the single filter source used
+     by roster + contacts + editor pages. colorForPerson(id)
+     drives the row stripe.
+
+  Carried forward (not in v3.4.78):
+   • Team-based digest emails. Teams stays view-only for now.
+   • Per-team availability / scheduling rules. Same reason.
+   • Audit revert for team membership edits (the v3.4.76 audit
+     Revert button covers schedule cells only).
 
   CHANGES IN v3.4.77  (What's-new credit page + SKS-only fallback)
   ────────────────────────────────────────────────────────────
@@ -2043,6 +2094,11 @@
     <span id="sync-status" style="display:none;background:var(--amber-lt);color:var(--amber);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto"></span>
   </div>
 
+  <!-- v3.4.78: Teams filter pill row. Sits between status bar and the
+       page content. Hidden by default; renderTeamPills() shows it on
+       roster + contacts + schedule pages. Populated by scripts/teams.js. -->
+  <div id="teams-filter-row" style="display:none"></div>
+
   <!-- Pages — content injected by render functions -->
   <div class="page print-active" id="page-dashboard">
     <!-- v3.4.23: "What's new" banner — populated by scripts/whatsnew.js, dismissed via localStorage -->
@@ -2563,6 +2619,28 @@
   </div>
 </div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-pin-mgmt')">Done</button></div></div></div>
 
+<!-- v3.4.78: Manage Teams modal. Supervisor-only — opened from the
+     ⚙ Manage teams button on the topbar pill row. Body content is
+     rendered by scripts/teams.js renderManageTeamsModal(). -->
+<div class="modal-overlay" id="modal-manage-teams">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <h3>👥 Manage Teams</h3>
+      <button class="modal-close" onclick="closeModal('modal-manage-teams')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.5">
+        Teams are named filters for the roster. A person can belong to multiple teams.
+        Teams do not affect availability or scheduling — they are a view-only concept.
+      </p>
+      <div id="manage-teams-body"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('modal-manage-teams')">Done</button>
+    </div>
+  </div>
+</div>
+
 <datalist id="site-datalist"></datalist>
 <datalist id="ts-job-list"></datalist>
 
@@ -2620,28 +2698,37 @@ async function loadFromSupabase() {
       const snap = await _idbLoadStateSnapshot();
       if (snap && snap.data) {
         const d = snap.data;
-        STATE.people     = d.people     || [];
-        STATE.sites      = d.sites      || [];
-        STATE.schedule   = d.schedule   || [];
-        STATE.managers   = d.managers   || [];
-        STATE.timesheets = d.timesheets || [];
+        STATE.people      = d.people      || [];
+        STATE.sites       = d.sites       || [];
+        STATE.schedule    = d.schedule    || [];
+        STATE.managers    = d.managers    || [];
+        STATE.timesheets  = d.timesheets  || [];
+        // v3.4.78 — teams + memberships in the snapshot
+        STATE.teams       = d.teams       || [];
+        STATE.teamMembers = d.teamMembers || [];
         STATE.scheduleIndex = {};
         STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
         STATE.cachedAt = snap.cachedAt;
         hideLoadingOverlay();
         updateLastUpdated(snap.cachedAt);
         if (typeof renderCurrentPage === 'function') renderCurrentPage();
+        if (typeof renderTeamPills    === 'function') renderTeamPills();
       }
     } catch (e) { console.warn('EQ[idb] state hydrate failed:', e && e.message || e); }
   }
 
   try {
-    const [people, sites, schedule, managers, tsRows] = await Promise.all([
+    // v3.4.78 — also fetch teams + team_members. Empty arrays on
+    // pre-migration tenants since sbFetch swallows 4xx for GETs and
+    // returns []. teams won't be in TENANT_DISABLED_TABLES for SKS.
+    const [people, sites, schedule, managers, tsRows, teams, teamMembers] = await Promise.all([
       sbFetch('people?select=*&order=name'),
       sbFetch('sites?select=*&order=name'),
       sbFetch('schedule?select=*'),
       sbFetch('managers?select=*&order=name'),
       sbFetch('timesheets?select=*'),
+      sbFetch('teams?select=*&order=name'),
+      sbFetch('team_members?select=*'),
     ]);
 
     STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));
@@ -2661,20 +2748,28 @@ async function loadFromSupabase() {
 
     STATE.timesheets = tsRows;
     STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
+    // v3.4.78 — Teams: pure filter metadata, light mapping.
+    STATE.teams       = (teams       || []).map(r => ({ id: r.id, name: r.name, color: r.color || '#7C77B9', created_at: r.created_at }));
+    STATE.teamMembers = (teamMembers || []).map(r => ({ team_id: r.team_id, person_id: r.person_id }));
     STATE.cachedAt = null;
     hideLoadingOverlay();
     updateLastUpdated();
+    if (typeof renderTeamPills === 'function') renderTeamPills();
 
     // v3.4.75: persist a snapshot for next launch. Fire-and-forget;
     // a failed save (storage quota, private mode) must not impact the
     // fresh data that's already in STATE.
+    // v3.4.78: snapshot now also carries teams + memberships so the
+    // filter pill row renders correctly on offline launch too.
     if (typeof _idbSaveStateSnapshot === 'function') {
       _idbSaveStateSnapshot({
-        people:     STATE.people,
-        sites:      STATE.sites,
-        schedule:   STATE.schedule,
-        managers:   STATE.managers,
-        timesheets: STATE.timesheets
+        people:      STATE.people,
+        sites:       STATE.sites,
+        schedule:    STATE.schedule,
+        managers:    STATE.managers,
+        timesheets:  STATE.timesheets,
+        teams:       STATE.teams,
+        teamMembers: STATE.teamMembers
       }).catch(() => {});
     }
     return true;
@@ -2724,6 +2819,10 @@ function showPage(id) {
   currentPage = id;
   const lb = document.getElementById('legend-bar');
   if (lb) lb.style.display = (id === 'roster') ? '' : 'none';
+  // v3.4.78: refresh the teams pill row so it shows on roster /
+  // contacts / schedule pages and hides everywhere else. renderTeamPills
+  // is no-op if scripts/teams.js hasn't loaded yet.
+  if (typeof renderTeamPills === 'function') renderTeamPills();
   renderCurrentPage();
   // v3.4.66: synthetic SPA pageview. URL doesn't change when navigating
   // between pages in this app — without this hook PostHog/Clarity see
