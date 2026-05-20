@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.77
-const CACHE = 'eq-field-v3.4.77';
+// EQ Solves — Field  ·  Service Worker  v3.4.78
+const CACHE = 'eq-field-v3.4.78';
 
 const PRECACHE = [
   '/',
@@ -14,6 +14,7 @@ const PRECACHE = [
   '/scripts/supabase.js',
   '/scripts/roster.js',
   '/scripts/people.js',
+  '/scripts/teams.js',
   '/scripts/sites.js',
   '/scripts/managers.js',
   '/scripts/dashboard.js',

@@ -417,6 +417,11 @@ function renderContacts() {
     (p.email && p.email.toLowerCase().includes(search))
   );
   if (group) people = people.filter(p => p.group === group);
+  // v3.4.78: apply the topbar team filter to the contacts page too.
+  // Same pill row drives both — no extra UI, just consistent behaviour.
+  if (typeof personInActiveTeam === 'function') {
+    people = people.filter(p => personInActiveTeam(p.id));
+  }
 
   const { col, dir } = contactsSort;
   const mult = dir === 'asc' ? 1 : -1;

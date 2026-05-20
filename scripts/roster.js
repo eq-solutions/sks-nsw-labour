@@ -185,6 +185,13 @@ function getRosterPeopleForGroup(group) {
       return Object.values(s).some(v => v === siteFilter);
     });
   }
+  // v3.4.78: team filter from the topbar pill row. personInActiveTeam
+  // lives in scripts/teams.js and returns true when the current filter
+  // is null (no team selected) — so this is a no-op until a team is
+  // picked.
+  if (typeof personInActiveTeam === 'function') {
+    filtered = filtered.filter(p => personInActiveTeam(p.id));
+  }
   return sortPeople(filtered, rosterSort.col, rosterSort.dir);
 }
 
@@ -268,7 +275,13 @@ function renderRoster() {
     people.forEach(p => {
       const s = getPersonSchedule(p.name, week);
       const isOnLeaveAllWeek = ['mon','tue','wed','thu','fri'].every(d2 => isLeave(s[d2] || ''));
-      html += `<tr>
+      // v3.4.78: 4px left-border in the person's team colour. When a
+      // specific team is filtered, all visible rows wear that team's
+      // colour. When 'All' is shown, the first team a person belongs
+      // to alphabetically wins. People in no team get no stripe.
+      const _stripe = (typeof colorForPerson === 'function') ? colorForPerson(p.id) : null;
+      const _rowStyle = _stripe ? `style="box-shadow:inset 4px 0 0 0 ${_stripe}"` : '';
+      html += `<tr ${_rowStyle}>
         <td class="name-col">${esc(p.name)}</td>
         ${days.map(d => {
           const code = s[d] || '';
@@ -495,6 +508,10 @@ function renderEditor() {
   let html = dayHeaderHtml;
   groups.forEach(g => {
     let people = STATE.people.filter(p => p.group === g);
+    // v3.4.78: apply the team filter from the topbar pill row.
+    if (typeof personInActiveTeam === 'function') {
+      people = people.filter(p => personInActiveTeam(p.id));
+    }
     if (!people.length) return;
     people = [...people].sort((a, b) => editorSort === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
     const gClass = g === 'Apprentice' ? 'apprentice' : g === 'Labour Hire' ? 'labour' : 'direct';
