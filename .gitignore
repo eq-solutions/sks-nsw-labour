@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────
+# .gitignore — sks-nsw-labour / eq-solves-field
+# Repo was missing one (only .gitattributes existed). Two accidental
+# commits surfaced from that: __perm_test (empty leftover) and
+# screenshots/my schedule.zip (2.4 MB binary). This stops future copies.
+#
+# Note: this file does not un-commit files that already exist in the
+# repo — those need `git rm` separately.
+# ─────────────────────────────────────────────────────────────
+
+# Environment secrets — never commit
+.env
+.env.*
+!.env.example
+.envrc
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+
+# Build / dist artifacts
+dist/
+build/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Netlify CLI / functions emulator
+.netlify/
+
+# Coverage / test reports
+coverage/
+.nyc_output/
+
+# Block accidental binary commits — pattern matches what slipped in
+# previously. Override with `git add -f <path>` if you genuinely want
+# to commit a zip (rare).
+*.zip
+__perm_test
+
+# Local-only notes / scratch files — committed deliberately means
+# renaming away from the .local convention.
+*.local.md
+*.local.txt
+*.local.json
