@@ -230,14 +230,232 @@
   opacity: .4;
   cursor: default;
 }
+
+/* v3.4.79 — Timesheets polish */
+/* Container that owns the horizontal scroll + the sticky header.    */
+.ts-table-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 280px);
+  position: relative;
+}
+.ts-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #1F335C;            /* SKS navy */
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: .3px;
+  padding: 10px 8px;
+}
+/* Freeze the Name column when the table scrolls horizontally.       */
+/* The header cell needs higher z-index so it sits above row cells.  */
+.ts-table thead th.ts-name-col-head,
+.ts-table thead th.ts-status-col-head {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+}
+.ts-table thead th.ts-name-col-head { min-width: 160px; }
+.ts-table thead th.ts-status-col-head { left: 160px; }
+.ts-table tbody td.ts-name-col,
+.ts-table tbody td.ts-status-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+.ts-table tbody td.ts-status-col { left: 160px; }
+/* Lift the stripe so it shows even when the cell sits over content */
+.ts-table tbody tr.ts-data-row > td.ts-name-col {
+  background-clip: padding-box;
+}
+
+/* Day-header highlight for today. Soft purple wash, brighter label. */
+.ts-day-head.ts-day-today {
+  background: #2C406B !important;
+  color: #FFFFFF;
+}
+.ts-today-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7DD3FC;
+  margin-left: 4px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 2px rgba(125,211,252,.25);
+}
+/* Today column body cells get a faint vertical band so the eye      */
+/* can follow the column down even when the header scrolls off-top.  */
+.ts-table tbody td.ts-cell-today {
+  background: linear-gradient(180deg, rgba(124,119,185,.06), rgba(124,119,185,.03));
+}
+
+/* Status pill — appears in the Name/Status column.                  */
+.ts-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  line-height: 1;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.ts-status-pill-label { font-weight: 600; }
+.ts-status-complete { background: #DCFCE7; color: #166534; border-color: #BBF7D0; }
+.ts-status-partial  { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
+.ts-status-empty    { background: #F1F5F9; color: #64748B; border-color: #E2E8F0; }
+.ts-status-leave    { background: #EEEDF8; color: #5B57A0; border-color: #DDD9F0; }
+.ts-status-tafe     { background: #EEEDF8; color: #5B57A0; border-color: #DDD9F0; }
+
+/* Muted leave / TAFE day cells — read-only, no inputs.              */
+.ts-cell-muted {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(124,119,185,.04),
+    rgba(124,119,185,.04) 8px,
+    rgba(124,119,185,.08) 8px,
+    rgba(124,119,185,.08) 16px
+  );
+  color: #5B57A0;
+}
+.ts-mute-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.7);
+  border: 1px dashed rgba(91,87,160,.35);
+}
+
+/* Soften the split-+ and Fill-Week buttons so the data is the       */
+/* visual focus, not the buttons. Smaller, lower contrast.           */
+.ts-split-btn {
+  font-size: 13px !important;
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  background: #F1F5F9 !important;
+  color: #64748B !important;
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 5px !important;
+}
+.ts-split-btn:hover:not(:disabled) {
+  background: #E2E8F0 !important;
+  color: #1F335C !important;
+}
+.ts-split-btn.active {
+  background: #7C77B9 !important;
+  color: #FFFFFF !important;
+  border-color: #7C77B9 !important;
+}
+.ts-fillweek-btn {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  padding: 3px 6px !important;
+  background: transparent !important;
+  color: #1F335C !important;
+  border: 1px dashed #94A3B8 !important;
+  border-radius: 5px !important;
+  letter-spacing: .2px !important;
+}
+.ts-fillweek-btn:hover:not(:disabled) {
+  background: #1F335C !important;
+  color: #FFFFFF !important;
+  border-color: #1F335C !important;
+  border-style: solid !important;
+}
+.ts-fillweek-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+/* Lighter alternating stripes for data rows; the box-shadow inset   */
+/* stripe on the left edge is the primary completion signal.         */
+.ts-data-row > td {
+  border-bottom: 1px solid #F1F5F9;
+  padding: 8px 6px;
+}
+.ts-data-row:nth-child(even) > td:not(.ts-name-col):not(.ts-status-col) {
+  background: rgba(15,23,42,.02);
+}
+
+/* Total column polish.                                              */
+.ts-table tbody td.ts-total-col {
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+}
 </style>
 </head>
 <body>
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.78
+  EQ Solves — Field  v3.4.79
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.79  (Timesheets polish — Phase 1 of 3)
+  ────────────────────────────────────────────────────────────
+  First of three phased timesheet improvements. The page is now
+  used Friday/Monday by all 15 supervisors AND by accounts to
+  check entries — it had become the most-visited page in the app
+  and the visual density was making it hard to scan.
+
+  Phase 1 (this release) — Polish only. No behaviour changes;
+  same data, same flow, same saves. The page just reads cleaner
+  and tells you more at a glance.
+
+  Phase 2 (v3.4.80, next) — Supervisor quick-fills: "Same as
+  roster" + "Copy last week" buttons, keyboard navigation,
+  hours quick-select chips.
+
+  Phase 3 (v3.4.81, after) — Accounts review mode: dense table
+  view, filter chips (Incomplete / >40h / <30h / by job / by
+  person), lock-week workflow, better CSV export.
+
+  v3.4.79 visual changes:
+   • Row status pill in the name column — ✓ Complete (green) /
+     ⚠ N of M (amber) / — Empty (grey) / 🌴 On Leave (purple) /
+     🎓 TAFE (purple). Driven by the ROSTER's leave/TAFE codes,
+     not just "is this cell filled" — so someone on A/L all week
+     reads "On Leave" instead of "Empty".
+   • Leave/TAFE cells now muted (read-only diagonal-striped
+     label "🌴 A/L" or "🎓 TAFE") instead of empty input boxes.
+     Wasted supervisor clicks → zero.
+   • Sticky day-header row stays visible while scrolling 49
+     people. Today's column subtly highlighted with a dot on
+     the header + soft purple wash down the column.
+   • Frozen Name + Status columns on horizontal scroll (mobile
+     win) so supervisors don't lose context when sliding to
+     Fri/Sat/Sun.
+   • Incomplete row marker switched from full red background
+     wash to a thin 4px left-stripe + very subtle row tint.
+     The page used to feel "alarmed" — now it feels informative.
+   • Group section dividers more prominent (5px coloured
+     stripe, larger label) so Apprentice vs Labour Hire breaks
+     are obvious without squinting.
+   • Split-day "+" button shrunk to 22px with quiet slate
+     styling; "Fill week from Mon" button switched from
+     filled-navy to dashed-outline. Buttons stop being the
+     visual anchor; the inputs are.
+
+  Bug fixes bundled (from the 2026-05-20 production audit):
+   • _updateUndoButton no longer overrides applyManagerMode's
+     display:none on the topbar Undo button. View-only staff
+     no longer see a disabled '↶ Undo' control they can't use.
+   • checkAccess pre-sets isManager + currentManagerName + calls
+     applyManagerMode immediately when restoring a supervisor
+     via remember-me, so the sidebar paints unlocked from the
+     first frame instead of flashing 'View only' for ~2s while
+     loadFromSupabase resolves.
 
   CHANGES IN v3.4.78  (Teams — named filter groups for the roster)
   ────────────────────────────────────────────────────────────

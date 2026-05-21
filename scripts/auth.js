@@ -355,7 +355,17 @@ async function checkAccess() {
       if (p && p.exp && Date.now() < p.exp && p.slug === TENANT.ORG_SLUG) {
         sessionStorage.setItem(ACCESS_KEY, '1');
         sessionStorage.setItem('eq_logged_in_name', p.name || '');
-        if (p.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+        if (p.role === 'supervisor') {
+          sessionStorage.setItem('eq_auto_admin', '1');
+          // v3.4.79: pre-set the manager state so the sidebar paints
+          // unlocked from the first frame instead of flashing
+          // "View only" for ~2s while initApp's loadFromSupabase
+          // resolves. initApp still calls applyManagerMode later;
+          // it's idempotent so the second call is a no-op refresh.
+          isManager          = true;
+          currentManagerName = p.name || 'Supervisor';
+          if (typeof applyManagerMode === 'function') applyManagerMode();
+        }
         // Re-mint a server-side session token for EQ Agent etc.
         // Only possible if the stored payload includes the code (newer
         // logins do; older ones won't until the user logs in again).

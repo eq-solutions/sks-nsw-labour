@@ -333,6 +333,75 @@ function _getTsFilteredPeople() {
   return people.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
 }
 
+// v3.4.79 — Day-status helper. Returns the per-day "should this cell
+// accept input?" verdict by checking the roster (not the timesheet).
+//   workable: true if the person is rostered to work on this day
+//   leaveLabel: 'A/L', 'P/L', 'PH' etc — the actual roster code
+//   tafeLabel:  'TAFE' if the person is at TAFE that day
+// Falls back gracefully if scripts/roster.js helpers aren't loaded.
+function _tsDayStatus(name, week, day) {
+  if (typeof getPersonSchedule !== 'function') return { workable: true };
+  const s = getPersonSchedule(name, week);
+  const code = (s && s[day] ? s[day] : '').trim().toUpperCase();
+  if (!code) return { workable: true };
+  if (typeof isEducation === 'function' && isEducation(code)) {
+    return { workable: false, tafeLabel: code };
+  }
+  if (typeof isLeave === 'function' && isLeave(code)) {
+    return { workable: false, leaveLabel: code };
+  }
+  return { workable: true };
+}
+
+// v3.4.79 — Row status pill state. Returns an object describing what
+// pill to render in the name column. Driven by the ROSTER (expected
+// work days) compared against the TIMESHEET (filled hours), not just
+// the count of filled cells. So someone on A/L all week reads
+// "On Leave" (complete by definition — nothing to fill) instead of
+// "Empty" or "Incomplete".
+function _tsRowStatus(person, week, entry) {
+  const workDays = ['mon','tue','wed','thu','fri'];
+  let expectedCount = 0;
+  let filledCount   = 0;
+  let leaveCount    = 0;
+  let tafeCount     = 0;
+  workDays.forEach(d => {
+    const st = _tsDayStatus(person.name, week, d);
+    if (st.leaveLabel)         leaveCount++;
+    if (st.tafeLabel)          tafeCount++;
+    if (st.workable) {
+      expectedCount++;
+      const hrs = entry && entry[d + '_hrs'];
+      const job = entry && entry[d + '_job'];
+      if (job && Number(hrs) > 0) filledCount++;
+    }
+  });
+  // All five rostered days are leave → "On Leave" (complete, nothing to do)
+  if (expectedCount === 0 && leaveCount === 5) {
+    return { kind: 'on-leave', icon: '🌴', label: 'On Leave', tone: 'leave' };
+  }
+  // All five rostered days are TAFE → unusual but handle it
+  if (expectedCount === 0 && tafeCount === 5) {
+    return { kind: 'tafe', icon: '🎓', label: 'TAFE Week', tone: 'tafe' };
+  }
+  // Some rostered days are leave/TAFE, others are workable — show partial-leave
+  if (expectedCount === 0) {
+    return { kind: 'on-leave', icon: '🌴', label: 'On Leave', tone: 'leave' };
+  }
+  if (filledCount === 0) {
+    return { kind: 'empty', icon: '—', label: 'Empty', tone: 'empty' };
+  }
+  if (filledCount === expectedCount) {
+    return { kind: 'complete', icon: '✓', label: 'Complete', tone: 'complete' };
+  }
+  return {
+    kind: 'partial',
+    icon: '⚠',
+    label: filledCount + ' of ' + expectedCount,
+    tone: 'partial'
+  };
+}
+
 function renderTimesheets() {
   const people = _getTsFilteredPeople();
 
@@ -357,22 +426,48 @@ function renderTimesheets() {
   const disabled    = isManager ? '' : ' disabled';
   const weekDatesTs = getWeekDates(week);
 
-  let html = `<div class="roster-card"><div class="table-scroll"><table style="width:100%">
+  // v3.4.79: figure out which column is "today" so we can subtly
+  // highlight it in the header + the column cells. Only fires when
+  // viewing the current calendar week — STATE.currentWeek string
+  // matches the Monday of this week.
+  const _todayDayKey = (function() {
+    const d   = new Date();
+    const dow = d.getDay(); // 0 Sun … 6 Sat
+    const map = { 1:'mon', 2:'tue', 3:'wed', 4:'thu', 5:'fri', 6:'sat', 0:'sun' };
+    return map[dow];
+  })();
+  const _thisMondayStr = (function() {
+    const d = new Date(), mon = new Date(d);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
+  })();
+  const _isThisWeek = (week === _thisMondayStr);
+
+  let html = `<div class="roster-card"><div class="ts-table-scroll"><table class="ts-table" style="width:100%">
     <thead><tr>
-      <th style="min-width:140px">Name</th>
+      <th class="ts-name-col-head">Name</th>
+      <th class="ts-status-col-head" style="min-width:96px">Status</th>
       <th style="min-width:50px">Group</th>
-      ${dlabels.map((d, i) => `<th class="center" style="min-width:160px">${d}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(d)]} — Job / Hrs</span></th>`).join('')}
-      <th class="center" style="min-width:55px">Total</th>
+      ${dlabels.map(d => {
+        const dayKey = d.toLowerCase();
+        const isToday = _isThisWeek && dayKey === _todayDayKey;
+        const dateIdx = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(d);
+        return `<th class="center ts-day-head${isToday ? ' ts-day-today' : ''}" style="min-width:170px">${d}${isToday ? ' <span class="ts-today-dot" title="Today"></span>' : ''}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[dateIdx]} — Job / Hrs</span></th>`;
+      }).join('')}
+      <th class="center" style="min-width:60px">Total</th>
     </tr></thead><tbody>`;
 
   // ── Data rows ───────────────────────────────────────────────
   let lastGroup = '';
   people.forEach(p => {
-    // Group separator row
+    // v3.4.79: more prominent group separator — wider band, brand
+    // colour stripe, larger label. Matches the Roster page's group
+    // strip treatment so the two pages feel consistent.
     if (p.group !== lastGroup) {
       lastGroup = p.group;
       const icon = p.group === 'Apprentice' ? '🎓' : '🔧';
-      html += `<tr><td colspan="${days.length + 3}" style="background:var(--surface-2);font-size:11px;font-weight:700;color:var(--ink-3);padding:8px 10px;text-transform:uppercase;letter-spacing:.5px">${icon} ${p.group}</td></tr>`;
+      const stripeColor = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
+      html += `<tr class="ts-group-row"><td colspan="${days.length + 4}" style="background:var(--surface-2);border-left:5px solid ${stripeColor};font-size:12px;font-weight:700;color:var(--navy);padding:10px 14px;text-transform:uppercase;letter-spacing:.6px">${icon} ${p.group}</td></tr>`;
     }
 
     const entry      = getTsEntry(p.name, week);
@@ -386,19 +481,54 @@ function renderTimesheets() {
     const _allDaysAt8Plus = _hrs.every(h => h >= 8);
     const _hasAnyHrs      = _hrs.some(h => h > 0);
     const _isComplete     = _hasAnyHrs && _allDaysAt8Plus && _weekTotal >= 40;
+    // v3.4.79: roster-aware row status (drives the pill in the name col).
+    const rowStatus       = _tsRowStatus(p, week, entry);
     const totalClass      = _isComplete ? 'ts-total-green' : (_hasAnyHrs ? 'ts-total-red' : 'ts-total-empty');
-    let rowBg;
-    if (_isComplete) rowBg = 'border-left:4px solid var(--green);';                       // complete
-    else             rowBg = 'background:#FFF1F2;border-left:4px solid var(--red);';      // incomplete
+    // v3.4.79: thinner left-stripe instead of full red-background.
+    // The full bg was the loudest thing on the page; users had to
+    // scan around it. A 4px coloured stripe carries the same signal
+    // without drowning the actual data.
+    let rowStripeStyle;
+    if (rowStatus.kind === 'complete') {
+      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--green);';
+    } else if (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') {
+      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--purple);background:rgba(124,119,185,.04);';
+    } else if (rowStatus.kind === 'empty') {
+      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--ink-4);';
+    } else {
+      // partial — still attention-getting but no full-red wash
+      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--red);background:rgba(220,38,38,.025);';
+    }
     const pid        = p.name.replace(/\W/g, '_');
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
       : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
+    // v3.4.79: status pill that reads at-a-glance — supervisor knows
+    // before they look at any cell whether this person needs work
+    // this week. Drives a lot of scannability for the 12-person crew
+    // case. Tone classes are in index.html inline CSS.
+    const statusPillHtml =
+      `<span class="ts-status-pill ts-status-${rowStatus.tone}">${rowStatus.icon}<span class="ts-status-pill-label">${esc(rowStatus.label)}</span></span>`;
 
-    html += `<tr style="${rowBg}">
-      <td style="font-weight:600;color:var(--navy)">${esc(p.name)}</td>
+    html += `<tr class="ts-data-row" style="${rowStripeStyle}">
+      <td class="ts-name-col" style="font-weight:600;color:var(--navy)">${esc(p.name)}</td>
+      <td class="ts-status-col">${statusPillHtml}</td>
       <td>${grpBadge}</td>
       ${days.map(d => {
+        // v3.4.79: mute the cell if the roster says the person is on
+        // leave or at TAFE this day. Reads the existing schedule data
+        // — no extra DB calls. View-only users get the same mute.
+        const dayStatus = _tsDayStatus(p.name, week, d);
+        if (!dayStatus.workable) {
+          const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : '🌴 ' + (dayStatus.leaveLabel || 'Leave');
+          const muteTone  = dayStatus.tafeLabel ? 'ts-cell-tafe' : 'ts-cell-leave';
+          return `<td class="ts-cell-muted ${muteTone}" style="padding:5px 6px;text-align:center" title="From roster — no timesheet entry needed">
+            <div class="ts-mute-label">${muteLabel}</div>
+          </td>`;
+        }
+        // v3.4.79: highlight today's column when viewing the current week.
+        const isTodayCol = _isThisWeek && d === _todayDayKey;
+        const todayClass = isTodayCol ? ' ts-cell-today' : '';
         const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
         const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
         let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
@@ -421,7 +551,7 @@ function renderTimesheets() {
                 ${fwDisabled ? 'disabled' : ''}
                 style="margin-top:4px;width:100%;padding:4px 6px;font-size:10px;font-weight:700;color:#fff;background:${fwDisabled ? 'var(--ink-4)' : 'var(--navy)'};border:1px solid ${fwDisabled ? 'var(--ink-4)' : 'var(--navy)'};border-radius:5px;cursor:${fwDisabled ? 'not-allowed' : 'pointer'};font-family:inherit;letter-spacing:.3px;${fwDisabled ? 'opacity:.55' : ''}">&gt;&gt; Week</button>`
           : '';
-        return `<td style="padding:5px 6px">
+        return `<td class="ts-input-cell${todayClass}" style="padding:5px 6px">
           <div class="ts-cell">
             <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"

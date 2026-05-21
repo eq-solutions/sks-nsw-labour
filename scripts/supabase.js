@@ -256,17 +256,20 @@ function _undoTooltipFor(action) {
 }
 
 function _updateUndoButton() {
+  // v3.4.79: visibility is owned by applyManagerMode (hides for non-
+  // supervisors). This function only updates the tooltip + disabled
+  // state — it must NOT touch style.display, otherwise view-only
+  // staff see a disabled "↶ Undo" button they can't use, which
+  // applyManagerMode just tried to hide.
   const btn = document.getElementById('topbar-undo-btn');
   if (!btn) return;
   const next = _undoStack[_undoStack.length - 1];
   if (next && (typeof isManager === 'undefined' || isManager)) {
-    btn.style.display = '';
-    btn.disabled      = false;
-    btn.title         = _undoTooltipFor(next);
+    btn.disabled = false;
+    btn.title    = _undoTooltipFor(next);
   } else {
-    btn.style.display = '';
-    btn.disabled      = true;
-    btn.title         = 'Nothing to undo';
+    btn.disabled = true;
+    btn.title    = 'Nothing to undo';
   }
   const rbtn = document.getElementById('topbar-redo-btn');
   if (rbtn) {
