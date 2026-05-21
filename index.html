@@ -231,7 +231,7 @@
   cursor: default;
 }
 
-/* v3.4.79 — Timesheets polish */
+/* v3.4.79 — Timesheets polish · v3.4.80 — compressed iteration */
 /* Container that owns the horizontal scroll + the sticky header.    */
 .ts-table-scroll {
   overflow: auto;
@@ -246,26 +246,23 @@
   color: #fff;
   font-weight: 700;
   letter-spacing: .3px;
-  padding: 10px 8px;
+  padding: 8px 6px;               /* v3.4.80: tighter padding */
+  font-size: 12px;
 }
 /* Freeze the Name column when the table scrolls horizontally.       */
 /* The header cell needs higher z-index so it sits above row cells.  */
-.ts-table thead th.ts-name-col-head,
-.ts-table thead th.ts-status-col-head {
+.ts-table thead th.ts-name-col-head {
   position: sticky;
   left: 0;
   z-index: 6;
+  min-width: 150px;
 }
-.ts-table thead th.ts-name-col-head { min-width: 160px; }
-.ts-table thead th.ts-status-col-head { left: 160px; }
-.ts-table tbody td.ts-name-col,
-.ts-table tbody td.ts-status-col {
+.ts-table tbody td.ts-name-col {
   position: sticky;
   left: 0;
   z-index: 1;
   background: #fff;
 }
-.ts-table tbody td.ts-status-col { left: 160px; }
 /* Lift the stripe so it shows even when the cell sits over content */
 .ts-table tbody tr.ts-data-row > td.ts-name-col {
   background-clip: padding-box;
@@ -292,7 +289,9 @@
   background: linear-gradient(180deg, rgba(124,119,185,.06), rgba(124,119,185,.03));
 }
 
-/* Status pill — appears in the Name/Status column.                  */
+/* v3.4.80: Status pill CSS retained but no longer rendered. The 4px
+   row left-stripe is the signal now. Kept here in case a future
+   review-mode wants to surface the pill in a different column. */
 .ts-status-pill {
   display: inline-flex;
   align-items: center;
@@ -312,6 +311,28 @@
 .ts-status-empty    { background: #F1F5F9; color: #64748B; border-color: #E2E8F0; }
 .ts-status-leave    { background: #EEEDF8; color: #5B57A0; border-color: #DDD9F0; }
 .ts-status-tafe     { background: #EEEDF8; color: #5B57A0; border-color: #DDD9F0; }
+
+/* v3.4.80: compact JOB NO. + h inputs. Job numbers in SKS land top
+   out around 5–6 chars (e.g. EQ123, D5384, SY3). The default
+   flex:1 1 auto stretched them to fill the whole day column, which
+   wasted ~80px of horizontal space per day × 7 days × 49 rows. Now
+   capped to ~70px so the day column compresses to 124px total. */
+.ts-table .ts-job {
+  flex: 0 0 auto !important;
+  width: 64px !important;
+  min-width: 60px !important;
+  max-width: 70px !important;
+  padding: 3px 5px !important;
+  font-size: 11px !important;
+}
+.ts-table .ts-hrs {
+  width: 38px !important;
+  min-width: 38px !important;
+  max-width: 38px !important;
+  padding: 3px 4px !important;
+  font-size: 11px !important;
+}
+.ts-table .ts-cell { gap: 3px !important; }
 
 /* Muted leave / TAFE day cells — read-only, no inputs.              */
 .ts-cell-muted {
@@ -356,36 +377,46 @@
   color: #FFFFFF !important;
   border-color: #7C77B9 !important;
 }
+/* v3.4.80: fill-week control is now a tiny text link, not a button.
+   Royce flagged the v3.4.79 dashed-outline version as still too big
+   and distracting. Lives directly below the Mon cell, 9px text, no
+   border, no background — supervisor only sees it when they look
+   for it. */
 .ts-fillweek-btn {
-  font-size: 10px !important;
-  font-weight: 600 !important;
-  padding: 3px 6px !important;
+  font-size: 9px !important;
+  font-weight: 500 !important;
+  padding: 1px 4px !important;
   background: transparent !important;
-  color: #1F335C !important;
-  border: 1px dashed #94A3B8 !important;
-  border-radius: 5px !important;
-  letter-spacing: .2px !important;
+  color: #94A3B8 !important;
+  border: none !important;
+  border-radius: 3px !important;
+  letter-spacing: 0 !important;
+  width: auto !important;
+  margin-top: 2px !important;
+  text-decoration: underline;
+  text-decoration-color: rgba(148,163,184,.35);
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 .ts-fillweek-btn:hover:not(:disabled) {
-  background: #1F335C !important;
-  color: #FFFFFF !important;
-  border-color: #1F335C !important;
-  border-style: solid !important;
+  background: rgba(31,51,92,.06) !important;
+  color: #1F335C !important;
+  text-decoration-color: #1F335C;
 }
 .ts-fillweek-btn:disabled {
-  opacity: .35;
-  cursor: not-allowed;
+  opacity: 0;
+  pointer-events: none;
+  cursor: default;
 }
 
-/* Lighter alternating stripes for data rows; the box-shadow inset   */
-/* stripe on the left edge is the primary completion signal.         */
+/* v3.4.80: tighter row padding for compressed density. The left-stripe
+   on the row is the only completion signal — alternating row backgrounds
+   from v3.4.79 added noise without info. Dropped. */
 .ts-data-row > td {
   border-bottom: 1px solid #F1F5F9;
-  padding: 8px 6px;
+  padding: 5px 5px;
 }
-.ts-data-row:nth-child(even) > td:not(.ts-name-col):not(.ts-status-col) {
-  background: rgba(15,23,42,.02);
-}
+.ts-input-cell { padding: 3px 4px !important; }
 
 /* Total column polish.                                              */
 .ts-table tbody td.ts-total-col {
@@ -399,8 +430,43 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.79
+  EQ Solves — Field  v3.4.80
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.80  (Timesheets — compressed iteration of v3.4.79)
+  ────────────────────────────────────────────────────────────
+  Royce reviewed v3.4.79 in production and asked for it to read
+  more like a professional compressed spreadsheet. Three concrete
+  asks, three changes:
+
+  1. Status column removed. The "— Empty / ⚠ N of M / ✓ Complete"
+     pills were a redundant restatement of the row left-stripe
+     (which already does green / amber / grey / purple). A whole
+     sticky column gone; ~110px of horizontal space back to the
+     data. _tsRowStatus helper retained for any future use case
+     that wants the same classification.
+
+  2. JOB NO. input capped to ~64px (5 chars + padding). The
+     default .ts-job had flex:1 1 auto so the input stretched to
+     fill the day column — wasted ~80px per day × 7 days × 49
+     rows. Job numbers in SKS land top out at 5–6 chars (EQ123,
+     D5384, SY3), so capping the input lets the whole day
+     column compress to 124px min-width.
+
+  3. ">> Week" button quietened all the way down to a 9px
+     underlined text link ("fill week →") below the Mon cell.
+     Dashed-outline button from v3.4.79 still drew the eye too
+     much. Now it's invisible unless you look for it.
+
+  Plus general tightening:
+   • Row padding 8px → 5px vertical, 6px → 5px horizontal
+   • Header cell padding 10/8 → 8/6
+   • .ts-cell gap 4px → 3px
+   • Alternating row backgrounds dropped (the left-stripe is
+     the only completion signal now — less visual noise)
+
+  No data-model changes; no migration; saves + render flow
+  identical to v3.4.79.
 
   CHANGES IN v3.4.79  (Timesheets polish — Phase 1 of 3)
   ────────────────────────────────────────────────────────────
