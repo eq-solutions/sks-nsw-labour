@@ -6,16 +6,28 @@ commit once you're caught up.
 
 ## TL;DR
 
-Two new files staged on this worktree branch (`claude/funny-satoshi-1408ae`):
+Two phases of work on this worktree branch (`claude/funny-satoshi-1408ae`):
 
+**Phase 1 — Tender pipeline (morning):**
 - `scripts/tender-parser.js` — IIFE module, ports the eq-field-pipeline
-  bundle's parser to the SKS no-bundler stack. Verified against the real
-  NSW Smartsheet sample (26/26 smoke tests pass).
-- `migrations/2026-05-22_tender_pipeline.sql` — SKS-native migration
-  (mixed uuid/bigint FKs, SKS RLS policy pattern, configurable value
-  floor in `app_config`). **NOT APPLIED to any Supabase project.**
+  bundle's parser to the SKS no-bundler stack. 26/26 smoke tests pass.
+- `migrations/2026-05-22_tender_pipeline.sql` — SKS-native migration.
+  **NOT APPLIED to any Supabase project.**
 
-Both committed to this branch. **Not pushed.** Branch tracks `origin/main`.
+**Phase 2 — Audit follow-ups (Royce-at-work autonomous pass):**
+- `netlify/functions/verify-pin.js` — fix HMAC compare to constant-time
+  (matches the `approve-leave.js` pattern). 10/10 verification tests pass.
+- `.gitignore` — new file; baseline patterns. Does not un-commit
+  existing files (need explicit `git rm` per the global rule about
+  deletes).
+- `PEOPLE_GROUPS` constant extracted to `scripts/app-state.js`,
+  6 duplication sites swept across batch/people/roster/auth/import-export.
+- Apprentices `skills_ratings` direct fetches routed through `sbFetch()`
+  (2 sites in `scripts/apprentices.js`).
+- DST/timezone probe report — clean, no code changes (see "DST audit"
+  section below).
+
+7 atomic commits, **not pushed.** Branch tracks `origin/main`.
 
 ## What's done
 
@@ -107,6 +119,55 @@ puts us back where we started. Nothing else needs cleanup.
 7. **Book the Tuesday 9am meeting.** Per the bundle's process docs, the
    meeting is the product. Schedule first, build to support it.
 
+## Audit follow-up (Phase 2)
+
+When you came back from the worktree state I left at the pipeline-only
+checkpoint, you asked for a broader code audit, then asked me to
+action the safe subset. Here's what I did:
+
+| Commit | What | Risk | Verify |
+|---|---|---|---|
+| `5b6cdca` | `verify-pin.js` constant-time HMAC compare | Low — copies a verified pattern from `approve-leave.js`. Login still works (10/10 token verification tests pass). | Login on a deploy preview |
+| `8ce71de` | New `.gitignore` (additive only — no deletes) | None — additive | `git check-ignore -v __perm_test` should show match |
+| `e4fa378` | Extract `PEOPLE_GROUPS` constant; sweep 6 sites | Low — pure refactor, no semantic change | Open the roster, contacts, batch-fill modals; all groups render |
+| `e088619` | Apprentices `skills_ratings` → `sbFetch()` | Low — gains TENANT_DISABLED_TABLES gating + offline IDB queue. EQ-tenant behaviour unchanged; SKS behaviour improved (404s become silent no-ops) | Open Apprentices on EQ tenant, save a self-rating |
+
+What I deliberately did NOT do (deferred to you):
+- **`git rm __perm_test screenshots/'my schedule.zip'`** — global rule
+  says ask before deleting. The .gitignore now blocks future copies; you
+  can run those two `git rm`s in 10 seconds.
+- **PIN rate-limit moved to a Supabase counter table** — too big for
+  autonomous (schema + code), needs your sign-off.
+- **Team color hex validation** — subtle behaviour change in the
+  roster UI; not worth doing without your eye.
+- **Two env-var pair docs comment** — low-value; can pair with the next
+  touch of verify-pin.
+
+## DST audit (BATTLE-TEST coverage gap closed)
+
+Read-only probe. Walked every date-arithmetic site in scripts/ and
+supabase/functions/. **No DST bugs.** Sites checked, all clean:
+
+| Site | Pattern |
+|---|---|
+| `scripts/utils.js:122` `getWeekDates` | `setDate(getDate()+i)` walks calendar days correctly across DST |
+| `scripts/utils.js:109` `formatWeekLabel` | UTC midnight read locally; safe for AU users, latent for west-of-UTC |
+| `scripts/timesheets.js:544` `_previousWeekKey` | 3-arg `Date` ctor = local midnight; `setDate(-7)` DST-safe |
+| `scripts/timesheets.js:918` `_thisMondayStr` | Standard `setDate(getDate() - ((getDay()+6) % 7))` |
+| `scripts/leave.js` business-day loops | Standard `setDate(getDate()+1)` walks |
+| `supabase/functions/*` cron functions | `Date.UTC(...)` everywhere — explicit UTC |
+
+Worth remembering (not bugs):
+1. The `'dd.MM.yy'` week key is timezone-neutral by design — two clients
+   in different TZs agree on the key for the same calendar Monday.
+2. `new Date('YYYY-MM-DD')` (no time component) parses as UTC midnight
+   in modern browsers. Safe for AU; would flip the day for users west
+   of UTC. Prefer `new Date(y, m-1, d)` if international expansion ever
+   matters.
+3. The `supervisor-digest` cron is `0 2 * * 5` UTC — that's **12pm AEST
+   in winter, 1pm AEDT in summer**. Send time drifts by 1h twice a year.
+   Not a bug; just a thing to know if anyone asks.
+
 ## Files of interest
 
 - Parser: `scripts/tender-parser.js`
@@ -120,22 +181,32 @@ puts us back where we started. Nothing else needs cleanup.
 
 ## What I touched (and didn't)
 
-**Files created:**
+**Files created (Phase 1):**
 - `scripts/tender-parser.js`
 - `migrations/2026-05-22_tender_pipeline.sql`
 - `PIPELINE-HANDOFF-2026-05-22.md` (this file)
 
+**Files created (Phase 2):**
+- `.gitignore`
+
+**Files modified (Phase 2):**
+- `netlify/functions/verify-pin.js` (constant-time HMAC)
+- `scripts/app-state.js` (PEOPLE_GROUPS constant added)
+- `scripts/batch.js`, `scripts/people.js`, `scripts/roster.js`,
+  `scripts/auth.js`, `scripts/import-export.js` (PEOPLE_GROUPS sweep)
+- `scripts/apprentices.js` (sbFetch routing)
+
 **Files NOT touched:**
 - `index.html` (no SheetJS wiring, no nav entry, no CHANGES block)
-- `scripts/app-state.js` (no APP_VERSION bump)
+- `scripts/app-state.js` — `APP_VERSION` (no bump)
 - `sw.js` (no cache key bump)
-- `CHANGELOG.md` (no entry)
-- Any existing migration
-- Any existing script
+- `CHANGELOG.md` (no entry — paired with the version bump you'll do)
+- `__perm_test` and `screenshots/my schedule.zip` — left in place;
+  global rule says ask before deleting
 
 **Supabase projects NOT touched** (zero queries, zero writes):
 - `nspbmirochztcjijmcrx` (SKS live)
 - `ktmjmdzqrogauaevbktn` (EQ demo)
 
-Three commits on this branch. None pushed. `git reset --hard origin/main`
+Seven commits on this branch. None pushed. `git reset --hard origin/main`
 puts the worktree back exactly where it started. No external state changed.
