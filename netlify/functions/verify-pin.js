@@ -77,10 +77,15 @@ function signToken(name, role, expiresAt) {
 
 function verifyToken(token) {
   try {
-    const [payloadB64, sig] = token.split('.');
+    const parts = (token || '').split('.');
+    if (parts.length !== 2) return null;
+    const [payloadB64, sig] = parts;
     const payload = Buffer.from(payloadB64, 'base64').toString();
     const expectedSig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
-    if (sig !== expectedSig) return null;
+    // Constant-time compare — match the pattern in approve-leave.js so an
+    // attacker can't deduce expectedSig byte-by-byte via response timing.
+    if (sig.length !== expectedSig.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return null;
     const data = JSON.parse(payload);
     if (data.exp < Date.now()) return null;
     return data;
