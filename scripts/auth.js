@@ -92,7 +92,7 @@ function renderGateNameList(filter) {
   let matches   = gateNameList;
   if (query) matches = matches.filter(p => p.name.toLowerCase().includes(query));
 
-  const groupOrder  = ['Supervision', 'Direct', 'Apprentice', 'Labour Hire'];
+  const groupOrder  = ['Supervision', ...PEOPLE_GROUPS];
   const groupColors = { 'Supervision': '#7C77B9', 'Direct': '#1F335C', 'Apprentice': '#7C77B9', 'Labour Hire': '#34486C' };
 
   let html = '';

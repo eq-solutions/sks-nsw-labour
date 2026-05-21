@@ -223,7 +223,7 @@ function importPeopleCSV(input) {
       const iStart  = (header.indexOf('startdate') >= 0) ? header.indexOf('startdate') : header.indexOf('start date');
       if (iName < 0 || iGroup < 0) { showPreviewError('import-people-preview', 'Missing required columns: Name, Group'); return; }
 
-      const valid   = ['Direct', 'Apprentice', 'Labour Hire'];
+      const valid   = PEOPLE_GROUPS;
       const people  = [];
       const errors  = [];
       rows.slice(1).forEach((r, i) => {

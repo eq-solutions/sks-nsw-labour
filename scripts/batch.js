@@ -17,7 +17,7 @@ function openBatchFill() {
 }
 
 function buildBatchPeopleList() {
-  const groups = ['Direct', 'Apprentice', 'Labour Hire'];
+  const groups = PEOPLE_GROUPS;
   const gClass = { 'Direct': 'direct', 'Apprentice': 'apprentice', 'Labour Hire': 'labour' };
   const gIcon  = { 'Direct': '⚡',     'Apprentice': '🎓',         'Labour Hire': '🔧' };
   let html = '';
