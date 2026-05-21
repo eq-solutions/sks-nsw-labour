@@ -519,14 +519,150 @@
   color: #FFFFFF;
   border-color: #1F335C;
 }
+
+/* v3.4.82 — Phase 3 Accounts Review mode */
+/* Lock banner — sits above the chip row when the active week is
+   locked. Soft amber wash with the lock icon + supervisor name. */
+.ts-lock-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FEF3C7;
+  border: 1px solid #FCD34D;
+  border-left: 5px solid #D97706;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  color: #78350F;
+}
+.ts-lock-banner-icon { font-size: 18px; flex-shrink: 0; }
+.ts-lock-banner-text {
+  flex: 1; min-width: 0;
+  font-size: 12px; line-height: 1.4;
+}
+.ts-lock-banner-text strong { color: #92400E; }
+.ts-lock-banner-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Filter chip row — chips on the left, action buttons on the right. */
+.ts-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 10px;
+  flex-wrap: wrap;
+}
+.ts-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ts-chip-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.ts-chip-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-right: 4px;
+}
+.ts-fchip {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  background: #F1F5F9;
+  color: #1F335C;
+  border: 1px solid #CBD5E1;
+  border-radius: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.ts-fchip:hover { background: #E2E8F0; }
+.ts-fchip-active {
+  background: #1F335C !important;
+  color: #FFFFFF !important;
+  border-color: #1F335C !important;
+}
+.ts-fchip-count { opacity: .7; font-weight: 500; }
+.ts-fchip-active .ts-fchip-count { opacity: .8; }
+
+/* Variance chip — small ⚠ in the name cell. Tone amber for high,
+   blue for low (low-hours weeks are less alarming, just unusual). */
+.ts-variance-chip {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: 1px;
+  cursor: help;
+}
+.ts-variance-high {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}
+.ts-variance-low {
+  background: #DBEAFE;
+  color: #1E3A8A;
+  border: 1px solid #BFDBFE;
+}
 </style>
 </head>
 <body>
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.81
+  EQ Solves — Field  v3.4.82
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.82  (Timesheets — Phase 3 Accounts Review mode)
+  ────────────────────────────────────────────────────────────
+  Final phase of the three-phase Timesheets rework. Polish
+  (v3.4.79+v3.4.80) made the page read better. Smart fills
+  (v3.4.81) made supervisor ENTRY faster. This release gives
+  ACCOUNTS the review tools they need to check + sign-off the
+  same data.
+
+  What's new:
+   • Filter chip row above the table: All / ⚠ Incomplete /
+     >40h / <30h. Counts live; active chip persists per
+     browser via localStorage. Composes with the existing
+     search + group filters.
+   • Variance ⚠ chip in the name cell when this week's total
+     is ≥40% above or ≤60% below the person's 4-week rolling
+     average. Tooltip shows "this week Xh vs 4-week avg Yh".
+     Tone differs: amber for high, blue for low (low isn't
+     alarming, just unusual). Skipped when there's not enough
+     history (< 2 prior weeks with any hours).
+   • Lock-week / Unlock-week supervisor button. Lock prompts
+     for an optional reason ("Approved by Webb Financial");
+     unlock confirms before opening. Both audited.
+   • Locked-week banner (amber, sits above the chip row) names
+     the supervisor who locked, when, and the reason. Includes
+     "Request unlock" affordance — drops an audit row with the
+     supervisor's stated reason so the locker can see + action.
+   • saveTsCell refuses writes into a locked week with a toast
+     pointing at the banner. The lock is workflow UX (not RLS)
+     — it stops accidents, not adversarial edits.
+   • New "↓ By Job" CSV export — one row per (job, person, day),
+     grouped by job number with TOTAL subtotal rows + blank
+     dividers. Complements the existing person-grouped export.
+
+  Database:
+   • New `timesheet_locks` table — one row per (week, org) when
+     locked, absent when open. RLS matches existing pattern:
+     anon SELECT(true), writes require org_id. Migration:
+     migrations/2026-05-21_timesheet_locks.sql.
+   • Code is forward-compatible — sbFetch swallows GET errors
+     on the table if migration hasn't run yet, lock features
+     stay dormant until the table exists.
+
+  Phase 3 closes out the original three-phase plan. The
+  Timesheets page is now production-ready for both the
+  supervisor (Fri/Mon entry) and accounts (later review)
+  workflows.
 
   CHANGES IN v3.4.81  (Timesheets — Phase 2 smart fills)
   ────────────────────────────────────────────────────────────
@@ -3135,6 +3271,8 @@ async function loadFromSupabase() {
         // v3.4.78 — teams + memberships in the snapshot
         STATE.teams       = d.teams       || [];
         STATE.teamMembers = d.teamMembers || [];
+        // v3.4.82 — timesheet locks in the snapshot
+        STATE.timesheetLocks = d.timesheetLocks || [];
         STATE.scheduleIndex = {};
         STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
         STATE.cachedAt = snap.cachedAt;
@@ -3150,7 +3288,9 @@ async function loadFromSupabase() {
     // v3.4.78 — also fetch teams + team_members. Empty arrays on
     // pre-migration tenants since sbFetch swallows 4xx for GETs and
     // returns []. teams won't be in TENANT_DISABLED_TABLES for SKS.
-    const [people, sites, schedule, managers, tsRows, teams, teamMembers] = await Promise.all([
+    // v3.4.82 — additionally fetch timesheet_locks for Accounts
+    // Review mode. Empty array is the open-week state.
+    const [people, sites, schedule, managers, tsRows, teams, teamMembers, tsLocks] = await Promise.all([
       sbFetch('people?select=*&order=name'),
       sbFetch('sites?select=*&order=name'),
       sbFetch('schedule?select=*'),
@@ -3158,6 +3298,7 @@ async function loadFromSupabase() {
       sbFetch('timesheets?select=*'),
       sbFetch('teams?select=*&order=name'),
       sbFetch('team_members?select=*'),
+      sbFetch('timesheet_locks?select=*'),
     ]);
 
     STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));
@@ -3180,6 +3321,10 @@ async function loadFromSupabase() {
     // v3.4.78 — Teams: pure filter metadata, light mapping.
     STATE.teams       = (teams       || []).map(r => ({ id: r.id, name: r.name, color: r.color || '#7C77B9', created_at: r.created_at }));
     STATE.teamMembers = (teamMembers || []).map(r => ({ team_id: r.team_id, person_id: r.person_id }));
+    // v3.4.82 — Timesheet locks: keyed by week_key. Tiny payload.
+    STATE.timesheetLocks = (tsLocks || []).map(r => ({
+      week_key: r.week_key, locked_at: r.locked_at, locked_by: r.locked_by, reason: r.reason
+    }));
     STATE.cachedAt = null;
     hideLoadingOverlay();
     updateLastUpdated();
@@ -3188,17 +3333,19 @@ async function loadFromSupabase() {
     // v3.4.75: persist a snapshot for next launch. Fire-and-forget;
     // a failed save (storage quota, private mode) must not impact the
     // fresh data that's already in STATE.
-    // v3.4.78: snapshot now also carries teams + memberships so the
-    // filter pill row renders correctly on offline launch too.
+    // v3.4.78: snapshot carries teams + memberships.
+    // v3.4.82: snapshot also carries timesheet_locks so the locked
+    // banner renders correctly on offline launch.
     if (typeof _idbSaveStateSnapshot === 'function') {
       _idbSaveStateSnapshot({
-        people:      STATE.people,
-        sites:       STATE.sites,
-        schedule:    STATE.schedule,
-        managers:    STATE.managers,
-        timesheets:  STATE.timesheets,
-        teams:       STATE.teams,
-        teamMembers: STATE.teamMembers
+        people:         STATE.people,
+        sites:          STATE.sites,
+        schedule:       STATE.schedule,
+        managers:       STATE.managers,
+        timesheets:     STATE.timesheets,
+        teams:          STATE.teams,
+        teamMembers:    STATE.teamMembers,
+        timesheetLocks: STATE.timesheetLocks
       }).catch(() => {});
     }
     return true;

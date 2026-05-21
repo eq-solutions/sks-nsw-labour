@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.81';
+const APP_VERSION = '3.4.82';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -67,7 +67,8 @@ const ORG_TABLES = [
   'apprentice_profiles', 'skills_ratings', 'feedback_entries',
   'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log',
   'roster_presence',  // v3.4.47 — realtime presence on roster editor cells
-  'teams', 'team_members'  // v3.4.78 — roster filter groups
+  'teams', 'team_members',  // v3.4.78 — roster filter groups
+  'timesheet_locks'   // v3.4.82 — per-week timesheet lock for accounts review
 ];
 
 // v3.4.29: tables a tenant doesn't have. sbFetch GET on these returns []
@@ -344,6 +345,8 @@ const STATE = {
   teams:               [],   // [{id, name, color}]
   teamMembers:         [],   // [{team_id, person_id}]
   currentTeamFilter:   null, // null = show all; -1 = unassigned; N = team id
+  // v3.4.82 — Timesheet locks (one row per locked week).
+  timesheetLocks:      [],   // [{week_key, locked_at, locked_by, reason}]
   currentWeek:  '',
   scheduleIndex: {}
 };
