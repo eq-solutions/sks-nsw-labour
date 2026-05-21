@@ -443,18 +443,24 @@ function renderTimesheets() {
   })();
   const _isThisWeek = (week === _thisMondayStr);
 
+  // v3.4.80: Status column removed per Royce's feedback — the 4px
+  // left-stripe on each row already carries the green/red/grey/purple
+  // completion signal. A whole column of "— Empty" pills was redundant
+  // and stole horizontal space the data inputs needed back.
+  // Day-column min-width compressed 170 → 124 (job 64 + hrs 38 + plus
+  // 22 + gaps + padding ≈ 130). Compact, scannable, more days fit on
+  // one screen.
   let html = `<div class="roster-card"><div class="ts-table-scroll"><table class="ts-table" style="width:100%">
     <thead><tr>
       <th class="ts-name-col-head">Name</th>
-      <th class="ts-status-col-head" style="min-width:96px">Status</th>
-      <th style="min-width:50px">Group</th>
+      <th style="min-width:46px">Group</th>
       ${dlabels.map(d => {
         const dayKey = d.toLowerCase();
         const isToday = _isThisWeek && dayKey === _todayDayKey;
         const dateIdx = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(d);
-        return `<th class="center ts-day-head${isToday ? ' ts-day-today' : ''}" style="min-width:170px">${d}${isToday ? ' <span class="ts-today-dot" title="Today"></span>' : ''}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[dateIdx]} — Job / Hrs</span></th>`;
+        return `<th class="center ts-day-head${isToday ? ' ts-day-today' : ''}" style="min-width:124px">${d}${isToday ? ' <span class="ts-today-dot" title="Today"></span>' : ''}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[dateIdx]} — Job / Hrs</span></th>`;
       }).join('')}
-      <th class="center" style="min-width:60px">Total</th>
+      <th class="center" style="min-width:54px">Total</th>
     </tr></thead><tbody>`;
 
   // ── Data rows ───────────────────────────────────────────────
@@ -467,7 +473,7 @@ function renderTimesheets() {
       lastGroup = p.group;
       const icon = p.group === 'Apprentice' ? '🎓' : '🔧';
       const stripeColor = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
-      html += `<tr class="ts-group-row"><td colspan="${days.length + 4}" style="background:var(--surface-2);border-left:5px solid ${stripeColor};font-size:12px;font-weight:700;color:var(--navy);padding:10px 14px;text-transform:uppercase;letter-spacing:.6px">${icon} ${p.group}</td></tr>`;
+      html += `<tr class="ts-group-row"><td colspan="${days.length + 3}" style="background:var(--surface-2);border-left:5px solid ${stripeColor};font-size:12px;font-weight:700;color:var(--navy);padding:10px 14px;text-transform:uppercase;letter-spacing:.6px">${icon} ${p.group}</td></tr>`;
     }
 
     const entry      = getTsEntry(p.name, week);
@@ -503,16 +509,13 @@ function renderTimesheets() {
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
       : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
-    // v3.4.79: status pill that reads at-a-glance — supervisor knows
-    // before they look at any cell whether this person needs work
-    // this week. Drives a lot of scannability for the 12-person crew
-    // case. Tone classes are in index.html inline CSS.
-    const statusPillHtml =
-      `<span class="ts-status-pill ts-status-${rowStatus.tone}">${rowStatus.icon}<span class="ts-status-pill-label">${esc(rowStatus.label)}</span></span>`;
+    // v3.4.80: status pill dropped — the 4px row left-stripe is the
+    // signal. rowStatus.kind is still used above to pick stripe colour;
+    // _tsRowStatus is otherwise unread now (kept as a public hook for
+    // any future page that wants the same classification).
 
     html += `<tr class="ts-data-row" style="${rowStripeStyle}">
       <td class="ts-name-col" style="font-weight:600;color:var(--navy)">${esc(p.name)}</td>
-      <td class="ts-status-col">${statusPillHtml}</td>
       <td>${grpBadge}</td>
       ${days.map(d => {
         // v3.4.79: mute the cell if the roster says the person is on
@@ -544,12 +547,14 @@ function renderTimesheets() {
         // until Mon has a job number (or if user is view-only).
         const monFilled = !!(entry && entry.mon_job);
         const fwDisabled = !monFilled || !isManager;
+        // v3.4.80: fill-week chip is now a tiny text link below the
+        // Mon cell. Visual weight removed — styling owned by the
+        // .ts-fillweek-btn rules in the index.html style block.
         const fillWeekBtn = d === 'mon'
           ? `<button class="ts-fillweek-btn" title="Copy Monday's job &amp; hours into Tue–Fri"
                 data-n="${esc(p.name)}" data-g="${p.group}"
                 onclick="fillTsWeekFromMon(this.dataset.n, this.dataset.g)"
-                ${fwDisabled ? 'disabled' : ''}
-                style="margin-top:4px;width:100%;padding:4px 6px;font-size:10px;font-weight:700;color:#fff;background:${fwDisabled ? 'var(--ink-4)' : 'var(--navy)'};border:1px solid ${fwDisabled ? 'var(--ink-4)' : 'var(--navy)'};border-radius:5px;cursor:${fwDisabled ? 'not-allowed' : 'pointer'};font-family:inherit;letter-spacing:.3px;${fwDisabled ? 'opacity:.55' : ''}">&gt;&gt; Week</button>`
+                ${fwDisabled ? 'disabled' : ''}>fill week →</button>`
           : '';
         return `<td class="ts-input-cell${todayClass}" style="padding:5px 6px">
           <div class="ts-cell">
