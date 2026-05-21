@@ -69,9 +69,17 @@ function openJobCombobox(inputEl) {
 
 function _renderComboboxOptions(filter) {
   if (!_activeCombobox) return;
-  const drop = _activeCombobox.dropdown;
-  const q    = (filter || '').toLowerCase().trim();
-  const jobs = _getActiveJobs();
+  const drop  = _activeCombobox.dropdown;
+  const input = _activeCombobox.input;
+  const q     = (filter || '').toLowerCase().trim();
+  // v3.4.81 — relevance-sorted suggestions. Personal history first,
+  // site history second, alpha-everything-else last. Falls back to
+  // a plain active-jobs list if dataset names aren't on the input.
+  const personName = input && input.dataset ? input.dataset.name : null;
+  const weekStr    = input && input.dataset ? input.dataset.week : null;
+  const jobs       = personName
+    ? _jobsSortedForCell(personName, weekStr)
+    : _getActiveJobs();
 
   const filtered = q
     ? jobs.filter(j =>
@@ -333,6 +341,262 @@ function _getTsFilteredPeople() {
   return people.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
 }
 
+// v3.4.81 — Smart-fill helpers (Phase 2)
+// ─────────────────────────────────────────────────────────────
+// Compute the previous Monday's week-key in the same "DD.MM.YY"
+// format the rest of the app uses. Pure function; no STATE access.
+function _previousWeekKey(weekStr) {
+  if (!weekStr) return null;
+  const m = /^(\d{2})\.(\d{2})\.(\d{2})$/.exec(weekStr);
+  if (!m) return null;
+  const date = new Date(Number('20' + m[3]), Number(m[2]) - 1, Number(m[1]));
+  date.setDate(date.getDate() - 7);
+  return String(date.getDate()).padStart(2,'0') + '.' +
+         String(date.getMonth() + 1).padStart(2,'0') + '.' +
+         String(date.getFullYear()).slice(-2);
+}
+
+// Walk back week by week looking for the most recent week that had
+// any entry for this person. Returns the entry, or null. Used by
+// Copy-Last-Week so a supervisor returning from leave doesn't get
+// blocked by an empty "previous week".
+function _findMostRecentEntry(name, beforeWeek, maxWeeksBack) {
+  maxWeeksBack = maxWeeksBack || 4;
+  let cursor = beforeWeek;
+  for (let i = 0; i < maxWeeksBack; i++) {
+    cursor = _previousWeekKey(cursor);
+    if (!cursor) return null;
+    const e = (STATE.timesheets || []).find(r => r.name === name && r.week === cursor);
+    if (e && TS_DAYS.some(d => e[d + '_job'] || e[d + '_hrs'])) {
+      return { entry: e, week: cursor };
+    }
+  }
+  return null;
+}
+
+// Copy a previous week's timesheet entry to this week. Honours
+// roster mute (leave/TAFE days don't get overwritten with a job
+// even if the source week had one). Asks for confirmation if the
+// target week already has any entries — silent clobbering of a
+// supervisor's existing work is the kind of bug that loses trust.
+async function copyLastWeekTs(name, group) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const week = STATE.currentWeek;
+  const found = _findMostRecentEntry(name, week, 4);
+  if (!found) { showToast('No recent week to copy from'); return; }
+  const source = found.entry;
+  const target = getTsEntry(name, week);
+
+  const hasExisting = target && TS_DAYS.some(d => target[d + '_job'] || target[d + '_hrs']);
+  if (hasExisting) {
+    if (!window.confirm(
+      `${name} already has timesheet data for this week.\n\nOverwrite with ${found.week} entries?`
+    )) return;
+  }
+
+  for (const d of TS_DAYS) {
+    const status = _tsDayStatus(name, week, d);
+    if (!status.workable) continue;            // leave / TAFE day — skip
+    const srcJob = source[d + '_job'];
+    const srcHrs = source[d + '_hrs'];
+    if (srcJob == null && srcHrs == null) continue;
+    await saveTsCell(name, group, week, d, srcJob, srcHrs);
+  }
+  renderTimesheets();
+  showToast('✓ Copied ' + found.week + ' → ' + week);
+  auditLog('Copy last week (' + found.week + ')', 'Timesheet', name, week);
+}
+
+// Repeat one day's job + hours across every other workable day in
+// the row. Replaces v3.4.79's "fill week →" link which only fired
+// from Monday — supervisors often nail Wednesday first and want
+// to fan it out, not the other way around. Skips leave/TAFE days
+// via _tsDayStatus.
+async function repeatDayAcrossTs(name, group, sourceDay) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const week  = STATE.currentWeek;
+  const entry = getTsEntry(name, week);
+  if (!entry) { showToast('Fill ' + sourceDay.toUpperCase() + ' first'); return; }
+  const srcJob = entry[sourceDay + '_job'];
+  const srcHrs = entry[sourceDay + '_hrs'];
+  if (!srcJob && (srcHrs == null || srcHrs === '')) {
+    showToast('No ' + sourceDay.toUpperCase() + ' value to repeat');
+    return;
+  }
+  // Target every workable day OTHER than the source day. Default
+  // pool is Mon–Fri; Sat/Sun are excluded — repeating a regular
+  // week's job into the weekend is almost always wrong.
+  const targets = ['mon','tue','wed','thu','fri'].filter(d => {
+    if (d === sourceDay) return false;
+    const st = _tsDayStatus(name, week, d);
+    return st.workable;
+  });
+  if (!targets.length) { showToast('No other workable days to fill'); return; }
+
+  // Quiet overwrite warning — supervisors expect a repeat-day to
+  // overwrite, so only ask when the differences are substantive
+  // (different job number in another cell).
+  const conflict = targets.some(d => {
+    const j = entry[d + '_job'];
+    return j && j !== srcJob;
+  });
+  if (conflict) {
+    if (!window.confirm(
+      `Other days have different job numbers. Overwrite with ${String(srcJob).split(':')[0]}?`
+    )) return;
+  }
+  for (const d of targets) {
+    await saveTsCell(name, group, week, d, srcJob, srcHrs);
+  }
+  renderTimesheets();
+  showToast('✓ Repeated ' + sourceDay.toUpperCase() + ' → ' + targets.map(d => d.toUpperCase()).join(' · '));
+  auditLog('Repeat day: ' + sourceDay.toUpperCase(), 'Timesheet', name, week);
+}
+
+// Returns active jobs sorted by relevance for a specific cell:
+//   1. Jobs THIS person used in the last 4 weeks (personal history)
+//   2. Jobs anyone used at this person's rostered site this week,
+//      within the last 4 weeks (site history)
+//   3. All remaining active jobs, alphabetical
+// Falls back to plain alpha order if STATE.timesheets/schedule
+// aren't loaded yet. Used by _renderComboboxOptions below.
+function _jobsSortedForCell(personName, weekStr) {
+  const jobs = _getActiveJobs();
+  if (!jobs.length) return jobs;
+
+  // Tier 1 — personal history (last 4 weeks)
+  const personalSet = new Set();
+  let cursor = weekStr;
+  for (let i = 0; i < 4; i++) {
+    if (!cursor) break;
+    const e = (STATE.timesheets || []).find(r => r.name === personName && r.week === cursor);
+    if (e) {
+      TS_DAYS.forEach(d => {
+        const j = e[d + '_job'];
+        if (j) String(j).split('|').forEach(part => {
+          const code = (part.split(':')[0] || '').trim();
+          if (code) personalSet.add(code.toUpperCase());
+        });
+      });
+    }
+    cursor = _previousWeekKey(cursor);
+  }
+
+  // Tier 2 — site history. Use the person's rostered site this week
+  // (if any) and find jobs other supervisors used at that site recently.
+  const siteSet = new Set();
+  try {
+    if (typeof getPersonSchedule === 'function') {
+      const s = getPersonSchedule(personName, weekStr);
+      const rosteredSites = ['mon','tue','wed','thu','fri']
+        .map(d => (s && s[d] ? String(s[d]).trim().toUpperCase() : ''))
+        .filter(v => v && !(typeof isLeave === 'function' && isLeave(v)) && !(typeof isEducation === 'function' && isEducation(v)));
+      const sitesUsed = new Set(rosteredSites);
+      if (sitesUsed.size) {
+        let c = weekStr;
+        for (let i = 0; i < 4; i++) {
+          if (!c) break;
+          (STATE.timesheets || []).filter(r => r.week === c).forEach(e => {
+            // Cross-reference each day's job with the same day's roster site
+            const eSchedule = typeof getPersonSchedule === 'function'
+              ? getPersonSchedule(e.name, c) : null;
+            TS_DAYS.forEach(d => {
+              if (!eSchedule) return;
+              const dSite = (eSchedule[d] || '').trim().toUpperCase();
+              if (!sitesUsed.has(dSite)) return;
+              const j = e[d + '_job'];
+              if (j) String(j).split('|').forEach(part => {
+                const code = (part.split(':')[0] || '').trim();
+                if (code) siteSet.add(code.toUpperCase());
+              });
+            });
+          });
+          c = _previousWeekKey(c);
+        }
+      }
+    }
+  } catch (_) { /* never break the picker on a sort-helper error */ }
+
+  // Score + sort
+  return jobs.slice().sort((a, b) => {
+    const aPersonal = personalSet.has(String(a.number).toUpperCase()) ? 1000 : 0;
+    const bPersonal = personalSet.has(String(b.number).toUpperCase()) ? 1000 : 0;
+    const aSite     = siteSet.has(String(a.number).toUpperCase())     ?  500 : 0;
+    const bSite     = siteSet.has(String(b.number).toUpperCase())     ?  500 : 0;
+    const diff = (bPersonal + bSite) - (aPersonal + aSite);
+    if (diff !== 0) return diff;
+    return String(a.number).localeCompare(String(b.number));
+  });
+}
+
+// v3.4.81 — Hours quick-select chip popover. Lazy-created on first
+// focus of a `.ts-hrs` input. Singleton — only one open at a time.
+// Tap a chip → fills the input + fires change → closes popover.
+const TS_HOURS_CHIPS = [8, 7.6, 4, 0];
+let _tsHoursPopoverEl = null;
+let _tsHoursPopoverInput = null;
+function _showTsHoursChips(input) {
+  if (!input) return;
+  if (!_tsHoursPopoverEl) {
+    _tsHoursPopoverEl = document.createElement('div');
+    _tsHoursPopoverEl.id = 'ts-hours-chips';
+    _tsHoursPopoverEl.className = 'ts-hours-chips';
+    document.body.appendChild(_tsHoursPopoverEl);
+  }
+  _tsHoursPopoverInput = input;
+  _tsHoursPopoverEl.innerHTML = TS_HOURS_CHIPS.map(h =>
+    '<button type="button" class="ts-hours-chip" data-h="' + h + '" ' +
+    'onmousedown="event.preventDefault()" ' +
+    'ontouchstart="event.preventDefault()" ' +
+    'onclick="_pickTsHoursChip(' + h + ')">' + h + '</button>'
+  ).join('');
+  // Position below the input
+  const rect = input.getBoundingClientRect();
+  _tsHoursPopoverEl.style.position = 'fixed';
+  _tsHoursPopoverEl.style.left   = rect.left + 'px';
+  _tsHoursPopoverEl.style.top    = (rect.bottom + 4) + 'px';
+  _tsHoursPopoverEl.style.display = 'flex';
+}
+function _hideTsHoursChips() {
+  if (_tsHoursPopoverEl) _tsHoursPopoverEl.style.display = 'none';
+  _tsHoursPopoverInput = null;
+}
+function _pickTsHoursChip(h) {
+  const input = _tsHoursPopoverInput;
+  if (!input) return;
+  input.value = String(h);
+  input.dispatchEvent(new Event('change'));
+  _hideTsHoursChips();
+}
+
+// v3.4.81 — Enter-key navigation. Inside a `.ts-job` or `.ts-hrs`
+// input, Enter moves down to the SAME day on the next person's row.
+// Tab keeps its default behaviour (right within the row). Listener
+// is attached once via delegation in renderTimesheets.
+function _onTsKeydown(e) {
+  if (e.key !== 'Enter') return;
+  const el = e.target;
+  if (!el || !el.classList) return;
+  if (!el.classList.contains('ts-job') && !el.classList.contains('ts-hrs')) return;
+  e.preventDefault();
+  const day  = el.dataset.day;
+  const type = el.dataset.type;
+  const slot = el.dataset.slot || '0';
+  const row  = el.closest('tr');
+  if (!row) return;
+  let next = row.nextElementSibling;
+  // Skip group separator rows
+  while (next && next.classList.contains('ts-group-row')) next = next.nextElementSibling;
+  if (!next) return;
+  const target = next.querySelector(
+    `input[data-day="${day}"][data-type="${type}"][data-slot="${slot}"]`
+  );
+  if (target) {
+    target.focus();
+    if (typeof target.select === 'function') target.select();
+  }
+}
+
 // v3.4.79 — Day-status helper. Returns the per-day "should this cell
 // accept input?" verdict by checking the roster (not the timesheet).
 //   workable: true if the person is rostered to work on this day
@@ -514,8 +778,25 @@ function renderTimesheets() {
     // _tsRowStatus is otherwise unread now (kept as a public hook for
     // any future page that wants the same classification).
 
+    // v3.4.81: per-row "Copy last week" affordance. Disabled when
+    // no prior week (within 4) has any entries for this person —
+    // saves the toast roundtrip. Tiny faint text-link, sits to the
+    // right of the name; supervisors learn to spot it without it
+    // shouting at them.
+    const _lastWkSource = _findMostRecentEntry(p.name, week, 4);
+    const _copyDisabled = !_lastWkSource || !isManager;
+    const copyLastWkLink = `<button class="ts-copylastwk-btn" title="${_copyDisabled ? 'No recent week to copy from' : 'Copy from ' + _lastWkSource.week}"
+        data-n="${esc(p.name)}" data-g="${p.group}"
+        onclick="copyLastWeekTs(this.dataset.n, this.dataset.g)"
+        ${_copyDisabled ? 'disabled' : ''}>↺ last wk</button>`;
+
     html += `<tr class="ts-data-row" style="${rowStripeStyle}">
-      <td class="ts-name-col" style="font-weight:600;color:var(--navy)">${esc(p.name)}</td>
+      <td class="ts-name-col" style="font-weight:600;color:var(--navy)">
+        <div class="ts-name-line">
+          <span class="ts-name-text">${esc(p.name)}</span>
+          ${copyLastWkLink}
+        </div>
+      </td>
       <td>${grpBadge}</td>
       ${days.map(d => {
         // v3.4.79: mute the cell if the roster says the person is on
@@ -543,38 +824,42 @@ function renderTimesheets() {
           job1 = rawJob; hrs1 = rawHrs;
         }
         const pid2 = p.name.replace(/\W/g, '_') + '_' + d;
-        // Fill-week button lives in the Mon cell only. Always visible, disabled
-        // until Mon has a job number (or if user is view-only).
-        const monFilled = !!(entry && entry.mon_job);
-        const fwDisabled = !monFilled || !isManager;
-        // v3.4.80: fill-week chip is now a tiny text link below the
-        // Mon cell. Visual weight removed — styling owned by the
-        // .ts-fillweek-btn rules in the index.html style block.
-        const fillWeekBtn = d === 'mon'
-          ? `<button class="ts-fillweek-btn" title="Copy Monday's job &amp; hours into Tue–Fri"
-                data-n="${esc(p.name)}" data-g="${p.group}"
-                onclick="fillTsWeekFromMon(this.dataset.n, this.dataset.g)"
-                ${fwDisabled ? 'disabled' : ''}>fill week →</button>`
+        // v3.4.81: per-day "↻ repeat" chip replaces the v3.4.80
+        // "fill week →" link. Works on ANY day (not just Mon), so
+        // supervisors who nail Wednesday first can fan it across the
+        // rest of the row. Only shows when this cell has a job
+        // number AND there's at least one other workable day to
+        // repeat into. Hidden in view-only mode.
+        const _hasJobThisDay = !!job1;
+        const _otherWorkableExists = ['mon','tue','wed','thu','fri']
+          .filter(d2 => d2 !== d)
+          .some(d2 => _tsDayStatus(p.name, week, d2).workable);
+        const repeatChip = (isManager && _hasJobThisDay && _otherWorkableExists)
+          ? `<button class="ts-repeatday-btn" title="Repeat ${d.toUpperCase()} across the rest of the week"
+                data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
+                onclick="repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻</button>`
           : '';
         return `<td class="ts-input-cell${todayClass}" style="padding:5px 6px">
           <div class="ts-cell">
             <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs1}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+            <input class="ts-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
+              onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
               onchange="onTsCellChange(this)">
             <button class="ts-split-btn${isSplit ? ' active' : ''}" title="Split: add second job" aria-label="Split day into two jobs" onclick="toggleTsSplit('${pid2}',this)"${disabled ? ' disabled' : ''}>＋</button>
+            ${repeatChip}
           </div>
           <div class="ts-cell ts-split-row" id="split-${pid2}" style="display:${isSplit ? 'flex' : 'none'};margin-top:3px">
             <input class="ts-job" type="text" value="${esc(String(job2))}" placeholder="Job 2"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+            <input class="ts-hrs" type="number" value="${hrs2}" placeholder="8" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
+              onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
               onchange="onTsCellChange(this)">
           </div>
-          ${fillWeekBtn}
         </td>`;
       }).join('')}
       <td class="ts-total-col ${totalClass}" id="tst-${pid}">${total > 0 ? total + 'h' : '—'}</td>
@@ -582,7 +867,15 @@ function renderTimesheets() {
   });
 
   html += '</tbody></table></div></div>';
-  document.getElementById('ts-content').innerHTML = html;
+  const root = document.getElementById('ts-content');
+  root.innerHTML = html;
+  // v3.4.81: Enter-key navigation — wire once per render via
+  // delegation on the table. Tab still uses default browser behaviour
+  // (right within row); Enter moves DOWN to the next person's same
+  // day. Replacing the listener on each render is safe — removeEventListener
+  // would need the same fn reference; cheaper just to re-set onkeydown.
+  const tbl = root.querySelector('.ts-table');
+  if (tbl) tbl.onkeydown = _onTsKeydown;
   updateTsStats();
 }
 

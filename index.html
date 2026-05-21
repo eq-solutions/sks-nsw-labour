@@ -424,14 +424,159 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* v3.4.81 — Phase 2 smart-fill affordances */
+/* Name cell layout: name text + quiet "copy last wk" action.        */
+.ts-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.ts-name-text { flex: 1 1 auto; min-width: 0; }
+
+/* "↺ last wk" copy button — sits in the name cell. Quiet by default;
+   on hover the dashed border solidifies to invite the click. Disabled
+   state fades to almost-invisible so empty-history rows don't tease. */
+.ts-copylastwk-btn {
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 500;
+  padding: 2px 6px;
+  background: transparent;
+  color: #64748B;
+  border: 1px dashed #CBD5E1;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: .1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.ts-copylastwk-btn:hover:not(:disabled) {
+  background: #1F335C;
+  color: #fff;
+  border-color: #1F335C;
+  border-style: solid;
+}
+.ts-copylastwk-btn:disabled {
+  opacity: .25;
+  cursor: not-allowed;
+  border-style: dotted;
+}
+
+/* "↻" per-cell repeat-day chip. Tiny, lives at the end of the day
+   cell's ts-cell row, next to the "＋" split button. Same size as
+   the split button so the row balances visually. */
+.ts-repeatday-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: #F1F5F9;
+  color: #64748B;
+  border: 1px solid #CBD5E1;
+  border-radius: 5px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.ts-repeatday-btn:hover {
+  background: #1F335C;
+  color: #fff;
+  border-color: #1F335C;
+}
+
+/* Hours quick-select chip popover. Singleton element attached to
+   <body>; positioned fixed below the focused .ts-hrs input by JS.   */
+.ts-hours-chips {
+  display: none;
+  gap: 4px;
+  padding: 6px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(15,23,42,.18);
+  z-index: 9998;
+}
+.ts-hours-chip {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  background: #F1F5F9;
+  color: #1F335C;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 38px;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.ts-hours-chip:hover {
+  background: #1F335C;
+  color: #FFFFFF;
+  border-color: #1F335C;
+}
 </style>
 </head>
 <body>
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.80
+  EQ Solves — Field  v3.4.81
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.81  (Timesheets — Phase 2 smart fills)
+  ────────────────────────────────────────────────────────────
+  Phase 2 of the three-phase Timesheets rework. Polish (v3.4.79
+  + v3.4.80) made the page READ better; this release makes it
+  ENTER faster. Cuts the per-row click count by roughly 70% for
+  the Fri/Mon supervisor flow.
+
+  Critical distinction Royce flagged scoping this: the ROSTER
+  is a site forecast (where someone is) and the TIMESHEET
+  records the JOB NUMBER (cost code). The roster can't auto-
+  fill jobs — but real timesheet history can.
+
+  What's new:
+   • "↺ last wk" button in the name cell. Reads the most recent
+     non-empty week from this person's timesheet history (walks
+     back up to 4 weeks if last week was empty) and mirrors job
+     + hours into this week. Skips leave/TAFE days so it never
+     overwrites a roster-muted cell. Asks for confirmation if
+     this week already has any entries.
+   • "↻" repeat-day chip on every FILLED day cell. Replaces the
+     v3.4.80 "fill week →" link which only worked from Mon.
+     Now you can nail Wednesday first and fan it across the
+     row in one click. Skips leave/TAFE days; quiet overwrite
+     warning only when other days have a different job number.
+   • Smart job-number autocomplete. The combobox now sorts by
+     relevance: jobs THIS person used in the last 4 weeks
+     first, jobs anyone used at this person's rostered site
+     this week second (cross-references timesheet history),
+     all other active jobs alphabetical last. Falls back to
+     plain alpha if data isn't loaded yet.
+   • Hours quick-select chips. Focus the "h" input → 8 / 7.6 /
+     4 / 0 chip popover appears beneath it. Tap to fill +
+     save. Common values become a single tap; non-standard
+     hours still type freely.
+   • Default placeholder "8" on the hours input (was "h").
+     Visual hint only — still empty until typed/tapped.
+   • Enter-key navigation. Inside any job or hours input,
+     Enter moves down to the SAME day on the next person's
+     row. Tab keeps default behaviour (right within row).
+     Skips group separator rows automatically.
+
+  Out of scope (Phase 3, v3.4.82):
+   • Accounts review mode — mode toggle, filter chips, lock-
+     week workflow, grouped CSV export with subtotals.
+
+  No DB migration. No behaviour change for view-only / staff TS
+  / agency-mode users — all new affordances gated on isManager.
+  The legacy fillTsWeekFromMon function is retained but no
+  longer reachable from the UI (replaced by repeatDayAcrossTs).
 
   CHANGES IN v3.4.80  (Timesheets — compressed iteration of v3.4.79)
   ────────────────────────────────────────────────────────────
