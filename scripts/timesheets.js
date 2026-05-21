@@ -198,6 +198,12 @@ function updateTsRowTotal(name, week) {
 
 async function saveTsCell(name, grp, week, day, job, hrs) {
   if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.82 — refuse writes into a locked week. Quiet toast pointing
+  // at the banner which has the "Request unlock" affordance.
+  if (typeof isTsWeekLocked === 'function' && isTsWeekLocked(week)) {
+    showToast('🔒 Week ' + week + ' is locked. Use the banner above to request unlock.');
+    return;
+  }
   if (!STATE.timesheets) STATE.timesheets = [];
   let entry = STATE.timesheets.find(r => r.name === name && r.week === week);
   if (!entry) {
@@ -339,6 +345,196 @@ function _getTsFilteredPeople() {
   if (search)    people = people.filter(p => p.name.toLowerCase().includes(search));
 
   return people.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+}
+
+// v3.4.82 — Phase 3: Accounts Review mode
+// ─────────────────────────────────────────────────────────────
+// Per-week lock state, filter chips, variance flagging, by-job CSV.
+// Lock state is one row per (week, org) in public.timesheet_locks;
+// loaded into STATE.timesheetLocks alongside the rest in
+// loadFromSupabase. The lock itself is workflow UX, not RLS.
+
+const TS_FILTER_LS_KEY = 'eq.ts.currentFilter';
+// Restored synchronously so the first renderTimesheets call picks up
+// the persisted filter. null/'all' means show everything.
+let _tsCurrentFilter = (function() {
+  try {
+    const v = localStorage.getItem(TS_FILTER_LS_KEY);
+    if (v && ['all','incomplete','over40','under30'].includes(v)) return v;
+  } catch (e) {}
+  return 'all';
+})();
+
+function setTsFilter(name) {
+  _tsCurrentFilter = name || 'all';
+  try { localStorage.setItem(TS_FILTER_LS_KEY, _tsCurrentFilter); } catch (e) {}
+  renderTimesheets();
+}
+
+// Lock-state lookup. Empty array == no locks; matches the absence-
+// means-open convention. Returns the lock row or null.
+function _getTsLock(weekKey) {
+  if (!Array.isArray(STATE.timesheetLocks)) return null;
+  return STATE.timesheetLocks.find(l => l.week_key === weekKey) || null;
+}
+function isTsWeekLocked(weekKey) { return !!_getTsLock(weekKey); }
+
+// Variance flag — compare this week's filled hours to the same
+// person's 4-week rolling average. Returns one of:
+//   null   — not enough history (< 2 prior weeks with any hours)
+//   'low'  — this week is ≤ 60% of avg
+//   'high' — this week is ≥ 140% of avg
+// Anything in-between is normal. The 4-week window matches the
+// smart-fill autocomplete scoring so users see consistent maths.
+function _tsRowVariance(personName, weekStr) {
+  const entry = (STATE.timesheets || []).find(r => r.name === personName && r.week === weekStr);
+  const thisHrs = entry ? tsTotalHrs(entry) : 0;
+  const samples = [];
+  let cursor = weekStr;
+  for (let i = 0; i < 4; i++) {
+    cursor = _previousWeekKey(cursor);
+    if (!cursor) break;
+    const e = (STATE.timesheets || []).find(r => r.name === personName && r.week === cursor);
+    if (e) {
+      const h = tsTotalHrs(e);
+      if (h > 0) samples.push(h);
+    }
+  }
+  if (samples.length < 2) return null;
+  const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+  if (avg <= 0) return null;
+  if (thisHrs === 0) return null;     // empty rows already flagged by left-stripe
+  const ratio = thisHrs / avg;
+  if (ratio <= 0.60) return { tone: 'low',  ratio, avg: Math.round(avg), thisHrs };
+  if (ratio >= 1.40) return { tone: 'high', ratio, avg: Math.round(avg), thisHrs };
+  return null;
+}
+
+// ── Lock / unlock actions ───────────────────────────────────
+async function lockCurrentWeek() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const week = STATE.currentWeek;
+  if (!week) return;
+  if (isTsWeekLocked(week)) { showToast('Week ' + week + ' is already locked'); return; }
+  const reason = window.prompt(
+    `Lock week ${week}?\n\nThis stops supervisors editing this week's timesheets until it's unlocked. ` +
+    `Optional reason (e.g. "Approved by accounts"):`,
+    ''
+  );
+  if (reason === null) return;  // Cancel
+  try {
+    const row = {
+      week_key:  week,
+      locked_at: new Date().toISOString(),
+      locked_by: (typeof currentManagerName !== 'undefined' && currentManagerName) || 'Supervisor',
+      reason:    (reason || '').trim() || null
+    };
+    await sbFetch('timesheet_locks', 'POST', row, 'return=minimal');
+    STATE.timesheetLocks = STATE.timesheetLocks || [];
+    STATE.timesheetLocks.push(row);
+    auditLog('Locked week ' + week, 'Timesheet', row.reason || '', week);
+    showToast('🔒 Week ' + week + ' locked');
+    renderTimesheets();
+  } catch (e) {
+    showToast('Lock failed: ' + (e && e.message || e));
+  }
+}
+
+async function unlockCurrentWeek() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const week = STATE.currentWeek;
+  if (!week) return;
+  const lock = _getTsLock(week);
+  if (!lock) { showToast('Week ' + week + ' is not locked'); return; }
+  if (!window.confirm(
+    `Unlock week ${week}?\n\nThis was locked by ${lock.locked_by || 'someone'}` +
+    (lock.reason ? ` (${lock.reason})` : '') + '.\n\nSupervisors will be able to edit again.'
+  )) return;
+  try {
+    await sbFetch('timesheet_locks?week_key=eq.' + encodeURIComponent(week), 'DELETE');
+    STATE.timesheetLocks = (STATE.timesheetLocks || []).filter(l => l.week_key !== week);
+    auditLog('Unlocked week ' + week, 'Timesheet', null, week);
+    showToast('🔓 Week ' + week + ' unlocked');
+    renderTimesheets();
+  } catch (e) {
+    showToast('Unlock failed: ' + (e && e.message || e));
+  }
+}
+
+// "Request unlock" affordance shown to any supervisor on a locked
+// week. Drops an audit row so whoever can unlock sees the request.
+// No email/notification — just an audit trail entry.
+function requestTsUnlock() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const week = STATE.currentWeek;
+  const lock = _getTsLock(week);
+  if (!lock) { showToast('Week ' + week + ' is not locked'); return; }
+  const reason = window.prompt(
+    `Request that week ${week} be unlocked?\n\n` +
+    `Locked by: ${lock.locked_by || 'unknown'}\n` +
+    `Why do you need to edit? (optional):`,
+    ''
+  );
+  if (reason === null) return;
+  auditLog('Unlock requested for week ' + week, 'Timesheet', (reason || '').trim() || null, week);
+  showToast('✓ Unlock request logged — ' + (lock.locked_by || 'a supervisor') + ' will see it in the audit log');
+}
+
+// ── CSV export grouped by job number ────────────────────────
+// Companion to exportTsCSV. Same data, different shape — one row
+// per (job_number, person, day) with grouping headers + subtotals.
+// Useful for accounts when reconciling against a specific job's
+// labour cost. Splits "J1:4|J2:4"-style cells into separate rows.
+function exportTsByJob() {
+  const week = STATE.currentWeek;
+  const rows = (STATE.timesheets || []).filter(r => r.week === week);
+  if (!rows.length) { showToast('No entries to export for ' + week); return; }
+  // Flatten into per-(job, person, day) tuples
+  const flat = [];
+  rows.forEach(r => {
+    TS_DAYS.forEach(d => {
+      const jobRaw = r[d + '_job'];
+      const hrsRaw = r[d + '_hrs'];
+      if (!jobRaw) return;
+      if (String(jobRaw).includes('|')) {
+        String(jobRaw).split('|').forEach(part => {
+          const seg = part.split(':');
+          const code = (seg[0] || '').trim();
+          const hrs  = parseFloat(seg[1]) || 0;
+          if (code) flat.push({ job: code, name: r.name, group: r.group, day: d, hrs });
+        });
+      } else {
+        const hrs = parseFloat(hrsRaw) || 0;
+        flat.push({ job: String(jobRaw).trim(), name: r.name, group: r.group, day: d, hrs });
+      }
+    });
+  });
+  if (!flat.length) { showToast('No entries to export for ' + week); return; }
+  // Group by job number
+  const byJob = {};
+  flat.forEach(f => { (byJob[f.job] = byJob[f.job] || []).push(f); });
+  const sortedJobs = Object.keys(byJob).sort();
+
+  const lines = ['Week,Job Number,Job Description,Person,Group,Day,Hours'];
+  sortedJobs.forEach(j => {
+    const jobMeta = (typeof jobNumbers !== 'undefined' ? jobNumbers : []).find(x => x.number === j);
+    const jobDesc = jobMeta && jobMeta.description ? jobMeta.description : '';
+    let jobTotal = 0;
+    byJob[j].sort((a, b) => a.name.localeCompare(b.name) || TS_DAYS.indexOf(a.day) - TS_DAYS.indexOf(b.day));
+    byJob[j].forEach(f => {
+      jobTotal += f.hrs;
+      lines.push([
+        week, j, jobDesc, f.name, f.group, f.day.toUpperCase(), f.hrs
+      ].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','));
+    });
+    // Subtotal row
+    lines.push([week, j, jobDesc, '', '', 'TOTAL', jobTotal]
+      .map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','));
+    lines.push('');  // blank row between jobs
+  });
+  downloadCSV(lines.join('\n'), 'EQ_Timesheets_by_Job_' + week.replace(/\./g, '-') + '.csv');
+  showToast('Exported ' + sortedJobs.length + ' job' + (sortedJobs.length === 1 ? '' : 's'));
+  auditLog('Export timesheets by job (' + sortedJobs.length + ' jobs)', 'Timesheet', null, week);
 }
 
 // v3.4.81 — Smart-fill helpers (Phase 2)
@@ -667,14 +863,33 @@ function _tsRowStatus(person, week, entry) {
 }
 
 function renderTimesheets() {
-  const people = _getTsFilteredPeople();
+  const allPeople = _getTsFilteredPeople();
 
-  if (!people.length) {
+  if (!allPeople.length) {
     document.getElementById('ts-content').innerHTML =
       `<div class="empty"><div class="empty-icon">👤</div><p>No matching staff found</p></div>`;
     updateTsStats();
     return;
   }
+
+  // v3.4.82: apply the Accounts Review filter chip (All/Incomplete/
+  // Over40/Under30). Filtering happens AFTER the existing search +
+  // group filter (_getTsFilteredPeople), so composes cleanly.
+  const _week = STATE.currentWeek;
+  const _passesChip = (p) => {
+    if (_tsCurrentFilter === 'all' || !_tsCurrentFilter) return true;
+    const e = (STATE.timesheets || []).find(r => r.name === p.name && r.week === _week);
+    const total = e ? tsTotalHrs(e) : 0;
+    const hrs = ['mon','tue','wed','thu','fri'].map(d => Number((e && e[d + '_hrs']) || 0));
+    const allDaysAt8Plus = hrs.every(h => h >= 8);
+    const hasAnyHrs = hrs.some(h => h > 0);
+    const isComplete = hasAnyHrs && allDaysAt8Plus && total >= 40;
+    if (_tsCurrentFilter === 'incomplete') return !isComplete;
+    if (_tsCurrentFilter === 'over40')     return total > 40;
+    if (_tsCurrentFilter === 'under30')    return total < 30 && hasAnyHrs;
+    return true;
+  };
+  const people = allPeople.filter(_passesChip);
 
   const week        = STATE.currentWeek;
   const weekEntries = (STATE.timesheets || []).filter(r => r.week === week);
@@ -707,6 +922,84 @@ function renderTimesheets() {
   })();
   const _isThisWeek = (week === _thisMondayStr);
 
+  // v3.4.82 — Lock banner + filter chips + by-job CSV + lock action.
+  // All Accounts Review mode affordances live above the data table.
+  // Filter chips persist their state per browser via localStorage.
+  const _lock = _getTsLock(_week);
+  let lockBannerHtml = '';
+  if (_lock) {
+    const _lockedAt = _lock.locked_at ? new Date(_lock.locked_at) : null;
+    const _whenStr  = _lockedAt
+      ? _lockedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) +
+        ' ' + _lockedAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const _reasonStr = _lock.reason ? ' — ' + esc(_lock.reason) : '';
+    lockBannerHtml = `<div class="ts-lock-banner">
+      <span class="ts-lock-banner-icon">🔒</span>
+      <div class="ts-lock-banner-text">
+        <strong>Week ${esc(_week)} is locked.</strong>
+        Locked by ${esc(_lock.locked_by || 'a supervisor')}${_whenStr ? ' on ' + _whenStr : ''}${_reasonStr}.
+      </div>
+      ${isManager ? `
+        <button class="btn btn-secondary btn-sm ts-lock-banner-action" onclick="requestTsUnlock()">Request unlock</button>
+        <button class="btn btn-primary btn-sm ts-lock-banner-action" onclick="unlockCurrentWeek()" title="Unlock for editing">🔓 Unlock</button>
+      ` : ''}
+    </div>`;
+  }
+
+  // Filter chip row + accounts-mode action buttons. Each chip
+  // updates _tsCurrentFilter and re-renders. The lock button is
+  // supervisor-only and swaps label/handler depending on state.
+  const _chip = (id, label, n) => {
+    const active = (_tsCurrentFilter || 'all') === id;
+    const cls    = 'ts-fchip' + (active ? ' ts-fchip-active' : '');
+    const count  = n != null ? ` <span class="ts-fchip-count">(${n})</span>` : '';
+    return `<button type="button" class="${cls}" onclick="setTsFilter('${id}')">${label}${count}</button>`;
+  };
+  // Counts for the chip badges (cheap — single pass).
+  const _now = { all: allPeople.length, incomplete: 0, over40: 0, under30: 0 };
+  allPeople.forEach(p => {
+    const e = (STATE.timesheets || []).find(r => r.name === p.name && r.week === _week);
+    const total = e ? tsTotalHrs(e) : 0;
+    const hrs = ['mon','tue','wed','thu','fri'].map(d => Number((e && e[d + '_hrs']) || 0));
+    const hasAnyHrs = hrs.some(h => h > 0);
+    const allDaysAt8Plus = hrs.every(h => h >= 8);
+    const isComplete = hasAnyHrs && allDaysAt8Plus && total >= 40;
+    if (!isComplete)                 _now.incomplete++;
+    if (total > 40)                  _now.over40++;
+    if (total < 30 && hasAnyHrs)     _now.under30++;
+  });
+
+  const filterChipHtml = `<div class="ts-chip-row">
+    <div class="ts-chips">
+      <span class="ts-chip-label">Show</span>
+      ${_chip('all',        'All',         _now.all)}
+      ${_chip('incomplete', '⚠ Incomplete',_now.incomplete)}
+      ${_chip('over40',     '> 40h',       _now.over40)}
+      ${_chip('under30',    '< 30h',       _now.under30)}
+    </div>
+    <div class="ts-chip-actions">
+      ${isManager
+        ? (_lock
+            ? '<button class="btn btn-secondary btn-sm" onclick="unlockCurrentWeek()" title="Unlock this week for editing">🔓 Unlock week</button>'
+            : '<button class="btn btn-secondary btn-sm" onclick="lockCurrentWeek()" title="Lock this week from edits (accounts sign-off)">🔒 Lock week</button>')
+        : ''}
+      <button class="btn btn-secondary btn-sm" onclick="exportTsByJob()" title="Grouped by job number with subtotals">↓ By Job</button>
+    </div>
+  </div>`;
+
+  // Empty-state when the filter chip excluded everyone. Distinct
+  // from "no matching staff" (that's the search/group filter).
+  if (!people.length) {
+    document.getElementById('ts-content').innerHTML = lockBannerHtml + filterChipHtml +
+      `<div class="empty" style="padding:40px 16px"><div class="empty-icon">${_tsCurrentFilter === 'all' ? '👤' : '🔍'}</div>
+        <p>No rows match the "${esc(_tsCurrentFilter)}" filter</p>
+        <button class="btn btn-secondary btn-sm" onclick="setTsFilter('all')" style="margin-top:10px">Show all</button>
+      </div>`;
+    updateTsStats();
+    return;
+  }
+
   // v3.4.80: Status column removed per Royce's feedback — the 4px
   // left-stripe on each row already carries the green/red/grey/purple
   // completion signal. A whole column of "— Empty" pills was redundant
@@ -714,7 +1007,8 @@ function renderTimesheets() {
   // Day-column min-width compressed 170 → 124 (job 64 + hrs 38 + plus
   // 22 + gaps + padding ≈ 130). Compact, scannable, more days fit on
   // one screen.
-  let html = `<div class="roster-card"><div class="ts-table-scroll"><table class="ts-table" style="width:100%">
+  let html = lockBannerHtml + filterChipHtml +
+    `<div class="roster-card"><div class="ts-table-scroll"><table class="ts-table" style="width:100%">
     <thead><tr>
       <th class="ts-name-col-head">Name</th>
       <th style="min-width:46px">Group</th>
@@ -778,22 +1072,25 @@ function renderTimesheets() {
     // _tsRowStatus is otherwise unread now (kept as a public hook for
     // any future page that wants the same classification).
 
-    // v3.4.81: per-row "Copy last week" affordance. Disabled when
-    // no prior week (within 4) has any entries for this person —
-    // saves the toast roundtrip. Tiny faint text-link, sits to the
-    // right of the name; supervisors learn to spot it without it
-    // shouting at them.
+    // v3.4.81: per-row "Copy last week" affordance.
     const _lastWkSource = _findMostRecentEntry(p.name, week, 4);
     const _copyDisabled = !_lastWkSource || !isManager;
     const copyLastWkLink = `<button class="ts-copylastwk-btn" title="${_copyDisabled ? 'No recent week to copy from' : 'Copy from ' + _lastWkSource.week}"
         data-n="${esc(p.name)}" data-g="${p.group}"
         onclick="copyLastWeekTs(this.dataset.n, this.dataset.g)"
         ${_copyDisabled ? 'disabled' : ''}>↺ last wk</button>`;
+    // v3.4.82: variance chip — small ⚠ when this week's total is
+    // ≥40% above or ≤60% below the 4-week rolling average. Skipped
+    // when there's not enough history. Tooltip shows the maths.
+    const _variance = _tsRowVariance(p.name, week);
+    const varianceChip = _variance
+      ? `<span class="ts-variance-chip ts-variance-${_variance.tone}" title="This week ${_variance.thisHrs}h vs 4-week avg ${_variance.avg}h">⚠</span>`
+      : '';
 
     html += `<tr class="ts-data-row" style="${rowStripeStyle}">
       <td class="ts-name-col" style="font-weight:600;color:var(--navy)">
         <div class="ts-name-line">
-          <span class="ts-name-text">${esc(p.name)}</span>
+          <span class="ts-name-text">${esc(p.name)}${varianceChip}</span>
           ${copyLastWkLink}
         </div>
       </td>
