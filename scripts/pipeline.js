@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
-// scripts/pipeline.js  —  SKS NSW Labour
+// scripts/pipeline.js  —  SKS NSW Labour  v3.4.89
 // Tender pipeline Kanban, enrichment panel, nominations.
 //
 // Depends on: app-state.js, supabase.js
@@ -85,7 +85,7 @@
     // Restore open panel
     if (_openId) {
       var t = _findTender(_openId);
-      if (t) _openPanel(t);
+      if (t) openPanel(t);
     }
   }
 
@@ -286,7 +286,6 @@
   function _panelHtml(t) {
     var enr     = _enrichment[t.id] || {};
     var nom     = _noms[t.id] || {};
-    var stage   = STAGES.find(function (s) { return s.key === t.stage; }) || {};
     var pmMgrs  = _managers.filter(function (m) { return m.category === 'Project Management'; });
     var supMgrs = _managers.filter(function (m) { return m.category === 'Supervisor'; });
     var currentPmId  = nom.pm  && nom.pm.person_id  ? String(nom.pm.person_id)  : '';
@@ -304,9 +303,20 @@
     html +=   '<button onclick="SKS_PIPELINE.closePanel()" style="background:none;border:none;font-size:22px;color:var(--ink-3);cursor:pointer;padding:0;margin-left:12px;flex-shrink:0;line-height:1">✕</button>';
     html += '</div>';
 
-    // Stage + key facts
+    // Stage mover — pill buttons (Watch / Likely / Won)
+    html += '<div style="display:flex;gap:6px;margin-bottom:16px">';
+    STAGES.forEach(function (s) {
+      var cur = t.stage === s.key;
+      html += '<button onpointerdown="SKS_PIPELINE.moveStage(\'' + t.id + '\',\'' + s.key + '\')" ' +
+        'style="flex:1;padding:7px 0;border-radius:8px;font-size:12px;font-weight:' + (cur ? '700' : '500') + ';' +
+        'cursor:pointer;border:2px solid ' + s.color + ';' +
+        'background:' + (cur ? s.bg : '#fff') + ';color:' + (cur ? s.color : 'var(--ink-3)') + '">' +
+        s.label + '</button>';
+    });
+    html += '</div>';
+
+    // Key facts (stage chip removed — pills above serve that purpose)
     html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">';
-    if (stage.label) html += '<span style="background:' + stage.bg + ';color:' + stage.color + ';padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600">' + stage.label + '</span>';
     if (t.probability_label) html += '<span style="background:var(--bg-2);color:var(--ink-2);padding:3px 12px;border-radius:20px;font-size:12px">' + _esc(t.probability_label) + '</span>';
     if (t.quote_value && !t.below_threshold) html += '<span style="background:var(--bg-2);color:var(--navy);padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700">$' + _fmtK(t.quote_value) + '</span>';
     if (t.due_date)   html += '<span style="background:var(--bg-2);color:var(--ink-2);padding:3px 12px;border-radius:20px;font-size:12px">Due ' + t.due_date + '</span>';
@@ -453,6 +463,36 @@
   function setVert(v)         { _filterVert  = v;    renderPipeline(); }
   function setValueFilter(v)  { _filterValue = v;    renderPipeline(); }
 
+  // ── Move a tender to a different stage ────────────────────
+  // Called from the pill buttons in the slide-out panel.
+  // Updates DB, updates local state, rebuilds board from local
+  // state (no re-fetch) then reopens the panel at the new stage.
+  async function moveStage(tenderId, newStage) {
+    var t = _tenders.find(function (x) { return String(x.id) === String(tenderId); });
+    if (!t || t.stage === newStage) return;
+    try {
+      await sbFetch('tenders?id=eq.' + tenderId, 'PATCH', {
+        stage:      newStage,
+        updated_at: new Date().toISOString()
+      });
+      t.stage = newStage;
+      var stageMeta = STAGES.find(function (s) { return s.key === newStage; });
+      showToast('Moved to ' + (stageMeta ? stageMeta.label : newStage));
+      // Rebuild board from local state (no loading spinner, instant)
+      var boardEl = document.getElementById('page-pipeline');
+      if (boardEl) {
+        boardEl.innerHTML = _buildHtml();
+        // Re-open the panel so the pills reflect the new stage
+        if (_openId) {
+          var reopenTender = _tenders.find(function (x) { return String(x.id) === String(_openId); });
+          if (reopenTender) openPanel(reopenTender);
+        }
+      }
+    } catch (e) {
+      showToast('Move failed — ' + e.message);
+    }
+  }
+
   // ── Helpers ───────────────────────────────────────────────
   function _findTender(id)   { return _tenders.find(function (t) { return t.id === id; }) || null; }
   function _mgrName(id)      { var m = _managers.find(function (m) { return String(m.id) === String(id); }); return m ? m.name : ''; }
@@ -480,6 +520,7 @@
     saveNominations: saveNominations,
     setDept:         setDept,
     setVert:         setVert,
-    setValueFilter:  setValueFilter
+    setValueFilter:  setValueFilter,
+    moveStage:       moveStage
   };
 })();
