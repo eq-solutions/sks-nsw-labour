@@ -614,8 +614,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.83.3
+  EQ Solves — Field  v3.4.84
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.84  (Audit fixes + tender pipeline foundation)
+  ────────────────────────────────────────────────────────────
+   • verify-pin.js: constant-time HMAC compare (timing-safe).
+   • .gitignore: baseline patterns added.
+   • PEOPLE_GROUPS extracted to app-state.js; 6 duplicate sites
+     swept (batch, people, roster, auth, import-export).
+   • Apprentices skills_ratings reads/writes through sbFetch().
+   • Tender pipeline schema + parser ship as inert code (dark —
+     not wired to UI or DB; migration unapplied).
 
   CHANGES IN v3.4.83.3  (Docs sweep — Help tab + deploy.md)
   ────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: tender pipeline (new schema for upstream labour planning)
 -- Project:   eq-field-app (SKS-Live clone)
--- Version:   3.4.83 (Tender Pipeline — Phase 1: schema + parser)
+-- Version:   3.4.84 (Tender Pipeline — Phase 1: schema + parser)
 -- Created:   2026-05-22
 -- Applied:   SKS  (nspbmirochztcjijmcrx) — pending
 -- ────────────────────────────────────────────────────────────

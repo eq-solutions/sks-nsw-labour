@@ -17,6 +17,11 @@
 // Bundle origin: C:\Projects\eq-field-pipeline\src\lib\tender-parser.js
 // Ported from ESM + vitest to IIFE for the SKS no-bundler stack.
 //
+// TEMPORARY — eq intake will own Smartsheet ingestion once eq-shell is
+// ready. When migrating, update pipeline-import.js to POST to the eq
+// intake endpoint instead of writing directly to Supabase. The parser
+// output format (tenders[], errors[], stats{}) is the stable contract.
+//
 // Column map locked against a real NSW export sampled 2026-05-22
 // (323 rows, all 12 expected headers present and exact).
 // ─────────────────────────────────────────────────────────────
