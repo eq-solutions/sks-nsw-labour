@@ -6,6 +6,25 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.83.3 — Docs sweep (Help tab + deploy.md)
+
+**Date:** 2026-05-23
+**Scope:** Doc-only release after Royce asked to update all relevant substrate and markdown files with the v3.4.83 → v3.4.83.2 changes. No functional code changes; version bumped purely for SW cache-bust consistency with the established pattern.
+
+- **Help tab → Supervisor Guide → new "Timesheets on Your Phone" card.** Covers the v3.4.83 card-stack layout, the 📍/📝 schedule bubble (known site vs free-text roster cell), the `[8/4/0]` hours chip, and the two-tap + Undo Fill Week flow. Plain English per CLAUDE.md voice guide; no engineering jargon in user-facing copy.
+- **`deploy.md` rewritten.** The previous version stopped at v3.3.5 and referenced "Demo site: eq-solves-field.netlify.app" alongside "Netlify auto-deploys both sites" — both stale since the eq-solves-field / SKS fork. New version documents:
+  - The post-fork PR-to-main deploy flow (no demo branch in this repo).
+  - The required per-release 4-file version bump (`app-state.js`, `sw.js`, `index.html`, `CHANGELOG.md`) and why the SW cache key is what forces phones to refetch.
+  - The current Netlify env-var list (including the optional `EMAIL_FROM` added in v3.4.39).
+  - Supabase edge functions (`supervisor-digest`, `tafe-weekly-fill`, `ts-reminder`) — previously absent from the doc entirely.
+  - Smoke-test checks for both desktop and phone Timesheets, including the Fill Week two-tap + undo path.
+  - Troubleshooting entries for the v3.4.83-era mobile gotchas (the `closest('tr, .ts-mday')` selector requirement; iOS `pointerdown` vs `touchstart`).
+- **Memory substrate updated** in `~/.claude/projects/C--Projects-sks-nsw-labour/memory/` (out-of-repo, not shipped with the build): four new entries — `feedback-ui-safety-pattern`, `feedback-ios-touch-events`, `feedback-mobile-render-shared-handlers`, `project-timesheets-source-of-truth` — plus the index refresh.
+
+Version stamps: `APP_VERSION = '3.4.83.3'`, SW cache `eq-field-v3.4.83.3`.
+
+---
+
 # v3.4.83.2 — Phase 4a live-test fixes + Fill Week safety model
 
 **Date:** 2026-05-23

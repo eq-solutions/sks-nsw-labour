@@ -614,8 +614,22 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.83.2
+  EQ Solves — Field  v3.4.83.3
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.83.3  (Docs sweep — Help tab + deploy.md)
+  ────────────────────────────────────────────────────────────
+  Doc-only release. No functional code changes.
+   • Help tab → Supervisor Guide → new "Timesheets on Your
+     Phone" card covering the v3.4.83 card-stack layout, the
+     📍/📝 schedule bubble, the [8/4/0] hours chip, and the
+     two-tap + Undo Fill Week flow.
+   • deploy.md rewritten for the post-fork SKS standalone
+     deployment lane. Old version stopped at v3.3.5 and
+     referenced the eq-solves-field "demo site" — both stale.
+     New version documents the actual PR-to-main flow, the
+     per-release 4-file version bump, and the post-deploy
+     smoke test (including phone-view checks).
 
   CHANGES IN v3.4.83.2  (Phase 4a live-test fixes + Fill Week safety)
   ────────────────────────────────────────────────────────────
@@ -3069,6 +3083,7 @@
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Supervisor Login</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Enter the supervisor code at the gate, or unlock from the sidebar lock button after logging in as staff.</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Editing the Roster</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Go to <strong>Edit Roster</strong>. Click a cell, type the site abbreviation. Changes save automatically. Use <strong>Copy Last Week</strong> or <strong>Batch Fill</strong> for bulk edits.</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Reviewing Timesheets</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Open <strong>Timesheets</strong> — the top filter switches between staff<br><strong>2.</strong> Red cells flag days over 8 hours; red weekly totals flag weeks over 40 hours. Check these against the roster before approving<br><strong>3.</strong> Anyone who hasn't submitted is listed in the "Outstanding" panel — the Friday digest covers this too<br><strong>4.</strong> Edits you make are saved straight to that person's timesheet</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Timesheets on Your Phone</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Open <strong>Timesheets</strong>. Staff appear as collapsed one-line cards — name, status icon (✓ complete · ⚠ partial · — empty), total hours<br><strong>2.</strong> Tap a name to expand. The week's days appear inside the card; finished days are tucked under a one-line summary (tap the day header to edit again)<br><strong>3.</strong> Each workable day shows where they were rostered — 📍 for known sites, 📝 for partner names or free-text from the roster. Leave / TAFE days stay muted and don't ask for hours<br><strong>4.</strong> Tap the Hours field → an <strong>8 / 4 / 0</strong> chip popover appears. One tap fills + saves<br><strong>5.</strong> If someone works the same job all week: fill <strong>Monday</strong>'s job + hours, then a <strong>Fill Week</strong> banner appears at the top of the card. Tap once — the button turns amber and says "Tap again — confirm". Tap a second time within 3 s to apply. An <strong>Undo</strong> toast hangs around for 5 s if you change your mind</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Approving Leave</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Email arrives when a staff member nominates you as approver, or open <strong>Leave</strong> and filter to <em>Pending</em><br><strong>2.</strong> Tap <strong>Review</strong> → choose <strong>Approve</strong> or <strong>Reject</strong>, add a note if needed, Submit<br><strong>3.</strong> Approved leave appears on the Calendar and on that person's roster row<br><strong>4.</strong> Use <strong>Archive</strong> to clear old/closed requests from the active list. <strong>Resend email</strong> re-sends the original approver email if it got lost<br><strong>5.</strong> If a request shouldn't have been submitted, the staffer can <strong>Withdraw</strong> it from their side</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Friday Digest</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Open <strong>Supervision</strong> → your card → tick <strong>Email me the Friday digest</strong>. You'll get the week's roster, outstanding timesheets, and pending leave at 12:00 AEST each Friday. Untick to opt out.</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Backup &amp; Security</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>Full Backup</strong> — Import / Export page. Download regularly.<br><strong>Audit Log</strong> — sidebar footer. All supervisor actions logged.</div></div>
