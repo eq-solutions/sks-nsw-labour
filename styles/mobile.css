@@ -345,6 +345,301 @@
     margin-top: -100%;
   }
 
+  /* ═══════════════════════════════════════════════════════════
+     v3.4.83 — Timesheets phone view (supervisor card-stack)
+     Below 768px, scripts/timesheets.js renders the supervisor
+     Timesheets as one card per person with days nested inside.
+     Read-only schedule bubble shows the rostered cell verbatim.
+     ═══════════════════════════════════════════════════════════ */
+  #page-timesheets .ts-table-scroll { display: none; }    /* safety — mobile JS replaces #ts-content but this guards stale renders */
+
+  .ts-mlist { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+
+  .ts-mgroup {
+    background: var(--surface-2);
+    border-left: 5px solid var(--navy-3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-top: 6px;
+  }
+  .ts-mgroup:first-child { margin-top: 0; }
+
+  .ts-mcard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04);
+  }
+  .ts-mcard-status-complete { box-shadow: inset 4px 0 0 0 var(--green), 0 1px 2px rgba(15,23,42,.04); }
+  .ts-mcard-status-partial  { box-shadow: inset 4px 0 0 0 var(--red),   0 1px 2px rgba(15,23,42,.04); background: rgba(220,38,38,.025); }
+  .ts-mcard-status-empty    { box-shadow: inset 4px 0 0 0 var(--ink-4), 0 1px 2px rgba(15,23,42,.04); }
+  .ts-mcard-status-leave    { box-shadow: inset 4px 0 0 0 var(--purple),0 1px 2px rgba(15,23,42,.04); }
+
+  .ts-mcard-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 48px;
+  }
+  .ts-mcard:not(.ts-mcard-collapsed) .ts-mcard-head {
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .ts-mcard-chev {
+    font-size: 12px;
+    color: var(--ink-4);
+    width: 12px;
+    flex-shrink: 0;
+    transition: transform .15s, color .15s;
+  }
+  .ts-mcard:not(.ts-mcard-collapsed) .ts-mcard-chev {
+    transform: rotate(90deg);
+    color: var(--navy);
+  }
+  .ts-mcard-icon { font-size: 17px; flex-shrink: 0; }
+  .ts-mcard-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--navy);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ts-mcard-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: .5px;
+    flex-shrink: 0;
+  }
+  .ts-mbadge-app { color: var(--purple); background: var(--purple-lt); }
+  .ts-mbadge-lh  { color: var(--navy-3); background: #F1F5F9; }
+  .ts-mcard-statusicon {
+    font-size: 13px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .ts-mcard-statusicon.complete { color: var(--green); }
+  .ts-mcard-statusicon.partial  { color: var(--red); }
+  .ts-mcard-statusicon.empty    { color: var(--ink-4); }
+  .ts-mcard-statusicon.leave    { color: var(--purple); }
+  .ts-mcard-total {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    min-width: 40px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .ts-mcard-total.green { color: var(--green); }
+  .ts-mcard-total.red   { color: var(--red); }
+  .ts-mcard-total.empty { color: var(--ink-4); }
+
+  .ts-mcard.ts-mcard-collapsed .ts-mcard-body { display: none; }
+  .ts-mcard-body { padding: 0; }
+
+  .ts-mcard-meta {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 14px 4px;
+    gap: 8px;
+  }
+  .ts-mcard-copylast {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-2);
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 32px;
+  }
+  .ts-mcard-copylast:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ── Day row ──────────────────────────────────────── */
+  .ts-mday { border-top: 1px solid var(--border); padding: 0; }
+  .ts-mday:first-child { border-top: 0; }
+  .ts-mday-muted { background: var(--surface-2); }
+  .ts-mday-today { background: rgba(124,119,185,.04); }
+
+  .ts-mday-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ts-mday-muted .ts-mday-head { cursor: default; }
+  .ts-mday-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    flex-shrink: 0;
+    min-width: 32px;
+  }
+  .ts-mday-date {
+    font-size: 11px;
+    color: var(--ink-3);
+    flex-shrink: 0;
+  }
+  .ts-mday-spacer { flex: 1; min-width: 4px; }
+  .ts-mday-status {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .ts-mday-status.done  { color: var(--green); background: var(--green-lt); }
+  .ts-mday-status.empty { color: var(--red);   background: var(--red-lt); }
+  .ts-mday-mutepill {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--purple);
+    background: var(--purple-lt);
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+  .ts-mday-tafe .ts-mday-mutepill { color: var(--amber); background: var(--amber-lt); }
+
+  .ts-mday-summary {
+    display: none;
+    padding: 0 14px 10px 46px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .ts-mday-summary-hint { color: var(--ink-4); font-family: inherit; }
+  .ts-mday.ts-mday-collapsed .ts-mday-summary { display: block; }
+  .ts-mday.ts-mday-collapsed .ts-mday-body    { display: none; }
+
+  .ts-mday-body {
+    padding: 4px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ── Schedule bubble ──────────────────────────────── */
+  .sched-bubble {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-2);
+    max-width: 200px;
+    min-width: 0;
+    cursor: default;
+  }
+  .sched-bubble-icon { font-size: 11px; flex-shrink: 0; }
+  .sched-bubble-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sched-bubble-freetext {
+    color: var(--ink-3);
+    background: var(--surface);
+    font-style: italic;
+    font-weight: 600;
+  }
+
+  /* ── Inputs (16px font prevents iOS zoom-on-focus) ── */
+  .ts-minput-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .ts-minput-jobwrap { flex: 1; min-width: 0; }
+  .ts-minput-hrswrap { width: 78px; flex-shrink: 0; }
+  .ts-minput-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .ts-minput-field {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 16px;
+    color: var(--ink);
+    outline: none;
+    background: var(--surface);
+    transition: border-color .12s;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .ts-minput-field:focus { border-color: var(--purple); }
+  .ts-minput-field.ts-minput-hrs {
+    font-family: inherit;
+    text-align: center;
+  }
+  .ts-msplit-row {
+    /* style="display:flex" / "none" controlled inline by JS */
+  }
+
+  .ts-mday-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ts-msplit-btn {
+    background: white;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-3);
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 36px;
+  }
+  .ts-msplit-btn.active { border-style: solid; border-color: var(--purple); color: var(--purple); background: var(--purple-lt); }
+  .ts-mrepeat-btn {
+    background: var(--navy);
+    color: white;
+    border: 1px solid var(--navy);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 36px;
+  }
+  .ts-mrepeat-btn:disabled { opacity: .5; cursor: not-allowed; }
+
 }
 
 @media (max-width: 480px) {

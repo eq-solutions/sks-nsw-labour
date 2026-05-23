@@ -614,8 +614,52 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.82
+  EQ Solves — Field  v3.4.83
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.83  (Timesheets — Phase 4a phone view for supervisors)
+  ────────────────────────────────────────────────────────────
+  Phone-friendly supervisor Timesheets so the Fri/Mon entry +
+  review flow doesn't require a laptop. Site-based work means a
+  laptop isn't always around — phone entry lowers the friction
+  to keep apprentices' and labour-hire timesheets current (these
+  are the SOURCE OF TRUTH for invoiced hours; direct employees
+  still flow through Workbench).
+
+  What's new (≤768px viewport only — desktop unchanged):
+   • Card-stack layout. Each person is a collapsible card; tap
+     the header to reveal the week's days nested inside. Everyone
+     starts collapsed — walk in to a clean scannable list of name
+     + status icon + total. The 4px coloured side-stripe (green /
+     red / grey / purple) carries the same complete / partial /
+     empty / on-leave signal the desktop table uses.
+   • Schedule bubble. Each workable day shows the rostered cell
+     verbatim — 📍 for cells that cleanly match a known site
+     (uppercase + trim against active jobs' site_name), 📝 for
+     free-text (partner names, "TBC", abbreviations). Read-only
+     in this phase. Phase 4b will add tap-to-fill behaviour for
+     the 📍 case once site tagging on jobs is consistent enough
+     to trust.
+   • Collapse-when-filled. Days that already have a job + hours
+     collapse to a one-line summary inside the expanded card.
+     Tap the day header to expand and edit. Empty days stay open.
+   • Bigger inputs. 16px font on the job + hours fields prevents
+     the iOS zoom-on-focus jump that the desktop table size
+     triggers on mobile. 12px padding for fat-finger margins.
+   • Existing affordances preserved on phone: ↺ "last wk" copy,
+     ↻ repeat day, ＋ split-day, variance ⚠ chip, lock banner,
+     filter chips, by-job CSV export. Same data path, same
+     handlers — only the layout flips.
+
+  Out of scope (deferred to Phase 4b):
+   • Tappable schedule bubble — autofill on 1-job-at-site, mini-
+     picker on 2+, no-op on free-text. Held back until job→site
+     tagging is reliable enough that wrong autofills don't risk
+     mis-invoicing.
+
+  Files touched: scripts/timesheets.js (new _renderTimesheetsMobile
+  + helpers; gate at top of renderTimesheets), styles/mobile.css
+  (~280 lines under @media max-width:768px). No schema changes.
 
   CHANGES IN v3.4.82  (Timesheets — Phase 3 Accounts Review mode)
   ────────────────────────────────────────────────────────────
