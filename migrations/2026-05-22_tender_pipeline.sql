@@ -481,10 +481,11 @@ COMMENT ON VIEW public.nomination_clashes IS
 --   INSERT INTO public.app_config (key, value, org_id) VALUES
 --     ('pipeline_enabled',              'false',  '1eb831f9-aeae-4e57-b49e-9681e8f51e15'),
 --     ('pipeline_value_floor',          '100000', '1eb831f9-aeae-4e57-b49e-9681e8f51e15'),
---     ('pipeline_review_cm_manager_id', '',       '1eb831f9-aeae-4e57-b49e-9681e8f51e15')
---   ON CONFLICT (key, org_id) DO NOTHING;
+--     ('pipeline_review_cm_manager_id', '27',     '1eb831f9-aeae-4e57-b49e-9681e8f51e15')
+--   ON CONFLICT (key) DO NOTHING;  -- app_config PK is (key) only, not composite (key, org_id)
+--   -- Applied 2026-05-24: pipeline_review_cm_manager_id set to manager id 27 (Royce Milmlow)
 --
---   -- EQ demo: look up its org_id first and substitute.
+--   -- EQ demo: uuid PKs on managers/people/sites/job_numbers — migration incompatible, skip.
 --
 -- Keys:
 --   pipeline_enabled              — runtime feature flag. Nav entry +
