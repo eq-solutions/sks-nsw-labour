@@ -1,10 +1,121 @@
 # EQ Solves Field — Changelog
 
-_Rolling changelog for `eq-solves-field`. Most recent release first. Versions before v3.4.5 (apprentices v2.1) are not in this file — earlier history lives in `sks-nsw-labour/` per-version notes._
+_Rolling changelog for `sks-nsw-labour` — the SKS deployment of EQ Solves Field. EQ owns the code; this repo is the stable deploy lane for SKS, forked from `eq-solves-field` so the live SKS app isn't churned by active EQ Field development. Most recent release first. Older entries below were written when this code lived in `eq-solves-field` and reference its demo→main flow — that flow no longer applies here._
 
 _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in and removed._
 
 ---
+
+# v3.4.83.1 — Phase 4a deploy-preview fixes
+
+**Date:** 2026-05-23
+**Scope:** Three follow-ups after Royce's first phone test of the v3.4.83 deploy preview.
+
+- **Saves on mobile actually work now.** `onTsCellChange` was looking up its peer inputs via `el.closest('tr')`, which returns null in the mobile card-stack DOM (cells are `<div class="ts-mday">`). Selector loosened to `tr, .ts-mday` — desktop unchanged, mobile saves go through. `_onTsKeydown` got the same defensive update. **Any timesheet edits made on the v3.4.83 deploy preview before this patch did NOT persist** — they need to be re-entered. (No data corruption; the save just no-op'd, the inputs showed the typed value locally.)
+- **Hours quick-select popover clamped to viewport.** Was anchored to the input's `rect.left` and overflowed the right edge on phones. Now measures itself, falls back to right-aligning to the input's right edge when a left-aligned popover would clip, with a final viewport-margin guard. Same logic on desktop — slightly more robust.
+- **`7.6h` chip dropped.** Per Royce — SKS uses 8h as the standard day. Quick-select is now `[8, 4, 0]`.
+- **"Fill Week" banner** in the mobile card body when Monday is filled and at least one of Tue–Fri is empty. Tap → calls the existing `fillTsWeekFromMon` (which already prompts before overwriting non-empty days). Sits at the top of the expanded card so it's the first thing you see after Mon is in.
+- **Card-expansion state persists across re-renders.** `_tsExpandedCards` Set tracks which person cards the supervisor has opened. After Fill Week (which calls `renderTimesheets`), the card stays open instead of snapping back to collapsed.
+
+Version stamps: `APP_VERSION = '3.4.83.1'`, SW cache `eq-field-v3.4.83.1`. The new cache key forces the SW to discard the v3.4.83 install — first phone load after deploy will hit network and pick up the fixed `timesheets.js` / `mobile.css`.
+
+---
+
+# v3.4.83 — Timesheets Phase 4a (supervisor phone view + roster bubble)
+
+**Date:** 2026-05-23
+**Branch flow:** `claude/hungry-thompson-648935` → `main` (squash). SKS ships straight to main now — no demo branch.
+**Scope:** Supervisor Timesheets layout at ≤768px viewport. No schema, API, or data-path changes. Desktop view unchanged.
+
+## Why this release
+
+SKS NSW is a site-based business — supervisors often don't have a laptop at hand on Friday/Monday when timesheets are due. The previous desktop-table layout shipped in v3.4.79–v3.4.82 reads great on a screen but is unusable on a phone: the cells need ~124px each to fit Job + Hours + split + repeat, so 5–7 of them across forced horizontal scroll and made every input a fat-finger problem.
+
+Apprentices and Labour Hire timesheets are the **source of truth for invoiced hours** for those groups — letting them lapse costs real money. Lowering the friction to update from a phone is the cleanest mitigation while job-numbers data hygiene catches up. (Direct employees still flow through Workbench externally — out of scope here.)
+
+## What changed (≤768px only)
+
+### `scripts/timesheets.js`
+
+New phone-view branch at the top of `renderTimesheets()`:
+
+```js
+_hookTsResizeOnce();
+if (_isPhoneViewport()) {
+  _renderTimesheetsMobile({ ... });
+  updateTsStats();
+  return;
+}
+```
+
+`_renderTimesheetsMobile()` produces a card-stack DOM (one card per person, days nested inside) using the **same** input `data-*` attributes and the **same** handlers (`onTsCellChange`, `_onComboboxInput`, `_showTsHoursChips`, `repeatDayAcrossTs`, `copyLastWeekTs`) the desktop table wires up. Identical data path — only the layout flips.
+
+New helpers:
+
+- `_isPhoneViewport()` — `window.innerWidth ≤ 768`.
+- `_tsScheduleBubble(name, week, day)` — returns `{ html, isKnown, code }` for the read-only roster bubble. Reads `getPersonSchedule(name, week)[day]`, returns the cell verbatim wrapped in a `.sched-bubble`. **isKnown** = the cell (uppercase + trim) matches an active job's `site_name` — the bubble gets the 📍 icon. Otherwise free-text gets 📝. Leave/TAFE days return empty html — the parent renders the existing mute pill instead.
+- `toggleTsCard(pid)` / `toggleTsDay(rid)` — collapse/expand handlers wired to inline `onclick`.
+- `toggleMTsSplit(rid, btn)` — split-day toggle for the mobile DOM.
+- `_hookTsResizeOnce()` — single idempotent resize listener; re-renders Timesheets when the viewport crosses the 768px breakpoint (rotation, dev-tools resize).
+
+### `styles/mobile.css`
+
+~280 lines under the existing `@media (max-width: 768px)` block. Highlights:
+
+- `.ts-mcard` collapsible card with 4px coloured left-stripe carrying the same complete / partial / empty / on-leave signal as the desktop row stripe.
+- Chevron rotation on card expand (`▸` → `▾`).
+- `.ts-mday` collapsible day row inside the expanded card. **Filled days start collapsed** with a one-line summary (`D5384 — tap to edit`); empty days stay expanded. Muted (leave/TAFE) days are non-tappable.
+- `.sched-bubble` + `.sched-bubble-freetext` styles for the read-only roster bubble.
+- Inputs: 16px font (prevents iOS zoom-on-focus), 12px padding, 10px radius.
+- Repeat-day, split, copy-last-wk affordances rebuilt in the mobile DOM (preserved from desktop).
+
+`#page-timesheets .ts-table-scroll { display: none; }` belt-and-braces in case a stale desktop render is still in the DOM when the breakpoint is crossed.
+
+### Roster bubble — what about messy roster cells?
+
+The roster is occasionally filled with partner names ("with Lewis"), placeholders ("TBC"), or free text rather than clean site codes. The bubble copes:
+
+- Cell matches a known site → 📍 styled bubble (data-site attribute holds the normalised value — used by Phase 4b).
+- Cell is anything else → 📝 italic neutral bubble showing the cell verbatim.
+- Cell is blank → no bubble.
+- Cell is leave/TAFE → existing mute pill (unchanged from v3.4.79).
+
+The supervisor's brain does the parsing — the app just surfaces what was already on the roster, in plain English.
+
+## Out of scope (deferred to Phase 4b, v3.4.84+)
+
+- **Tappable schedule bubble.** Designed and prototyped, held back until we've had a week of 4a in production. Plan: 📍 bubbles become tappable; 1 job at site → autofill the cell with that job + 8h; 2+ jobs → focused mini-picker filtered to that site; 0 jobs / 📝 free-text → no-op (no chevron). The risk that justifies the staged rollout is wrong autofill → wrong invoiced job if a job's `site_name` is mis-tagged — Phase 4a is read-only, so data-quality issues at most look confusing, never bill wrong.
+
+## Mockup
+
+A static HTML mockup of the proposed phone layout lives at `MOCKUP-v3.4.83-timesheets-phone.html` at repo root. Includes toggles for the 4a vs 4b bubble behaviours so reviewers can compare; safe to delete once the live build has stabilised.
+
+## Version stamps
+
+- `scripts/app-state.js` — `APP_VERSION = '3.4.83'`.
+- `sw.js` — header + `CACHE = 'eq-field-v3.4.83'`.
+- `index.html` — header comment block (new `CHANGES IN v3.4.83` entry prepended).
+- Favicon cache-buster `var v` (line ~23) unchanged at `3.4.40` — no icon changes.
+
+## Smoke test
+
+Open Timesheets on a phone-sized viewport (≤768px wide — devtools responsive mode works):
+
+1. Sidebar/topbar collapses to mobile nav (existing behaviour). Filter chip row + lock banner render unchanged.
+2. The grid is gone — instead, a stack of person cards, all collapsed, ordered by group (Apprentice first, Labour Hire second).
+3. Tap a person header → card expands, chevron rotates, 5 day rows appear. Filled days are collapsed (summary line); empty days are expanded.
+4. Each workable day shows the schedule bubble — 📍 for clean sites, 📝 for free-text. Leave/TAFE days show the existing mute pill instead.
+5. Type into a job/hours input → fires `onTsCellChange` → save toasts as on desktop. Hours quick-select chips still pop. Combobox autocomplete still works.
+6. ↺ "last wk" copy, ↻ repeat day, ＋ split — all wired and tested in the mobile DOM.
+7. Resize the window past 768px → page re-renders into the desktop table (and back) without a page reload.
+
+## Deploy
+
+SKS NSW Labour ships straight from `main` — no demo branch, no cross-repo deploy.
+
+1. PR `claude/hungry-thompson-648935` → `main`, squash-merge.
+2. Netlify auto-deploys `main` to `sks-nsw-labour.netlify.app`.
+3. Hard-refresh on a phone (SW cache key changed, so first load will hit the network).
 
 # v3.4.63 — Help tab rewrite (timesheet + leave coverage, tenant-aware URL)
 

@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MOCKUP — Timesheets phone view (v3.4.83 proposal)</title>
+<style>
+  :root {
+    --navy:      #1F335C;
+    --navy-2:    #2A4A7F;
+    --navy-3:    #34486C;
+    --purple:    #7C77B9;
+    --purple-lt: #EEEDF8;
+    --green:     #16A34A;
+    --green-lt:  #F0FDF4;
+    --amber:     #D97706;
+    --amber-lt:  #FFFBEB;
+    --red:       #DC2626;
+    --red-lt:    #FEF2F2;
+    --ink:       #1A1A2E;
+    --ink-2:     #374151;
+    --ink-3:     #6B7280;
+    --ink-4:     #9CA3AF;
+    --border:    #E5E7EB;
+    --surface:   #FFFFFF;
+    --surface-2: #F8FAFC;
+    --slate-lt:  #F1F5F9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--ink); }
+
+  /* Page frame so the mockup feels like a phone on a dark backdrop */
+  .stage { display: flex; flex-wrap: wrap; gap: 24px; padding: 24px; align-items: flex-start; justify-content: center; min-height: 100vh; }
+  .stage-label { color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 8px; opacity: .65; }
+
+  .phone {
+    width: 390px; max-width: 100%;
+    background: var(--surface-2);
+    border: 1px solid #1e293b;
+    border-radius: 28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    height: 820px;
+  }
+  .phone-notch { background: #000; height: 22px; }
+
+  /* Topbar */
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
+  .topbar-title { font-size: 15px; font-weight: 700; color: var(--navy); }
+  .topbar-week { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 12px; font-weight: 700; color: var(--ink-2); gap: 6px; }
+  .topbar-week button { background: none; border: none; min-width: 28px; min-height: 28px; font-size: 16px; color: var(--ink-3); cursor: pointer; border-radius: 6px; }
+  .topbar-icon { background: var(--navy); color: #fff; min-width: 36px; min-height: 36px; border-radius: 999px; border: none; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
+
+  /* Progress strip */
+  .progress { padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .progress-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .progress-label { font-size: 10px; font-weight: 700; color: var(--ink-2); text-transform: uppercase; letter-spacing: .5px; }
+  .progress-pct { font-size: 13px; font-weight: 800; color: var(--amber); }
+  .progress-bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+  .progress-fill { height: 100%; width: 40%; background: var(--amber); transition: width .25s; }
+
+  /* Filter chips row */
+  .chip-row { background: var(--surface); padding: 8px 14px 10px; border-bottom: 1px solid var(--border); overflow-x: auto; display: flex; gap: 6px; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: var(--ink-2); cursor: pointer; font-family: inherit; flex-shrink: 0; }
+  .chip-active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .chip-count { opacity: .7; margin-left: 4px; font-weight: 600; }
+
+  /* Scrollable card list */
+  .card-list { flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 76px; }
+
+  /* Person card */
+  .ts-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+  .ts-card.collapsed .ts-card-body { display: none; }
+  .ts-card-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px;
+    background: var(--surface);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ts-card:not(.collapsed) .ts-card-header { border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .ts-card-chev { font-size: 12px; color: var(--ink-4); width: 14px; flex-shrink: 0; transition: transform .15s; }
+  .ts-card:not(.collapsed) .ts-card-chev { transform: rotate(90deg); color: var(--navy); }
+  .ts-card-icon { font-size: 17px; }
+  .ts-card-name { flex: 1; font-size: 14px; font-weight: 700; color: var(--navy); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ts-card-badge { font-size: 9px; font-weight: 800; color: var(--purple); background: var(--purple-lt); padding: 2px 6px; border-radius: 4px; letter-spacing: .5px; }
+  .ts-card-badge.lh { color: var(--navy-3); background: var(--slate-lt); }
+  .ts-card-total { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
+  .ts-card-total.red   { color: var(--red); }
+  .ts-card-total.green { color: var(--green); }
+  .ts-card-total.empty { color: var(--ink-4); }
+  .ts-card-status-icon { font-size: 13px; width: 18px; text-align: center; flex-shrink: 0; }
+  .ts-card-status-icon.complete { color: var(--green); }
+  .ts-card-status-icon.partial  { color: var(--red); }
+  .ts-card-status-icon.empty    { color: var(--ink-4); }
+  .ts-card-status-icon.leave    { color: var(--purple); }
+  .ts-card-copylast { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 10px; font-weight: 700; color: var(--ink-3); padding: 4px 8px; cursor: pointer; font-family: inherit; }
+
+  /* Status stripe */
+  .ts-card.status-complete { box-shadow: inset 4px 0 0 0 var(--green); }
+  .ts-card.status-partial  { box-shadow: inset 4px 0 0 0 var(--red); background: rgba(220,38,38,.025); }
+  .ts-card.status-empty    { box-shadow: inset 4px 0 0 0 var(--ink-4); }
+  .ts-card.status-leave    { box-shadow: inset 4px 0 0 0 var(--purple); }
+
+  /* Day row */
+  .day-row { border-bottom: 1px solid var(--border); padding: 10px 14px; }
+  .day-row:last-child { border-bottom: none; }
+  .day-row.muted { background: var(--surface-2); }
+
+  .day-head { display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 28px; }
+  .day-label { font-size: 13px; font-weight: 700; color: var(--ink); flex-shrink: 0; min-width: 64px; }
+  .day-date  { font-size: 11px; color: var(--ink-3); flex-shrink: 0; }
+  .day-spacer { flex: 1; }
+  .day-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .day-status.done    { color: var(--green); background: var(--green-lt); }
+  .day-status.empty   { color: var(--red);   background: var(--red-lt); }
+  .day-status.leave   { color: var(--purple);background: var(--purple-lt); }
+  .day-summary { font-size: 12px; color: var(--ink-3); margin-top: 4px; font-family: ui-monospace, monospace; }
+
+  /* Schedule bubble */
+  .sched-bubble {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 8px;
+    font-size: 11px; font-weight: 700; color: var(--ink-2);
+    cursor: default; font-family: inherit;
+    max-width: 200px; min-width: 0;
+  }
+  .sched-bubble .pin { font-size: 11px; }
+  .sched-bubble .site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Free-text / unstructured roster cells — neutral pill, no pin */
+  .sched-bubble.freetext { color: var(--ink-3); background: var(--surface); font-style: italic; font-weight: 600; }
+  /* Tappable (only when roster value cleanly matches a known site) */
+  .sched-bubble.tappable { cursor: pointer; border-color: var(--purple); color: var(--navy); background: var(--purple-lt); }
+  .sched-bubble.tappable .chev { font-size: 9px; opacity: .7; margin-left: 2px; }
+  .sched-bubble.tappable:active { transform: scale(.96); }
+
+  /* Day body — input row, hidden when collapsed */
+  .day-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .day-row.collapsed .day-body { display: none; }
+  .input-row { display: flex; gap: 8px; align-items: flex-end; }
+  .input-row .job-wrap { flex: 1; min-width: 0; }
+  .input-row .hrs-wrap { width: 78px; }
+  .input-label { font-size: 9px; font-weight: 800; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 4px; }
+  .input-field {
+    width: 100%;
+    padding: 12px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: ui-monospace, monospace;
+    font-size: 16px; /* 16px prevents iOS auto-zoom on focus */
+    color: var(--ink);
+    outline: none;
+    background: var(--surface);
+    transition: border-color .12s;
+  }
+  .input-field:focus { border-color: var(--purple); }
+  .input-field.hrs { font-family: inherit; text-align: center; }
+  .input-field.hrs::placeholder { color: var(--ink-4); }
+  .split-btn {
+    background: none; border: 1px dashed var(--border); border-radius: 8px;
+    padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--ink-3);
+    cursor: pointer; font-family: inherit; align-self: flex-start;
+  }
+
+  /* Leave / TAFE mute */
+  .mute-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; color: var(--purple);
+    background: var(--purple-lt); border-radius: 999px;
+    padding: 4px 10px;
+  }
+  .mute-pill.tafe { color: var(--amber); background: var(--amber-lt); }
+
+  /* Bottom nav placeholder */
+  .bottom-nav { height: 60px; background: #fff; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-around; flex-shrink: 0; position: relative; }
+  .bottom-nav button { flex: 1; background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; font-family: inherit; font-size: 9px; font-weight: 700; color: var(--ink-4); cursor: pointer; text-transform: uppercase; letter-spacing: .2px; }
+  .bottom-nav button.active { color: var(--navy); border-top: 2px solid var(--navy); margin-top: -1px; }
+  .bottom-nav .icon { font-size: 18px; }
+
+  /* Mode toggle controls (mockup-only — not part of real UI) */
+  .controls { background: rgba(255,255,255,.06); border: 1px dashed rgba(255,255,255,.2); border-radius: 12px; padding: 14px 18px; color: #e2e8f0; font-size: 13px; max-width: 320px; }
+  .controls h2 { margin: 0 0 8px; font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #fff; }
+  .controls label { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+  .controls input[type=checkbox] { transform: scale(1.2); accent-color: #7C77B9; }
+  .controls .hint { color: #94a3b8; font-size: 11px; margin-top: 10px; line-height: 1.5; }
+
+  /* Mini job-picker (tappable bubble — 2+ matches) */
+  .picker-overlay { position: absolute; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: flex-end; z-index: 50; }
+  .picker-overlay.open { display: flex; }
+  .picker-panel { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-height: 60%; overflow-y: auto; padding: 14px 0 24px; }
+  .picker-head { padding: 0 18px 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+  .picker-title { flex: 1; font-size: 13px; font-weight: 800; color: var(--navy); }
+  .picker-sub { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .picker-close { background: none; border: none; font-size: 22px; color: var(--ink-3); cursor: pointer; }
+  .picker-item { padding: 12px 18px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .picker-item:active { background: var(--purple-lt); }
+  .picker-num { font-size: 14px; font-weight: 800; color: var(--navy); font-family: ui-monospace, monospace; }
+  .picker-desc { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+  .picker-tag { display: inline-block; font-size: 9px; font-weight: 800; color: var(--purple); background: var(--purple-lt); padding: 2px 6px; border-radius: 3px; margin-left: 6px; letter-spacing: .3px; }
+
+  /* Toast (mockup-only) */
+  .toast { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 12px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.3); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 60; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <div>
+    <div class="stage-label">v3.4.83 — Timesheets phone view (proposal)</div>
+
+    <div class="phone" id="phone">
+      <div class="phone-notch"></div>
+
+      <div class="topbar">
+        <div class="topbar-title">Timesheets</div>
+        <div class="topbar-week">
+          <button>‹</button>
+          <span>Week 19–25 May 26</span>
+          <button>›</button>
+        </div>
+        <button class="topbar-icon" title="Refresh">⟳</button>
+      </div>
+
+      <div class="progress">
+        <div class="progress-head">
+          <span class="progress-label">This week — 19.05.26</span>
+          <span class="progress-pct">2 of 5 complete (40%)</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+
+      <div class="chip-row">
+        <button class="chip">All<span class="chip-count">5</span></button>
+        <button class="chip chip-active">⚠ Incomplete<span class="chip-count">3</span></button>
+        <button class="chip">&gt; 40h<span class="chip-count">0</span></button>
+        <button class="chip">&lt; 30h<span class="chip-count">2</span></button>
+      </div>
+
+      <div class="card-list" id="card-list">
+        <!-- cards injected by JS -->
+      </div>
+
+      <div class="bottom-nav">
+        <button><span class="icon">🏠</span>Home</button>
+        <button><span class="icon">📅</span>Roster</button>
+        <button class="active"><span class="icon">📝</span>Timesheets</button>
+        <button><span class="icon">👥</span>Staff</button>
+        <button><span class="icon">⋯</span>More</button>
+      </div>
+
+      <div class="picker-overlay" id="picker">
+        <div class="picker-panel">
+          <div class="picker-head">
+            <div>
+              <div class="picker-title">📍 NORTH SYDNEY METRO</div>
+              <div class="picker-sub">2 jobs at this site</div>
+            </div>
+            <div style="flex:1"></div>
+            <button class="picker-close" onclick="closePicker()">×</button>
+          </div>
+          <div class="picker-item" onclick="pickJob('D5384','North Sydney Metro — Comms upgrade')">
+            <div><span class="picker-num">D5384</span> <span class="picker-tag">YOUR LAST USE</span></div>
+            <div class="picker-desc">North Sydney Metro — Comms upgrade</div>
+          </div>
+          <div class="picker-item" onclick="pickJob('D5402','North Sydney Metro — Switchboard')">
+            <div><span class="picker-num">D5402</span></div>
+            <div class="picker-desc">North Sydney Metro — Switchboard refurb</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <h2>Mockup controls</h2>
+    <label><input type="checkbox" id="toggle-autoexpand"> Auto-expand people who need attention</label>
+    <label><input type="checkbox" id="toggle-collapse" checked> Collapse completed days (within expanded person)</label>
+    <label><input type="checkbox" id="toggle-tappable"> Tappable schedule bubble <span style="color:#94a3b8">(Phase 4b — optional)</span></label>
+
+    <h2 style="margin-top:18px;font-size:11px">Bubble variants — reference</h2>
+    <div style="background:rgba(255,255,255,.92); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="sched-bubble" style="cursor:default"><span class="pin">📍</span><span class="site">NORTH SYDNEY METRO</span></span>
+        <span style="color:#475569; font-size:11px;">Known site (clean match)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="sched-bubble tappable" style="cursor:default"><span class="pin">📍</span><span class="site">PARRAMATTA</span><span class="chev">▾</span></span>
+        <span style="color:#475569; font-size:11px;">Tappable (when 4b on)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="sched-bubble freetext"><span class="pin">📝</span><span class="site">with Lewis</span></span>
+        <span style="color:#475569; font-size:11px;">Free-text (partner name)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="sched-bubble freetext"><span class="pin">📝</span><span class="site">TBC</span></span>
+        <span style="color:#475569; font-size:11px;">Free-text (placeholder)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="sched-bubble freetext"><span class="pin">📝</span><span class="site">site visit + Homebush</span></span>
+        <span style="color:#475569; font-size:11px;">Free-text (mixed)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="mute-pill">🌴 A/L</span>
+        <span style="color:#475569; font-size:11px;">Leave (existing)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="mute-pill tafe">🎓 TAFE</span>
+        <span style="color:#475569; font-size:11px;">TAFE (existing)</span>
+      </div>
+    </div>
+
+    <div class="hint">
+      <b>Try this:</b> tap <b>Maeve Scott</b> in the phone — her week has all four
+      non-mute variants ("with Lewis" partner, "TBC" placeholder, "site visit +
+      Homebush" mixed, and a blank Friday). Turn on <b>Tappable</b> to see how
+      free-text bubbles stay non-tappable while clean sites get the ▾ chevron.
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Mock data ────────────────────────────────────────────────
+  // Each person: name, group, schedule (Mon-Fri roster cell values), entries (filled days).
+  // Note: roster cells aren't always clean site codes — sometimes a partner's
+  // name, free text, or abbreviation. The bubble shows it verbatim either way;
+  // only cells matching a known site (see SITE_JOB_COUNTS) become tappable.
+  const PEOPLE = [
+    { name: 'Indigo White',  group: 'Apprentice', sched: ['NORTH SYDNEY METRO','NORTH SYDNEY METRO','TAFE','PARRAMATTA','PARRAMATTA'],
+      entries: { mon:{j:'D5384',h:8}, tue:{j:'D5384',h:8} } },
+    { name: 'Jamie Harris',  group: 'Apprentice', sched: ['NORTH SYDNEY METRO','NORTH SYDNEY METRO','NORTH SYDNEY METRO','NORTH SYDNEY METRO','NORTH SYDNEY METRO'],
+      entries: {} },
+    { name: 'Kai Morris',    group: 'Apprentice', sched: ['HOMEBUSH','HOMEBUSH','A/L','A/L','HOMEBUSH'],
+      entries: { mon:{j:'D5410',h:8}, tue:{j:'D5410',h:8}, fri:{j:'D5410',h:8} } },
+    { name: 'Lewis Robinson', group: 'Labour Hire', sched: ['BARANGAROO','BARANGAROO','BARANGAROO','BARANGAROO','BARANGAROO'],
+      entries: { mon:{j:'D5320',h:8}, tue:{j:'D5320',h:8}, wed:{j:'D5320',h:8}, thu:{j:'D5320',h:8}, fri:{j:'D5320',h:8} } },
+    // Realistic messy roster — partner names, free text, abbreviations
+    { name: 'Maeve Scott',   group: 'Labour Hire', sched: ['with Lewis','with Lewis','TBC','site visit + Homebush',''],
+      entries: { mon:{j:'D5320',h:8}, tue:{j:'D5320',h:6} } },
+    { name: 'Noah Patel',    group: 'Labour Hire', sched: ['Chatswood','Chatswood','PARRAMATTA','PARRAMATTA','PARRAMATTA'],
+      entries: { mon:{j:'D5398',h:8}, tue:{j:'D5398',h:8}, wed:{j:'D5417',h:8}, thu:{j:'D5417',h:8}, fri:{j:'D5417',h:8} } },
+  ];
+
+  const DAYS = ['mon','tue','wed','thu','fri'];
+  const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri'];
+  const WEEK_DATES = ['19 May','20 May','21 May','22 May','23 May'];
+
+  // How many active jobs we *pretend* exist at each site — drives the
+  // tappable bubble's 0 / 1 / 2+ behaviour for the mockup.
+  const SITE_JOB_COUNTS = {
+    'NORTH SYDNEY METRO': 2,   // 2+ → mini-picker
+    'PARRAMATTA':         1,   // 1   → autofill
+    'HOMEBUSH':           1,
+    'BARANGAROO':         1,
+    'CHATSWOOD':          0,   // 0   → read-only
+  };
+  const SITE_AUTOFILL = {
+    'PARRAMATTA': 'D5417',
+    'HOMEBUSH':   'D5410',
+    'BARANGAROO': 'D5320',
+  };
+
+  const isLeave = code => /^(A\/L|P\/L|PH|S\/L)$/i.test(code || '');
+  const isTafe  = code => /^TAFE$/i.test(code || '');
+  const isMute  = code => isLeave(code) || isTafe(code);
+
+  // ── Render ───────────────────────────────────────────────────
+  function render() {
+    const tappable = document.getElementById('toggle-tappable').checked;
+    const collapseFilled = document.getElementById('toggle-collapse').checked;
+    const autoExpand = document.getElementById('toggle-autoexpand').checked;
+    const root = document.getElementById('card-list');
+    root.innerHTML = '';
+
+    PEOPLE.forEach(p => {
+      const total = Object.values(p.entries).reduce((a, e) => a + (e.h || 0), 0);
+      const workableDays = DAYS.filter((_, i) => !isMute(p.sched[i]));
+      const filledDays = workableDays.filter(d => p.entries[d] && p.entries[d].h > 0);
+      const allWorkableMuted = workableDays.length === 0;
+      let status, totalCls, statusIcon;
+      if (allWorkableMuted)                          { status = 'leave';    totalCls = 'empty'; statusIcon = '🌴'; }
+      else if (filledDays.length === 0)              { status = 'empty';    totalCls = 'empty'; statusIcon = '—'; }
+      else if (filledDays.length === workableDays.length && total >= 40) { status = 'complete'; totalCls = 'green'; statusIcon = '✓'; }
+      else                                           { status = 'partial';  totalCls = 'red';   statusIcon = '⚠'; }
+
+      // Default-collapsed unless the person needs attention (autoExpand mode).
+      // Manual mode = everyone collapsed; tap to expand.
+      const cardCollapsed = autoExpand ? (status === 'complete' || status === 'leave') : true;
+
+      const card = document.createElement('div');
+      card.className = 'ts-card status-' + status + (cardCollapsed ? ' collapsed' : '');
+      card.innerHTML = `
+        <div class="ts-card-header">
+          <span class="ts-card-chev">▸</span>
+          <span class="ts-card-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
+          <span class="ts-card-name">${esc(p.name)}</span>
+          <span class="ts-card-badge ${p.group === 'Labour Hire' ? 'lh' : ''}">${p.group === 'Apprentice' ? 'APP' : 'LH'}</span>
+          <span class="ts-card-status-icon ${status}">${statusIcon}</span>
+          <span class="ts-card-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
+        </div>
+        <div class="ts-card-body"></div>
+      `;
+      const body = card.querySelector('.ts-card-body');
+
+      DAYS.forEach((d, i) => {
+        const code = (p.sched[i] || '').trim();
+        const entry = p.entries[d];
+        const filled = entry && entry.h > 0;
+        const muted  = isMute(code);
+        const collapsed = collapseFilled && filled && !muted;
+
+        const row = document.createElement('div');
+        row.className = 'day-row' + (muted ? ' muted' : '') + (collapsed ? ' collapsed' : '');
+        row.dataset.person = p.name;
+        row.dataset.day = d;
+
+        // Bubble HTML — show whatever the roster cell contains, verbatim.
+        // Only cells that uppercase-match a known site become tappable (4b).
+        // Free-text / partner-name / blank cells render as a neutral pill
+        // (or get omitted entirely if blank).
+        let bubbleHtml = '';
+        if (muted) {
+          bubbleHtml = isTafe(code)
+            ? `<span class="mute-pill tafe">🎓 TAFE</span>`
+            : `<span class="mute-pill">🌴 ${esc(code)}</span>`;
+        } else if (code) {
+          const norm = code.trim().toUpperCase();
+          const knownSite = SITE_JOB_COUNTS[norm] != null;
+          const jobCount = knownSite ? SITE_JOB_COUNTS[norm] : 0;
+          const canTap   = tappable && knownSite && jobCount >= 1;
+          let cls = 'sched-bubble';
+          let pin = '<span class="pin">📍</span>';
+          let chev = '';
+          if (canTap) { cls += ' tappable'; chev = '<span class="chev">▾</span>'; }
+          else if (!knownSite) { cls += ' freetext'; pin = '<span class="pin">📝</span>'; }
+          bubbleHtml = `<span class="${cls}" data-site="${esc(norm)}">${pin}<span class="site">${esc(code)}</span>${chev}</span>`;
+        }
+
+        // Status pill on the right
+        let pillHtml = '';
+        if (muted) pillHtml = '';
+        else if (filled) pillHtml = `<span class="day-status done">✓ ${entry.h}h</span>`;
+        else             pillHtml = `<span class="day-status empty">— missing</span>`;
+
+        // Header (always visible)
+        let headerHtml = `
+          <div class="day-head">
+            <span class="day-label">${DAY_LABELS[i]}</span>
+            <span class="day-date">${WEEK_DATES[i]}</span>
+            ${bubbleHtml}
+            <span class="day-spacer"></span>
+            ${pillHtml}
+          </div>
+        `;
+        // Collapsed summary line (under header)
+        if (collapsed) {
+          headerHtml += `<div class="day-summary">${esc(entry.j)} · ${entry.h}h <span style="color:var(--ink-4)">— tap to edit</span></div>`;
+        }
+
+        // Body (inputs) — hidden if collapsed or muted
+        let bodyHtml = '';
+        if (!muted) {
+          const jobVal = entry ? entry.j : '';
+          const hrsVal = entry ? entry.h : '';
+          bodyHtml = `
+            <div class="day-body">
+              <div class="input-row">
+                <div class="job-wrap">
+                  <label class="input-label">Job / Docket No.</label>
+                  <input class="input-field" type="text" value="${esc(jobVal || '')}" placeholder="e.g. D5384">
+                </div>
+                <div class="hrs-wrap">
+                  <label class="input-label">Hours</label>
+                  <input class="input-field hrs" type="number" value="${hrsVal || ''}" placeholder="8" min="0" max="24" step="0.5">
+                </div>
+              </div>
+              <button class="split-btn">＋ Split — add second job</button>
+            </div>
+          `;
+        }
+
+        row.innerHTML = headerHtml + bodyHtml;
+        body.appendChild(row);
+      });
+
+      root.appendChild(card);
+    });
+
+    wireInteractions();
+  }
+
+  // ── Interactions ─────────────────────────────────────────────
+  function wireInteractions() {
+    // Person card header → toggle expand of the whole card
+    document.querySelectorAll('.ts-card-header').forEach(head => {
+      head.addEventListener('click', e => {
+        if (e.target.closest('.ts-card-copylast')) return;
+        const card = head.closest('.ts-card');
+        card.classList.toggle('collapsed');
+      });
+    });
+
+    // Day header tap → toggle collapse of that day row (within expanded card)
+    document.querySelectorAll('.day-row .day-head').forEach(head => {
+      head.addEventListener('click', e => {
+        // Don't toggle if the click was on the bubble itself
+        if (e.target.closest('.sched-bubble.tappable')) return;
+        const row = head.closest('.day-row');
+        if (row.classList.contains('muted')) return;
+        row.classList.toggle('collapsed');
+      });
+    });
+
+    // Bubble tap → autofill or open picker
+    document.querySelectorAll('.sched-bubble.tappable').forEach(b => {
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        const site = b.dataset.site;
+        const count = SITE_JOB_COUNTS[site] != null ? SITE_JOB_COUNTS[site] : 1;
+        if (count === 1) {
+          // Autofill
+          const job = SITE_AUTOFILL[site];
+          const row = b.closest('.day-row');
+          const jobInput = row.querySelector('.input-field:not(.hrs)');
+          const hrsInput = row.querySelector('.input-field.hrs');
+          if (jobInput) jobInput.value = job;
+          if (hrsInput && !hrsInput.value) hrsInput.value = '8';
+          row.classList.remove('collapsed');
+          toast(`✓ Filled ${job} at ${site}`);
+        } else if (count >= 2) {
+          openPicker(site, b);
+        } else {
+          toast('No jobs at this site yet');
+        }
+      });
+    });
+  }
+
+  // ── Mini-picker ──────────────────────────────────────────────
+  let _pickerTarget = null;
+  function openPicker(site, btn) {
+    _pickerTarget = btn.closest('.day-row');
+    document.getElementById('picker').classList.add('open');
+  }
+  function closePicker() {
+    document.getElementById('picker').classList.remove('open');
+    _pickerTarget = null;
+  }
+  function pickJob(num, desc) {
+    if (_pickerTarget) {
+      const jobInput = _pickerTarget.querySelector('.input-field:not(.hrs)');
+      const hrsInput = _pickerTarget.querySelector('.input-field.hrs');
+      if (jobInput) jobInput.value = num;
+      if (hrsInput && !hrsInput.value) hrsInput.value = '8';
+      _pickerTarget.classList.remove('collapsed');
+      toast(`✓ Filled ${num}`);
+    }
+    closePicker();
+  }
+
+  // ── Toast ────────────────────────────────────────────────────
+  let _toastTimer = null;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Wire toggles
+  document.getElementById('toggle-tappable').addEventListener('change', render);
+  document.getElementById('toggle-collapse').addEventListener('change', render);
+  document.getElementById('toggle-autoexpand').addEventListener('change', render);
+
+  render();
+</script>
+
+</body>
+</html>
