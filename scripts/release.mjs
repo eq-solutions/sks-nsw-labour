@@ -41,8 +41,8 @@ const __dirname  = dirname(__filename);
 const repoRoot   = resolve(__dirname, "..");
 
 const target = process.argv[2];
-if (!target || !/^\d+\.\d+\.\d+$/.test(target)) {
-  console.error("Usage: node scripts/release.mjs <X.Y.Z>");
+if (!target || !/^\d+\.\d+\.\d+(\.\d+)?$/.test(target)) {
+  console.error("Usage: node scripts/release.mjs <X.Y.Z[.W]>");
   console.error("Example: node scripts/release.mjs 3.4.45");
   process.exit(1);
 }
@@ -65,7 +65,7 @@ async function bump(path, find, replace) {
 
 await bump(
   "scripts/app-state.js",
-  /const APP_VERSION = '\d+\.\d+\.\d+';/,
+  /const APP_VERSION = '\d+\.\d+\.\d+(\.\d+)?';/,
   `const APP_VERSION = '${target}';`,
 );
 
@@ -74,12 +74,12 @@ await bump(
 // drift, so we patch each independently.
 await bump(
   "sw.js",
-  /Service Worker  v\d+\.\d+\.\d+/,
+  /Service Worker  v\d+\.\d+\.\d+(\.\d+)?/,
   `Service Worker  v${target}`,
 );
 await bump(
   "sw.js",
-  /const CACHE = 'eq-field-v\d+\.\d+\.\d+';/,
+  /const CACHE = 'eq-field-v\d+\.\d+\.\d+(\.\d+)?';/,
   `const CACHE = 'eq-field-v${target}';`,
 );
 
