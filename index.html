@@ -80,6 +80,9 @@
 <script src="scripts/tafe.js"></script>
 <script src="scripts/digest-settings.js"></script>
 <script src="scripts/whatsnew.js"></script>
+<script src="scripts/tender-parser.js"></script>
+<script src="scripts/pipeline-import.js"></script>
+<script src="scripts/pipeline.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -614,8 +617,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.84
+  EQ Solves — Field  v3.4.85
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.85  (Tender Pipeline — live UI)
+  ────────────────────────────────────────────────────────────
+   • Pipeline nav (supervisor-only): Kanban + Import screens.
+   • Import: xlsx upload → parse → diff preview → upsert tenders.
+   • Kanban: Watch / Likely / Won columns with card detail panel.
+   • Enrichment: est. hours, peak workers, start date, duration.
+   • Nominations: PM + supervisor pencilling per tender.
+   • tenders + tender_import_runs added to ORG_TABLES.
 
   CHANGES IN v3.4.84  (Audit fixes + tender pipeline foundation)
   ────────────────────────────────────────────────────────────
@@ -2693,6 +2705,7 @@
       <button class="nav-item" onclick="openAddPerson()" id="nav-addperson"><span class="nav-icon">＋</span> Add Person</button>
       <button class="nav-item" onclick="showPage('data')" id="nav-data"><span class="nav-icon">⇅</span> Import / Export</button>
       <button class="nav-item" onclick="showPage('help')" id="nav-help"><span class="nav-icon">❓</span> Help</button>
+      <button class="nav-item edit-only" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">◈</span> Pipeline <span style="font-size:8px;font-weight:700;color:#16a34a;background:#dcfce7;padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Testing (DO NOT USE)</div>
@@ -3105,6 +3118,14 @@
     <div id="apprentices-content"></div>
   </div>
 
+  <!-- Pipeline pages (v3.4.85) -->
+  <div class="page hidden" id="page-pipeline">
+    <!-- rendered by scripts/pipeline.js SKS_PIPELINE.renderPipeline() -->
+  </div>
+  <div class="page hidden" id="page-pipeline-import">
+    <!-- rendered by scripts/pipeline-import.js SKS_PIPELINE_IMPORT.renderPipelineImport() -->
+  </div>
+
 </div><!-- /content -->
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -3136,6 +3157,7 @@
     <button class="drawer-item edit-only" onclick="openAddPerson();closeMobileDrawer()"><span class="d-icon">＋</span> Add Person</button>
     <button class="drawer-item" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
     <button class="drawer-item" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
+    <button class="drawer-item edit-only" onclick="mobileNav('pipeline');closeMobileDrawer()" id="ditem-pipeline"><span class="d-icon">◈</span> Pipeline <span class="beta-tag" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0">NEW</span></button>
     <div class="drawer-divider"></div>
     <div class="drawer-label">Beta</div>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
@@ -3486,7 +3508,8 @@ const PAGE_TITLES = {
   contacts:'Contacts', sites:'Sites', editor:'Edit Roster',
   data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
-  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices'
+  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
+  pipeline:'Pipeline', 'pipeline-import':'Import Smartsheet'
 };
 
 function showPage(id) {
@@ -3536,7 +3559,9 @@ function renderCurrentPage() {
   else if (currentPage === 'staff-ts')   renderStaffTs();
   else if (currentPage === 'calendar')   renderCalendar();
   else if (currentPage === 'trial')      renderTrialDashboard();
-  else if (currentPage === 'apprentices') renderApprentices();
+  else if (currentPage === 'apprentices')      renderApprentices();
+  else if (currentPage === 'pipeline')         { if (typeof SKS_PIPELINE !== 'undefined') SKS_PIPELINE.renderPipeline(); }
+  else if (currentPage === 'pipeline-import')  { if (typeof SKS_PIPELINE_IMPORT !== 'undefined') SKS_PIPELINE_IMPORT.renderPipelineImport(); }
 }
 
 // ── Week controls ─────────────────────────────────────────────

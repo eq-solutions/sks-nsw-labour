@@ -6,6 +6,21 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.85 — Tender Pipeline live UI
+
+**Date:** 2026-05-24
+**Scope:** Phase 3 — full pipeline UI wired to Supabase. Import screen, Kanban, enrichment panel, PM/supervisor nominations. Feature is supervisor-gated (edit-only nav). Migration applied to SKS prod in Phase 2 (same session).
+
+- **Pipeline Kanban** — Watch / Likely / Won columns. Each card shows ref, job name, client, probability, due date, quote value, and any enrichment/nomination tags. Dept + vertical filters. Pipeline total value strip.
+- **Import screen** — xlsx drag-drop or click to upload. Lazy-loads SheetJS from CDN. Parses with `SKS_TENDER_PARSER`, diffs against existing tenders, shows New / Changed / Missing preview table. Confirm → upsert to `tenders` + insert `tender_import_runs`.
+- **Enrichment panel** — side panel on card click: est. hours, peak workers, start date (est), duration weeks, confidence notes. Saves to `tender_enrichment` (upsert).
+- **Nominations** — PM (Project Management category) + Supervisor (Supervisor category) pickers in the same panel. Saves to `nominations` table.
+- **ORG_TABLES** — `tenders` and `tender_import_runs` added so sbFetch auto-applies org_id filter on GET and stamps on POST.
+
+Version stamps: `APP_VERSION = '3.4.85'`, SW cache `eq-field-v3.4.85`.
+
+---
+
 # v3.4.84 — Audit fixes + tender pipeline foundation
 
 **Date:** 2026-05-24
