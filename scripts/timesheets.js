@@ -277,6 +277,15 @@ function onTsCellChange(el) {
   saveTsCell(name, group, week, day, combinedJob, combinedHrs);
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
+
+  // v3.4.83.2: mobile surfaces (card total, status icon, variance chip,
+  // Fill Week banner) live on different DOM than the desktop table —
+  // updateTsRowTotal() targets a desktop-only #tst- id and no-ops here.
+  // Trigger a full re-render so all per-row visuals update after a save.
+  // Card expansion is preserved via _tsExpandedCards.
+  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) {
+    renderTimesheets();
+  }
 }
 
 // ── Split row toggle ──────────────────────────────────────────
@@ -294,10 +303,15 @@ function toggleTsSplit(pid, btn) {
 
 // ── Fill week from Monday ─────────────────────────────────────
 // Copies the current Monday cell (job + hours) for one person into
-// Tue–Fri of the same week. Honours split-day entries: the raw
-// `mon_job` string (e.g. "D5384:4|D5385:4") and numeric `mon_hrs`
-// copy through saveTsCell unchanged.
-// Triggered from the ">> Week" button in the Monday cell.
+// the workable Tue–Fri days of the same week. v3.4.83.2: skips
+// roster-muted days (leave/TAFE) — was a quiet bug before. Honours
+// split-day entries: the raw `mon_job` string (e.g. "D5384:4|D5385:4")
+// and numeric `mon_hrs` copy through saveTsCell unchanged.
+//
+// Safety model (no modal prompts — fully reversible):
+//  1. Two-tap arming on the banner button (see _armFillWeek)
+//  2. Undo toast for 5s after the fill (see _showFillWeekUndoToast)
+//  3. Audit log entry — recoverable via the v3.4.76 revert button
 async function fillTsWeekFromMon(name, grp) {
   if (!isManager) { showToast('Supervision access required'); return; }
   if (!name) return;
@@ -308,26 +322,87 @@ async function fillTsWeekFromMon(name, grp) {
   const monJob = entry.mon_job;
   const monHrs = entry.mon_hrs;
   const days   = ['tue', 'wed', 'thu', 'fri'];
-
-  // Warn before clobbering existing Tue–Fri data
-  const hasExisting = days.some(d => entry[d + '_job'] || entry[d + '_hrs']);
-  if (hasExisting) {
-    const ok = window.confirm(
-      `${name} already has Tue–Fri data for this week.\n\n` +
-      `Overwrite Tue–Fri with Monday's job (${String(monJob).split(':')[0]}) / ${monHrs || 0}h?`
-    );
-    if (!ok) return;
+  const workableDays = days.filter(d => _tsDayStatus(name, week, d).workable);
+  if (!workableDays.length) {
+    showToast('No workable days to fill — Tue–Fri all on leave/TAFE');
+    return;
   }
 
-  for (const d of days) {
+  // Capture per-day before-state so the undo toast can restore.
+  const before = {};
+  workableDays.forEach(d => {
+    before[d] = { job: entry[d + '_job'], hrs: entry[d + '_hrs'] };
+  });
+
+  for (const d of workableDays) {
     await saveTsCell(name, grp, week, d, monJob, monHrs);
   }
-  renderTimesheets();
-  showToast('✓ Copied Mon → Tue–Fri');
+  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) renderTimesheets();
+
+  const jobNum = String(monJob).split(':')[0];
+  _showFillWeekUndoToast(
+    `Filled Mon → Fri (${jobNum})`,
+    async () => {
+      for (const d of workableDays) {
+        await saveTsCell(name, grp, week, d, before[d].job, before[d].hrs);
+      }
+      if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) renderTimesheets();
+      showToast('↩ Undone — Tue–Fri restored');
+      auditLog('Undid Fill Week from Mon', 'Timesheet', name, week);
+    }
+  );
+
   auditLog(
-    `Fill week from Mon: ${String(monJob).split('|')[0]} / ${monHrs || 0}h`,
+    `Fill week from Mon: ${jobNum} / ${monHrs || 0}h`,
     'Timesheet', name, week
   );
+}
+
+// v3.4.83.2 — Two-tap arming on the Fill Week banner button. First
+// tap arms (label changes, amber pulse). Second tap within 3s
+// fires fillTsWeekFromMon. Auto-disarms after the timeout so a
+// forgotten arm doesn't fire on the next tap of any other button.
+function _armFillWeek(btn) {
+  if (!btn) return;
+  if (btn.dataset.armed === '1') {
+    if (btn.dataset.timeoutId) clearTimeout(Number(btn.dataset.timeoutId));
+    delete btn.dataset.timeoutId;
+    btn.dataset.armed = '';
+    btn.classList.remove('ts-mfillweek-btn-armed');
+    fillTsWeekFromMon(btn.dataset.n, btn.dataset.g);
+    return;
+  }
+  btn.dataset.armed   = '1';
+  btn.dataset.origText = btn.textContent;
+  btn.classList.add('ts-mfillweek-btn-armed');
+  btn.textContent = 'Tap again — confirm';
+  const timeout = setTimeout(() => {
+    if (btn.dataset.armed !== '1') return;
+    btn.dataset.armed = '';
+    btn.classList.remove('ts-mfillweek-btn-armed');
+    btn.textContent = btn.dataset.origText || 'Fill Week';
+    delete btn.dataset.timeoutId;
+    delete btn.dataset.origText;
+  }, 3000);
+  btn.dataset.timeoutId = String(timeout);
+}
+
+// v3.4.83.2 — Undo toast with a 5s window. Tapping Undo calls the
+// supplied function to restore the pre-fill state.
+function _showFillWeekUndoToast(msg, undoFn) {
+  document.querySelectorAll('.ts-fillweek-undo-toast').forEach(t => t.remove());
+  const toast = document.createElement('div');
+  toast.className = 'ts-fillweek-undo-toast';
+  toast.innerHTML = '<span class="ts-fillweek-undo-msg">' + esc(msg) + '</span>' +
+                    '<button class="ts-fillweek-undo-btn" type="button">Undo</button>';
+  document.body.appendChild(toast);
+  const cleanup = () => { if (toast.parentNode) toast.parentNode.removeChild(toast); };
+  toast.querySelector('.ts-fillweek-undo-btn').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    cleanup();
+    undoFn();
+  });
+  setTimeout(cleanup, 5000);
 }
 
 // ── Render grid ───────────────────────────────────────────────
@@ -743,11 +818,13 @@ function _showTsHoursChips(input) {
     document.body.appendChild(_tsHoursPopoverEl);
   }
   _tsHoursPopoverInput = input;
+  // v3.4.83.2: use pointerdown — fires for both mouse + touch BEFORE
+  // blur/focus changes, so the chip's action runs cleanly. Previous
+  // touchstart preventDefault was suppressing the synthesized click on
+  // iOS so the 8/4/0 chips appeared to do nothing on phone.
   _tsHoursPopoverEl.innerHTML = TS_HOURS_CHIPS.map(h =>
     '<button type="button" class="ts-hours-chip" data-h="' + h + '" ' +
-    'onmousedown="event.preventDefault()" ' +
-    'ontouchstart="event.preventDefault()" ' +
-    'onclick="_pickTsHoursChip(' + h + ')">' + h + '</button>'
+    'onpointerdown="event.preventDefault();_pickTsHoursChip(' + h + ');">' + h + '</button>'
   ).join('');
   // Position below the input, clamped to viewport so the popover
   // never overflows the right edge on narrow phones. v3.4.83.1.
@@ -1978,7 +2055,7 @@ function _renderTimesheetsMobile(opts) {
     const fillWeekBanner = (isManager && monFilled && monRestEmpty)
       ? `<div class="ts-mfillweek">
           <div class="ts-mfillweek-text"><span class="ts-mfillweek-icon">↻</span> Same job all week? Fill Tue–Fri with Mon (<span class="ts-mfillweek-job">${esc(String(entry.mon_job).split(':')[0])}</span>)</div>
-          <button class="ts-mfillweek-btn" onclick="event.stopPropagation();fillTsWeekFromMon('${esc(p.name)}','${p.group}')">Fill Week</button>
+          <button class="ts-mfillweek-btn" data-n="${esc(p.name)}" data-g="${p.group}" onclick="event.stopPropagation();_armFillWeek(this)">Fill Week</button>
         </div>`
       : '';
 

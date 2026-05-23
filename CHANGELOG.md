@@ -6,6 +6,31 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.83.2 — Phase 4a live-test fixes + Fill Week safety model
+
+**Date:** 2026-05-23
+**Scope:** Two bugs caught by Royce on `sks-nsw-labour.netlify.app` immediately after v3.4.83.1 went live, plus the safety design for the new Fill Week affordance that those bugs were blocking him from reaching.
+
+## Bug fixes
+
+- **Hours quick-select chips fire on touch.** Tapping the `8` chip did nothing on iOS because the previous `ontouchstart="event.preventDefault()"` suppressed the synthesized `click` event entirely. Switched to a single `onpointerdown="event.preventDefault();_pickTsHoursChip(...)"` handler that fires for both mouse and touch *before* any blur/focus shift, then runs the pick directly. Same code path for desktop — slightly more robust there too. Symptom on phone: chip popover appeared, tap was visually acknowledged, but the hours input stayed empty and no save fired.
+- **Mobile re-renders after every save.** `onTsCellChange` was calling `updateTsRowTotal` which only updates a desktop-only `#tst-<name>` element — on phone the card total / status icon / variance chip / **Fill Week banner** all stayed stale until you reloaded. Now `onTsCellChange` triggers a full `renderTimesheets()` if `_isPhoneViewport()` is true. Card-expansion state is preserved via the existing `_tsExpandedCards` Set so the supervisor's open row stays open. Desktop save path unchanged.
+
+## Fill Week safety model
+
+Royce wanted "easy but stops accidental clicking" on the Fill Week banner that appears once Monday is filled. Shipped three layers of protection — no modal prompts (fully reversible):
+
+- **Two-tap arming on the button.** First tap → button label becomes "Tap again — confirm", background turns amber with a soft pulse. Second tap within 3s fires `fillTsWeekFromMon`. If you don't follow through, the button auto-disarms after 3s. No modal dialog blocking the flow.
+- **Undo toast for 5s after the fill.** Floats above the bottom nav with "✓ Filled Mon → Fri (D5384)" and an Undo button. Tap Undo → Tue–Fri restored to whatever they held before the fill (captured per-day at fill time). Audit-logged on both sides. Same pattern as Gmail's Undo Send.
+- **Skips leave/TAFE days.** The old `fillTsWeekFromMon` silently wrote a job into roster-muted Tuesday cells — a quiet bug (cell would carry data the UI never showed). Now consults `_tsDayStatus` and only touches workable days. Undo only restores those same days.
+- **Audit log entry** for both the fill and the undo — recoverable forever via the v3.4.76 revert button if you miss the 5s window.
+
+The previous `window.confirm` overwrite prompt was dropped — two-tap covers the "are you sure?" purpose without a modal, undo covers the "I clicked too fast" purpose, and audit log covers the "I noticed an hour later" case. Three guards, none of them block the common case.
+
+Version stamps: `APP_VERSION = '3.4.83.2'`, SW cache `eq-field-v3.4.83.2`.
+
+---
+
 # v3.4.83.1 — Phase 4a deploy-preview fixes
 
 **Date:** 2026-05-23

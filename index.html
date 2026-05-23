@@ -614,8 +614,30 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.83.1
+  EQ Solves — Field  v3.4.83.2
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.83.2  (Phase 4a live-test fixes + Fill Week safety)
+  ────────────────────────────────────────────────────────────
+  Two bugs from the v3.4.83.1 live test plus the safety design
+  for the Fill Week affordance those bugs were hiding:
+   • Hours quick-select chips (8 / 4 / 0) now actually fire on
+     touch. Previous touchstart preventDefault was suppressing
+     the synthesized click on iOS. Switched to pointerdown.
+   • Mobile re-renders after every save. onTsCellChange triggers
+     renderTimesheets when on phone view so the card total,
+     status icon, variance chip, and Fill Week banner update
+     immediately. _tsExpandedCards preserves the open card.
+   • Fill Week — three protection layers (no modals):
+       1. Two-tap arming on the banner button. First tap turns
+          it amber + "Tap again — confirm"; second tap fires.
+          Auto-disarms after 3s.
+       2. Undo toast for 5s post-fill — tap to restore Tue–Fri
+          to their pre-fill state. Audit-logged either way.
+       3. Skips leave/TAFE days (was a quiet bug previously
+          — would silently write into a muted cell).
+     The previous window.confirm overwrite prompt is dropped —
+     two-tap + undo + audit log replace it.
 
   CHANGES IN v3.4.83.1  (Phase 4a deploy-preview fixes)
   ────────────────────────────────────────────────────────────
