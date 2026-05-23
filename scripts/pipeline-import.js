@@ -32,15 +32,19 @@
   }
 
   // ── Module state ─────────────────────────────────────────
-  var _parsed   = null; // { rows:[], errors:[] }
-  var _diff     = null; // { new:[], stageChanged:[], valueChanged:[], unchanged:[], missing:[] }
-  var _fileName = '';
+  var _parsed       = null; // { rows:[], errors:[] }
+  var _aboveRows    = [];   // rows with quote_value >= $100k
+  var _belowRows    = [];   // rows with quote_value < $100k (below_threshold flag)
+  var _diff         = null; // diff of _aboveRows against existing
+  var _includeBelow = false; // toggle: also import below-threshold rows
+  var _fileName     = '';
 
   // ── Render ────────────────────────────────────────────────
   function renderPipelineImport() {
     var el = document.getElementById('page-pipeline-import');
     if (!el) return;
     _parsed = null; _diff = null; _fileName = '';
+    _aboveRows = []; _belowRows = []; _includeBelow = false;
     el.innerHTML = _pageHtml();
     _bindEvents();
   }
@@ -127,7 +131,11 @@
 
     _parsed = result;
 
-    // Fetch existing for diff
+    // Split above / below $100k threshold
+    _aboveRows = result.rows.filter(function (r) { return !r.below_threshold; });
+    _belowRows = result.rows.filter(function (r) { return r.below_threshold; });
+
+    // Fetch existing for diff (diff only above-threshold rows)
     _setStatus('<div style="color:var(--ink-2);font-size:13px">Comparing with existing…</div>');
     var existing = [];
     try {
@@ -136,23 +144,22 @@
       existing = Array.isArray(rows) ? rows : [];
     } catch (e) { /* non-fatal — diff will show all as new */ }
 
-    _diff = window.SKS_TENDER_PARSER.diffAgainstExisting(result.rows, existing);
-    _renderDiff(result, _diff);
+    _diff = window.SKS_TENDER_PARSER.diffAgainstExisting(_aboveRows, existing);
+    _renderDiff(_aboveRows, _diff);
     _setActions(true);
   }
 
-  function _renderDiff(parsed, diff) {
-    var warns = parsed.errors.filter(function (e) { return e.severity === 'warning'; }).length;
-    var belowCount = parsed.rows.filter(function (r) { return r.below_threshold; }).length;
+  function _renderDiff(aboveRows, diff) {
+    var warns   = (_parsed && _parsed.errors) ? _parsed.errors.filter(function (e) { return e.severity === 'warning'; }).length : 0;
     var changed = diff.stageChanged.length + diff.valueChanged.length;
+    var total   = aboveRows.length + _belowRows.length;
 
-    // Summary chips
+    // Summary chips (counts are for above-threshold rows only; below shown separately)
     var status = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:' + (warns ? '8' : '0') + 'px">';
-    status += _chip(parsed.rows.length, 'Parsed',   '#64748b', '#f1f5f9');
+    status += _chip(total,              'Parsed',    '#64748b', '#f1f5f9');
     status += _chip(diff.new.length,    'New',       '#16a34a', '#dcfce7');
     status += _chip(changed,            'Changed',   '#d97706', '#fef3c7');
     status += _chip(diff.missing.length,'Missing',   '#dc2626', '#fee2e2');
-    status += _chip(belowCount,         'Below $100k','#94a3b8','#f8fafc');
     status += '</div>';
     if (warns) status += '<div style="font-size:11px;color:var(--ink-3)">' + warns + ' row(s) skipped — missing SKS Quote No</div>';
     _setStatus(status);
@@ -191,6 +198,18 @@
     addRows(diff.missing,      'missing', '<span style="background:#fee2e2;color:#dc2626;font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600">MISSING</span>');
 
     html += '</tbody></table></div>';
+
+    // Below-threshold notice
+    if (_belowRows.length) {
+      html += '<div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)">';
+      html += '<span>' + _belowRows.length + ' tender' + (_belowRows.length !== 1 ? 's' : '') + ' below $100k will be skipped</span>';
+      html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto;white-space:nowrap">';
+      html += '<input type="checkbox" id="imp-include-below"' + (_includeBelow ? ' checked' : '') + ' onchange="SKS_PIPELINE_IMPORT.toggleBelowThreshold(this.checked)">';
+      html += '<span>Include anyway</span>';
+      html += '</label>';
+      html += '</div>';
+    }
+
     _setDiff(html);
   }
 
@@ -212,7 +231,10 @@
     var EXCLUDE = ['_row_index', '_probability_raw', 'first_imported_at', 'created_at', 'updated_at',
                    'archived_at', 'missing_import_count', 'job_number_id', 'site_id'];
 
-    var upsertRows = _parsed.rows.map(function (r) {
+    // Respect the below-threshold guardrail
+    var rowsToUpsert = _includeBelow ? _aboveRows.concat(_belowRows) : _aboveRows;
+
+    var upsertRows = rowsToUpsert.map(function (r) {
       var row = { org_id: TENANT.ORG_UUID, last_imported_at: now };
       Object.keys(r).forEach(function (k) {
         if (EXCLUDE.indexOf(k) === -1) row[k] = r[k];
@@ -237,7 +259,7 @@
     if (ok) {
       // Record import run (non-fatal if this fails)
       try {
-        var stats = window.SKS_TENDER_PARSER.summariseImport(_diff, _parsed.rows);
+        var stats = window.SKS_TENDER_PARSER.summariseImport(_diff, rowsToUpsert);
         await sbFetch('tender_import_runs', 'POST', Object.assign({
           org_id:      TENANT.ORG_UUID,
           imported_at: now,
@@ -254,7 +276,16 @@
 
   function cancel() {
     _parsed = null; _diff = null;
+    _aboveRows = []; _belowRows = []; _includeBelow = false;
     renderPipelineImport();
+  }
+
+  function toggleBelowThreshold(checked) {
+    _includeBelow = !!checked;
+    // Update confirm button label to reflect count change
+    var btn = document.getElementById('imp-confirm-btn');
+    var count = _includeBelow ? (_aboveRows.length + _belowRows.length) : _aboveRows.length;
+    if (btn) btn.textContent = 'Confirm Import (' + count + ')';
   }
 
   // ── DOM helpers ───────────────────────────────────────────
@@ -274,8 +305,9 @@
 
   // ── Export ────────────────────────────────────────────────
   window.SKS_PIPELINE_IMPORT = {
-    renderPipelineImport: renderPipelineImport,
-    confirm:              confirm,
-    cancel:               cancel
+    renderPipelineImport:  renderPipelineImport,
+    confirm:               confirm,
+    cancel:                cancel,
+    toggleBelowThreshold:  toggleBelowThreshold
   };
 })();

@@ -6,6 +6,22 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.87 — Resource Allocation + Import guardrail
+
+**Date:** 2026-05-24
+**Scope:** Pipeline Phase 4 — firm up Won tenders into confirmed jobs with resource planning; import guardrail for sub-$100k tenders.
+
+- **Resource Allocation screen** (`pipeline-resource.js`) — new supervisor-gated page accessible from nav under Pipeline.
+  - **Needs Allocation** — lists all Won tenders. Expand each row to fill in: start date, est. hours, duration (weeks), peak workers (auto-suggested from hours÷weeks÷38h), PM + Supervisor nominations. Save or Save & Confirm → moves stage to `confirmed`.
+  - **Capacity Planning** — 26-week demand forecast bar chart. Each bar = total peak workers committed that week across all Won+Confirmed tenders with enrichment. Red threshold line at active headcount count. Gap weeks (demand > headcount) highlighted in red.
+  - **Confirmed Jobs** — summary list of confirmed tenders with start date, workers, hours, PM. Running total value locked in.
+- **Import guardrail** (`pipeline-import.js`) — sub-$100k tenders are now split before diff. Main diff only shows above-threshold rows. A "N tenders below $100k will be skipped" notice appears with an "Include anyway" toggle. Confirm button counts update when toggle is changed.
+- Worker suggestion formula: `ceil(est_hours / (duration_weeks × 38))` — pre-fills peak workers field, user can override.
+
+Version stamps: `APP_VERSION = '3.4.87'`, SW cache `eq-field-v3.4.87`.
+
+---
+
 # v3.4.86 — Hotfix: vendor SheetJS (CSP blocks CDN)
 
 **Date:** 2026-05-24
