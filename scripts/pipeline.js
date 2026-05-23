@@ -24,8 +24,9 @@
   var _noms       = {};   // tender_id → { pm: row|null, supervisor: row|null }
   var _managers   = [];
   var _openId     = null;
-  var _filterDept = '';
-  var _filterVert = '';
+  var _filterDept  = '';
+  var _filterVert  = '';
+  var _filterValue = 100000; // default: hide <$100k jobs
   var _loading    = false;
 
   // ── Load ─────────────────────────────────────────────────
@@ -93,6 +94,7 @@
       if (t.stage === 'confirmed') return false; // handled separately below
       if (_filterDept && t.department !== _filterDept) return false;
       if (_filterVert && t.vertical  !== _filterVert)  return false;
+      if (_filterValue && (t.quote_value || 0) < _filterValue) return false;
       return true;
     });
 
@@ -117,6 +119,19 @@
     html +=       '<option value="">All verticals</option>';
     verticals.forEach(function (v) {
       html += '<option value="' + _esc(v) + '"' + (v === _filterVert ? ' selected' : '') + '>' + _esc(v) + '</option>';
+    });
+    html +=     '</select>';
+    // Value filter
+    var valueOpts = [
+      { label: 'All values',  val: 0       },
+      { label: '≥$100k',      val: 100000  },
+      { label: '≥$250k',      val: 250000  },
+      { label: '≥$500k',      val: 500000  },
+      { label: '≥$1M',        val: 1000000 }
+    ];
+    html +=     '<select class="form-input" style="height:32px;font-size:12px;padding:0 8px;width:auto" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
+    valueOpts.forEach(function (o) {
+      html += '<option value="' + o.val + '"' + (o.val === _filterValue ? ' selected' : '') + '>' + _esc(o.label) + '</option>';
     });
     html +=     '</select>';
     html +=   '</div>';
@@ -434,8 +449,9 @@
   }
 
   // ── Filter setters (called from inline onchange) ──────────
-  function setDept(v) { _filterDept = v; renderPipeline(); }
-  function setVert(v) { _filterVert = v; renderPipeline(); }
+  function setDept(v)         { _filterDept  = v;    renderPipeline(); }
+  function setVert(v)         { _filterVert  = v;    renderPipeline(); }
+  function setValueFilter(v)  { _filterValue = v;    renderPipeline(); }
 
   // ── Helpers ───────────────────────────────────────────────
   function _findTender(id)   { return _tenders.find(function (t) { return t.id === id; }) || null; }
@@ -463,6 +479,7 @@
     saveEnrichment:  saveEnrichment,
     saveNominations: saveNominations,
     setDept:         setDept,
-    setVert:         setVert
+    setVert:         setVert,
+    setValueFilter:  setValueFilter
   };
 })();
