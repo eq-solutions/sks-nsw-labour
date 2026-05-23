@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.89';
+const APP_VERSION = '3.4.90';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -53,6 +53,7 @@ let TENANT = {
   ORG_SLUG: 'eq',
   ORG_UUID: null,
   ORG_NAME: 'EQ Solves — Field',
+  PIPELINE_ENABLED: false,
 };
 
 let SB_URL         = '';
@@ -164,9 +165,10 @@ async function loadTenantConfig() {
       const cfg = await cfgResp.json();
       let _dbStaffCode = null, _dbSupervisorCode = null;
       cfg.forEach(row => {
-        if (row.key === 'manager_password')   MANAGER_PASSWORD  = row.value;
-        if (row.key === 'staff_code')         _dbStaffCode      = row.value;
-        if (row.key === 'supervisor_code')    _dbSupervisorCode = row.value;
+        if (row.key === 'manager_password')   MANAGER_PASSWORD        = row.value;
+        if (row.key === 'staff_code')         _dbStaffCode            = row.value;
+        if (row.key === 'supervisor_code')    _dbSupervisorCode       = row.value;
+        if (row.key === 'pipeline_enabled')   TENANT.PIPELINE_ENABLED = row.value === 'true';
       });
       // Stash DB-driven access codes for applyTenantBranding to consume.
       if (_dbStaffCode || _dbSupervisorCode) {
@@ -194,6 +196,12 @@ async function loadTenantConfig() {
     console.info('EQ[tenant] Using fallback manager password for', TENANT.ORG_SLUG, '(no app_config.manager_password row)');
   }
   applyTenantBranding();
+
+  // Show/hide pipeline nav based on app_config.pipeline_enabled
+  ['nav-pipeline', 'nav-pipeline-resource'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = TENANT.PIPELINE_ENABLED ? '' : 'none';
+  });
 }
 
 // Per-tenant visual branding (applied after loadTenantConfig)
