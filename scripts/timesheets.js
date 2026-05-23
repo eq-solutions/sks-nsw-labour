@@ -278,14 +278,7 @@ function onTsCellChange(el) {
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
 
-  // v3.4.83.2: mobile surfaces (card total, status icon, variance chip,
-  // Fill Week banner) live on different DOM than the desktop table —
-  // updateTsRowTotal() targets a desktop-only #tst- id and no-ops here.
-  // Trigger a full re-render so all per-row visuals update after a save.
-  // Card expansion is preserved via _tsExpandedCards.
-  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) {
-    renderTimesheets();
-  }
+  renderTimesheets();
 }
 
 // ── Split row toggle ──────────────────────────────────────────
@@ -337,7 +330,7 @@ async function fillTsWeekFromMon(name, grp) {
   for (const d of workableDays) {
     await saveTsCell(name, grp, week, d, monJob, monHrs);
   }
-  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) renderTimesheets();
+  renderTimesheets();
 
   const jobNum = String(monJob).split(':')[0];
   _showFillWeekUndoToast(
@@ -346,7 +339,7 @@ async function fillTsWeekFromMon(name, grp) {
       for (const d of workableDays) {
         await saveTsCell(name, grp, week, d, before[d].job, before[d].hrs);
       }
-      if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) renderTimesheets();
+      renderTimesheets();
       showToast('↩ Undone — Tue–Fri restored');
       auditLog('Undid Fill Week from Mon', 'Timesheet', name, week);
     }
@@ -875,7 +868,7 @@ function _onTsKeydown(e) {
   if (!row) return;
   let next = row.nextElementSibling;
   // Skip group separator rows
-  while (next && next.classList.contains('ts-group-row')) next = next.nextElementSibling;
+  while (next && (next.classList.contains('ts-group-row') || next.classList.contains('ts-fillweek-row'))) next = next.nextElementSibling;
   if (!next) return;
   const target = next.querySelector(
     `input[data-day="${day}"][data-type="${type}"][data-slot="${slot}"]`
@@ -1265,6 +1258,24 @@ function renderTimesheets() {
       }).join('')}
       <td class="ts-total-col ${totalClass}" id="tst-${pid}">${total > 0 ? total + 'h' : '—'}</td>
     </tr>`;
+    // Fill-week-from-Monday banner row — shows on desktop when Mon is
+    // filled and at least one workable Tue–Fri is still empty.
+    const monFilled = entry && entry.mon_job && Number(entry.mon_hrs) > 0;
+    const monRestEmpty = monFilled && ['tue','wed','thu','fri'].some(d2 => {
+      const ds = _tsDayStatus(p.name, week, d2);
+      if (!ds.workable) return false;
+      return !(entry[d2 + '_job'] && Number(entry[d2 + '_hrs']) > 0);
+    });
+    if (isManager && monFilled && monRestEmpty) {
+      html += `<tr class="ts-fillweek-row">
+        <td colspan="${days.length + 3}">
+          <div class="ts-fillweek-td">
+            <span class="ts-fillweek-text"><span class="ts-mfillweek-icon">↻</span> Same job all week? Fill Tue–Fri with Mon (<span class="ts-mfillweek-job">${esc(String(entry.mon_job).split(':')[0])}</span>)</span>
+            <button class="ts-mfillweek-btn" data-n="${esc(p.name)}" data-g="${p.group}" onclick="_armFillWeek(this)">Fill Week</button>
+          </div>
+        </td>
+      </tr>`;
+    }
   });
 
   html += '</tbody></table></div></div>';
