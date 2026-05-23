@@ -6,6 +6,18 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.86 — Hotfix: vendor SheetJS (CSP blocks CDN)
+
+**Date:** 2026-05-24
+**Scope:** Hotfix — SheetJS was lazy-loaded from `cdn.jsdelivr.net` which is blocked by the app's Content-Security-Policy `script-src` directive. Vendored `xlsx.full.min.js` locally instead.
+
+- **Vendor xlsx.full.min.js** — `scripts/xlsx.full.min.js` (881KB, SheetJS v0.18.5). Reference in `pipeline-import.js` updated from CDN URL to `/scripts/xlsx.full.min.js`.
+- **SW PRECACHE** — added `tender-parser.js`, `pipeline-import.js`, `pipeline.js` (were missing from v3.4.85 precache).
+
+Version stamps: `APP_VERSION = '3.4.86'`, SW cache `eq-field-v3.4.86`.
+
+---
+
 # v3.4.85 — Tender Pipeline live UI
 
 **Date:** 2026-05-24

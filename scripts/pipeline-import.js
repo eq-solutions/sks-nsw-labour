@@ -11,7 +11,7 @@
   'use strict';
 
   // ── SheetJS CDN (lazy) ────────────────────────────────────
-  var SHEETJS_CDN = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  var SHEETJS_CDN = '/scripts/xlsx.full.min.js';  // vendored locally — v3.4.86 (CSP blocks external CDN)
   var _xlsxReady   = false;
   var _xlsxPromise = null;
 
