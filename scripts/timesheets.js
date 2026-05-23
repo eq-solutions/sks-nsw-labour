@@ -277,6 +277,15 @@ function onTsCellChange(el) {
   saveTsCell(name, group, week, day, combinedJob, combinedHrs);
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
+
+  // v3.4.83.2: mobile surfaces (card total, status icon, variance chip,
+  // Fill Week banner) live on different DOM than the desktop table —
+  // updateTsRowTotal() targets a desktop-only #tst- id and no-ops here.
+  // Trigger a full re-render so all per-row visuals update after a save.
+  // Card expansion is preserved via _tsExpandedCards.
+  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) {
+    renderTimesheets();
+  }
 }
 
 // ── Split row toggle ──────────────────────────────────────────
@@ -743,11 +752,13 @@ function _showTsHoursChips(input) {
     document.body.appendChild(_tsHoursPopoverEl);
   }
   _tsHoursPopoverInput = input;
+  // v3.4.83.2: use pointerdown — fires for both mouse + touch BEFORE
+  // blur/focus changes, so the chip's action runs cleanly. Previous
+  // touchstart preventDefault was suppressing the synthesized click on
+  // iOS so the 8/4/0 chips appeared to do nothing on phone.
   _tsHoursPopoverEl.innerHTML = TS_HOURS_CHIPS.map(h =>
     '<button type="button" class="ts-hours-chip" data-h="' + h + '" ' +
-    'onmousedown="event.preventDefault()" ' +
-    'ontouchstart="event.preventDefault()" ' +
-    'onclick="_pickTsHoursChip(' + h + ')">' + h + '</button>'
+    'onpointerdown="event.preventDefault();_pickTsHoursChip(' + h + ');">' + h + '</button>'
   ).join('');
   // Position below the input, clamped to viewport so the popover
   // never overflows the right edge on narrow phones. v3.4.83.1.

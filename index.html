@@ -614,8 +614,22 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.83.1
+  EQ Solves — Field  v3.4.83.2
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.83.2  (Phase 4a live-test fixes)
+  ────────────────────────────────────────────────────────────
+  Two fixes after Royce's live phone test of v3.4.83.1:
+   • Hours quick-select chips (8 / 4 / 0) now actually fire on
+     touch. Previous touchstart preventDefault was suppressing
+     the synthesized click on iOS. Switched to pointerdown which
+     works for both mouse + touch and fires before blur.
+   • Mobile re-renders after every save. onTsCellChange now
+     calls renderTimesheets when on phone view so the card
+     total, status icon, variance chip, and the Fill Week banner
+     all update without a manual refresh. Card expansion state
+     is preserved via _tsExpandedCards so the supervisor isn't
+     thrown out of their current row.
 
   CHANGES IN v3.4.83.1  (Phase 4a deploy-preview fixes)
   ────────────────────────────────────────────────────────────

@@ -6,6 +6,18 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.83.2 — Phase 4a live-test fixes
+
+**Date:** 2026-05-23
+**Scope:** Two fixes after Royce's live phone test of v3.4.83.1 against `sks-nsw-labour.netlify.app`.
+
+- **Hours quick-select chips fire on touch.** Tapping the `8` chip did nothing on iOS because the previous `ontouchstart="event.preventDefault()"` suppressed the synthesized `click` event entirely. Switched to a single `onpointerdown="event.preventDefault();_pickTsHoursChip(...)"` handler that fires for both mouse and touch *before* any blur/focus shift, then runs the pick directly. Same code path for desktop — slightly more robust there too. Symptom on phone: chip popover appeared, tap was visually acknowledged, but the hours input stayed empty and no save fired.
+- **Mobile re-renders after every save.** `onTsCellChange` was calling `updateTsRowTotal` which only updates a desktop-only `#tst-<name>` element — on phone the card total / status icon / variance chip / **Fill Week banner** all stayed stale until you reloaded. Now `onTsCellChange` triggers a full `renderTimesheets()` if `_isPhoneViewport()` is true. Card-expansion state is preserved via the existing `_tsExpandedCards` Set so the supervisor's open row stays open. Desktop save path unchanged.
+
+Version stamps: `APP_VERSION = '3.4.83.2'`, SW cache `eq-field-v3.4.83.2`.
+
+---
+
 # v3.4.83.1 — Phase 4a deploy-preview fixes
 
 **Date:** 2026-05-23
