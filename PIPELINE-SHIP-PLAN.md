@@ -97,17 +97,33 @@ Apply the migration. **No code deploy needed; this is DB-only.**
    ```sql
    SELECT count(*) FROM pg_proc WHERE proname = 'set_updated_at';
    -- expect 0 (SKS uses per-table funcs)
-   SELECT slug FROM public.organisations;
-   -- confirm 'sks' is there
+   SELECT slug, id FROM public.organisations WHERE slug = 'sks';
+   -- confirm 'sks' is there + grab its uuid (should be 1eb831f9-aeae-4e57-b49e-9681e8f51e15)
+   SELECT DISTINCT category FROM public.managers ORDER BY category;
+   -- confirm 'Project Management' and 'Supervisor' are present in the
+   -- actual category values (the screens depend on these literals)
    ```
 2. **Apply to EQ demo first** (zero blast-radius validation): Supabase MCP `apply_migration` against project `ktmjmdzqrogauaevbktn` with `migrations/2026-05-22_tender_pipeline.sql`.
 3. **Run the verification SELECTs** from the migration's section 11 (commented block at the bottom). All should pass.
 4. **Apply to SKS prod**: same MCP call against `nspbmirochztcjijmcrx`.
 5. **Re-run verification SELECTs** on SKS.
-6. **`get_advisors` snapshot:** confirm 0 new warns (search_path pin from Phase 0 is what prevents new WARNs here).
-7. **Optional: trigger a manual Supabase backup** via the `workers/supabase-backup` worker (or just confirm last weekly snapshot is recent).
+6. **Seed the 3 app_config rows per tenant** (the migration deliberately doesn't do this — see migration's section 10 for the rationale and copy-paste SQL):
+   ```sql
+   -- On SKS prod (nspbmirochztcjijmcrx):
+   INSERT INTO public.app_config (key, value, org_id) VALUES
+     ('pipeline_enabled',              'false',  '1eb831f9-aeae-4e57-b49e-9681e8f51e15'),
+     ('pipeline_value_floor',          '100000', '1eb831f9-aeae-4e57-b49e-9681e8f51e15'),
+     ('pipeline_review_cm_manager_id', '',       '1eb831f9-aeae-4e57-b49e-9681e8f51e15')
+   ON CONFLICT (key, org_id) DO NOTHING;
 
-**Output of Phase 2:** schema is live on SKS prod. No code change. No UI change. Tables are empty, ready for code that uses them.
+   -- On EQ demo (ktmjmdzqrogauaevbktn): look up its org_id first via
+   --   SELECT id FROM public.organisations WHERE slug = 'eq';
+   -- then substitute into the same INSERT.
+   ```
+7. **`get_advisors` snapshot:** confirm 0 new warns (search_path pin from Phase 0 is what prevents new WARNs here).
+8. **Optional: trigger a manual Supabase backup** via the `workers/supabase-backup` worker (or just confirm last weekly snapshot is recent).
+
+**Output of Phase 2:** schema is live on SKS prod, config rows seeded with the flag at `'false'`. No code change. No UI change. Tables are empty, ready for code that uses them.
 
 ### Phase 3 — Pipeline code ships dark behind flag (6-10 hrs focused)
 

@@ -464,24 +464,36 @@ WHERE m.archived = false;
 COMMENT ON VIEW public.nomination_clashes IS
   'Overlapping nomination pairs per manager, with severity. Red = both confirmed (resolve now). Amber = one confirmed + one pencilled (drop the pencilling or find a backup). Yellow = both pencilled (normal; resolve when one tender wins). Capacity-tag nominations excluded — they cannot clash until assigned.';
 
--- ─── 10. app_config seed rows ────────────────────────────────
--- Two config rows the pipeline reads at runtime:
---   pipeline_value_floor          — flat $ floor for the import filter
---                                   (default 100000; configurable in
---                                   Pipeline Settings UI later)
---   pipeline_review_cm_manager_id — UUID-as-text of the manager who
---                                   runs the fortnightly review.
---                                   Empty until set in Pipeline
---                                   Settings UI; pick from managers
---                                   where category IN
+-- ─── 10. app_config seed rows — DEFERRED to per-tenant manual INSERT ─
+-- The 3 pipeline config rows are NOT seeded by this migration because
+-- public.app_config has an org_id column (see 2026-04-16_tafe_day_and
+-- _holidays.sql and 2026-04-16_tier1_features_schema.sql for the
+-- per-tenant insert convention) and the value of pipeline_value_floor
+-- can legitimately differ between tenants ($100k on SKS, possibly
+-- different on EQ).
+--
+-- After applying this migration, run these PER TENANT via the SQL
+-- editor (replacing the org_id literal with the right tenant's UUID):
+--
+--   -- SKS prod (org_id 1eb831f9-aeae-4e57-b49e-9681e8f51e15)
+--   INSERT INTO public.app_config (key, value, org_id) VALUES
+--     ('pipeline_enabled',              'false',  '1eb831f9-aeae-4e57-b49e-9681e8f51e15'),
+--     ('pipeline_value_floor',          '100000', '1eb831f9-aeae-4e57-b49e-9681e8f51e15'),
+--     ('pipeline_review_cm_manager_id', '',       '1eb831f9-aeae-4e57-b49e-9681e8f51e15')
+--   ON CONFLICT (key, org_id) DO NOTHING;
+--
+--   -- EQ demo: look up its org_id first and substitute.
+--
+-- Keys:
+--   pipeline_enabled              — runtime feature flag. Nav entry +
+--                                   /pipeline routes gate on this.
+--   pipeline_value_floor          — flat $ floor for the import filter.
+--   pipeline_review_cm_manager_id — managers.id (text) of the CM running
+--                                   the fortnightly review. Picker
+--                                   filters by managers.category IN
 --                                   ('Executive','Operations',
 --                                    'Project Management','Construction',
 --                                    'Supervisor','Internal','Other').
-
-INSERT INTO public.app_config (key, value) VALUES
-  ('pipeline_value_floor',          '100000'),
-  ('pipeline_review_cm_manager_id', '')
-ON CONFLICT (key) DO NOTHING;
 
 -- ─── 11. Verification (run manually after the migration) ─────
 -- All non-mutating. Each should return the expected count.
