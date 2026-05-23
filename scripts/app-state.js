@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.84';
+const APP_VERSION = '3.4.85';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -76,7 +76,8 @@ const ORG_TABLES = [
   'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log',
   'roster_presence',  // v3.4.47 — realtime presence on roster editor cells
   'teams', 'team_members',  // v3.4.78 — roster filter groups
-  'timesheet_locks'   // v3.4.82 — per-week timesheet lock for accounts review
+  'timesheet_locks',  // v3.4.82 — per-week timesheet lock for accounts review
+  'tenders', 'tender_import_runs'  // v3.4.85 — pipeline tables (org_id auto-filter)
 ];
 
 // v3.4.29: tables a tenant doesn't have. sbFetch GET on these returns []
