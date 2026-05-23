@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.89
-const CACHE = 'eq-field-v3.4.89';
+// EQ Solves — Field  ·  Service Worker  v3.4.90
+const CACHE = 'eq-field-v3.4.90';
 
 const PRECACHE = [
   '/',

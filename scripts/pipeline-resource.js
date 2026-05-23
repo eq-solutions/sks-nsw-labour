@@ -362,7 +362,7 @@
     try {
       // Upsert enrichment
       var enrData = {
-        tender_id:            parseInt(id, 10),
+        tender_id:            id,
         hours_estimated:      hours,
         peak_workers:         workers,
         start_date_estimated: start,
@@ -413,7 +413,7 @@
         nom[key] = Object.assign({}, existing, { person_id: newId });
       }
     } else if (newId && !existing) {
-      var row = { tender_id: parseInt(tenderId, 10), person_id: newId, role: role, status: 'pencilled', is_primary: true };
+      var row = { tender_id: tenderId, person_id: newId, role: role, status: 'pencilled', is_primary: true };
       var res = await sbFetch('nominations', 'POST', row, 'return=representation');
       nom[key] = (Array.isArray(res) && res[0]) ? res[0] : row;
     } else if (!newId && existing) {

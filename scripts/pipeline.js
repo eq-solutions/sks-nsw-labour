@@ -94,7 +94,7 @@
       if (t.stage === 'confirmed') return false; // handled separately below
       if (_filterDept && t.department !== _filterDept) return false;
       if (_filterVert && t.vertical  !== _filterVert)  return false;
-      if (_filterValue && (t.quote_value || 0) < _filterValue) return false;
+      if (_filterValue && t.stage !== 'won' && (t.quote_value || 0) < _filterValue) return false;
       return true;
     });
 

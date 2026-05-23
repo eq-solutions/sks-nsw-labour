@@ -260,7 +260,6 @@
       var valueChanged = prevVal !== rowVal;
       if (stageChanged && valueChanged) {
         diff.stageChanged.push(Object.assign({}, row, { previous: prev }));
-        diff.valueChanged.push(Object.assign({}, row, { previous: prev }));
       } else if (stageChanged) {
         diff.stageChanged.push(Object.assign({}, row, { previous: prev }));
       } else if (valueChanged) {

@@ -6,6 +6,44 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.90 — Pipeline bug fixes (Won filter, UUID integrity, import diff, pipeline_enabled nav)
+
+**Date:** 2026-05-24
+**Scope:** Four correctness fixes identified during post-ship pipeline review.
+
+- **Won tenders now always visible on Kanban** — value filter (`≥$100k` default) was applied to all stages including Won, hiding any Won tender with a null or sub-$100k quote_value. Won is now exempt: only Watch/Likely/Confirmed entries are filtered by value. `pipeline.js:_buildHtml`.
+- **Fix UUID corruption in Resource Allocation saves** — `saveAlloc` and `_upsertNom` were calling `parseInt(tender_id, 10)` on a UUID string, yielding a truncated integer (e.g. `550` from `"550e8400-…"`). POST to `tender_enrichment` would fail with *"invalid input syntax for type uuid"* on first save. Both callers now pass the raw UUID string. `pipeline-resource.js`.
+- **Fix import diff double-counting** — when a tender had both a stage change and a value change in the same import, it was pushed into both `stageChanged` and `valueChanged` arrays in `diffAgainstExisting`. The preview table counted it twice. Now stageChanged takes priority; the row appears once. `tender-parser.js`.
+- **Wire `pipeline_enabled` from app_config** — pipeline nav items (`Pipeline` + `Resources`) are now hidden by default (`TENANT.PIPELINE_ENABLED = false`) and shown only when `app_config.pipeline_enabled = 'true'` for the tenant. Flip this row in Supabase when ready to go live. `app-state.js`.
+
+Version stamps: `APP_VERSION = '3.4.90'`, SW cache `eq-field-v3.4.90`.
+
+---
+
+# v3.4.89 — Pipeline stage mover pills
+
+**Date:** 2026-05-24
+**Scope:** UX — move a tender between Watch / Likely / Won from within the enrichment panel without closing it.
+
+- **Stage mover pills** in enrichment panel — current stage highlighted, tap another to move. Uses `onpointerdown` (iOS-safe). `pipeline.js:_panelHtml`, `moveStage()`.
+- Fix `_openPanel` → `openPanel` typo in `_buildHtml` restore-panel path.
+
+Version stamps: `APP_VERSION = '3.4.89'`, SW cache `eq-field-v3.4.89`.
+
+---
+
+# v3.4.88 — Pipeline value filter + timesheet Fill Week desktop banner
+
+**Date:** 2026-05-24
+**Scope:** Two independent improvements shipped together.
+
+- **Pipeline value filter** — Kanban defaults to hiding tenders below $100k. Dropdown lets user switch to All / ≥$100k / ≥$250k / ≥$500k / ≥$1M. `pipeline.js`.
+- **Fill Week desktop banner** — "Fill Week" confirmation banner now renders on desktop (was mobile-only). Always re-renders timesheet card after save to keep UI in sync. `timesheets.js`.
+
+Version stamps: `APP_VERSION = '3.4.88'`, SW cache `eq-field-v3.4.88`.
+
+---
+
 # v3.4.87 — Resource Allocation + Import guardrail
 
 **Date:** 2026-05-24
