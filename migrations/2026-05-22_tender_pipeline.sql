@@ -103,7 +103,8 @@ BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
 
 CREATE OR REPLACE FUNCTION public.set_is_high_confidence()
 RETURNS TRIGGER AS $$
@@ -111,7 +112,8 @@ BEGIN
   NEW.is_high_confidence = (NEW.probability_pct IS NOT NULL AND NEW.probability_pct >= 90);
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
 
 -- ─── 3. tenders ──────────────────────────────────────────────
 -- Mirror of SKS's "Open 12m Tenders (State) - NSW" Smartsheet.
