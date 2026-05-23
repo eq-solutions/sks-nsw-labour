@@ -251,7 +251,9 @@ function onTsCellChange(el) {
   if (!isManager) { showToast('Supervision access required'); el.value = ''; return; }
 
   const { name, group, week, day } = el.dataset;
-  const row = el.closest('tr');
+  // v3.4.83.1: also accept the mobile `.ts-mday` container so saves
+  // work in the supervisor phone view (mobile inputs aren't in a <tr>).
+  const row = el.closest('tr, .ts-mday');
 
   const job0El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="job"][data-slot="0"]`);
   const hrs0El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="0"]`);
@@ -728,7 +730,8 @@ function _jobsSortedForCell(personName, weekStr) {
 // v3.4.81 — Hours quick-select chip popover. Lazy-created on first
 // focus of a `.ts-hrs` input. Singleton — only one open at a time.
 // Tap a chip → fills the input + fires change → closes popover.
-const TS_HOURS_CHIPS = [8, 7.6, 4, 0];
+// v3.4.83.1 — dropped 7.6 chip per Royce; 8 is the standard SKS day.
+const TS_HOURS_CHIPS = [8, 4, 0];
 let _tsHoursPopoverEl = null;
 let _tsHoursPopoverInput = null;
 function _showTsHoursChips(input) {
@@ -746,12 +749,25 @@ function _showTsHoursChips(input) {
     'ontouchstart="event.preventDefault()" ' +
     'onclick="_pickTsHoursChip(' + h + ')">' + h + '</button>'
   ).join('');
-  // Position below the input
+  // Position below the input, clamped to viewport so the popover
+  // never overflows the right edge on narrow phones. v3.4.83.1.
   const rect = input.getBoundingClientRect();
   _tsHoursPopoverEl.style.position = 'fixed';
-  _tsHoursPopoverEl.style.left   = rect.left + 'px';
-  _tsHoursPopoverEl.style.top    = (rect.bottom + 4) + 'px';
-  _tsHoursPopoverEl.style.display = 'flex';
+  _tsHoursPopoverEl.style.top      = (rect.bottom + 4) + 'px';
+  _tsHoursPopoverEl.style.left     = '0px';
+  _tsHoursPopoverEl.style.display  = 'flex';
+  // Measure now that it's laid out, then clamp horizontally.
+  const margin   = 8;
+  const popW     = _tsHoursPopoverEl.offsetWidth || (TS_HOURS_CHIPS.length * 48);
+  let   left     = rect.left;
+  if (left + popW > window.innerWidth - margin) {
+    // Right-align to the input's right edge if a left-aligned popover
+    // would clip; falls through to the viewport-margin clamp below.
+    left = rect.right - popW;
+  }
+  if (left < margin) left = margin;
+  if (left + popW > window.innerWidth - margin) left = window.innerWidth - popW - margin;
+  _tsHoursPopoverEl.style.left = left + 'px';
 }
 function _hideTsHoursChips() {
   if (_tsHoursPopoverEl) _tsHoursPopoverEl.style.display = 'none';
@@ -778,7 +794,7 @@ function _onTsKeydown(e) {
   const day  = el.dataset.day;
   const type = el.dataset.type;
   const slot = el.dataset.slot || '0';
-  const row  = el.closest('tr');
+  const row  = el.closest('tr, .ts-mday');
   if (!row) return;
   let next = row.nextElementSibling;
   // Skip group separator rows
@@ -1878,9 +1894,17 @@ function _tsScheduleBubble(name, week, day) {
   return { html, isKnown, code: raw };
 }
 
+// v3.4.83.1: remember which cards the user has expanded so that a
+// re-render (e.g. after fillTsWeekFromMon → renderTimesheets) doesn't
+// snap everyone back to collapsed.
+const _tsExpandedCards = new Set();
 function toggleTsCard(pid) {
   const card = document.getElementById('ts-mcard-' + pid);
-  if (card) card.classList.toggle('ts-mcard-collapsed');
+  if (!card) return;
+  const wasCollapsed = card.classList.contains('ts-mcard-collapsed');
+  card.classList.toggle('ts-mcard-collapsed');
+  if (wasCollapsed) _tsExpandedCards.add(pid);
+  else              _tsExpandedCards.delete(pid);
 }
 function toggleTsDay(rid) {
   const row = document.getElementById('ts-mday-' + rid);
@@ -1937,7 +1961,28 @@ function _renderTimesheetsMobile(opts) {
         onclick="event.stopPropagation();copyLastWeekTs(this.dataset.n, this.dataset.g)"
         ${_copyDisabled ? 'disabled' : ''}>↺ last wk</button>`;
 
-    html += `<div class="ts-mcard ts-mcard-collapsed ts-mcard-status-${statusCls}" id="ts-mcard-${pid}">
+    // v3.4.83.1: card stays expanded across re-renders if the user
+    // had opened it (e.g. after Fill Week triggers a renderTimesheets).
+    const cardClass = _tsExpandedCards.has(pid) ? '' : ' ts-mcard-collapsed';
+
+    // Fill-week-from-Monday banner (v3.4.83.1). Shows when Mon is
+    // fully filled and at least one workable Tue–Fri is empty.
+    // Reuses the existing fillTsWeekFromMon(name, group) function
+    // which handles the overwrite confirmation prompt.
+    const monFilled = entry && entry.mon_job && Number(entry.mon_hrs) > 0;
+    const monRestEmpty = monFilled && ['tue','wed','thu','fri'].some(d2 => {
+      const ds = _tsDayStatus(p.name, week, d2);
+      if (!ds.workable) return false;
+      return !(entry[d2 + '_job'] && Number(entry[d2 + '_hrs']) > 0);
+    });
+    const fillWeekBanner = (isManager && monFilled && monRestEmpty)
+      ? `<div class="ts-mfillweek">
+          <div class="ts-mfillweek-text"><span class="ts-mfillweek-icon">↻</span> Same job all week? Fill Tue–Fri with Mon (<span class="ts-mfillweek-job">${esc(String(entry.mon_job).split(':')[0])}</span>)</div>
+          <button class="ts-mfillweek-btn" onclick="event.stopPropagation();fillTsWeekFromMon('${esc(p.name)}','${p.group}')">Fill Week</button>
+        </div>`
+      : '';
+
+    html += `<div class="ts-mcard${cardClass} ts-mcard-status-${statusCls}" id="ts-mcard-${pid}">
       <div class="ts-mcard-head" onclick="toggleTsCard('${pid}')">
         <span class="ts-mcard-chev">▸</span>
         <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
@@ -1947,7 +1992,8 @@ function _renderTimesheetsMobile(opts) {
         <span class="ts-mcard-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
       </div>
       <div class="ts-mcard-body">
-        <div class="ts-mcard-meta">${copyLastWkBtn}</div>`;
+        <div class="ts-mcard-meta">${copyLastWkBtn}</div>
+        ${fillWeekBanner}`;
 
     days.forEach((d, i) => {
       const rid        = pid + '_' + d;

@@ -473,6 +473,51 @@
   }
   .ts-mcard-copylast:disabled { opacity: .5; cursor: not-allowed; }
 
+  /* ── Fill-week-from-Monday banner (v3.4.83.1) ─────── */
+  .ts-mfillweek {
+    margin: 4px 14px 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--purple-lt);
+    border: 1px solid var(--purple);
+    border-radius: 10px;
+  }
+  .ts-mfillweek-text {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--navy);
+    line-height: 1.35;
+    min-width: 0;
+  }
+  .ts-mfillweek-icon {
+    display: inline-block;
+    color: var(--purple);
+    font-weight: 800;
+    margin-right: 4px;
+  }
+  .ts-mfillweek-job {
+    font-family: ui-monospace, monospace;
+    font-weight: 800;
+    color: var(--purple);
+  }
+  .ts-mfillweek-btn {
+    background: var(--purple);
+    color: white;
+    border: 1px solid var(--purple);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 36px;
+    flex-shrink: 0;
+  }
+  .ts-mfillweek-btn:active { transform: scale(.97); }
+
   /* ── Day row ──────────────────────────────────────── */
   .ts-mday { border-top: 1px solid var(--border); padding: 0; }
   .ts-mday:first-child { border-top: 0; }

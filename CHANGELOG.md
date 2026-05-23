@@ -6,6 +6,21 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.83.1 — Phase 4a deploy-preview fixes
+
+**Date:** 2026-05-23
+**Scope:** Three follow-ups after Royce's first phone test of the v3.4.83 deploy preview.
+
+- **Saves on mobile actually work now.** `onTsCellChange` was looking up its peer inputs via `el.closest('tr')`, which returns null in the mobile card-stack DOM (cells are `<div class="ts-mday">`). Selector loosened to `tr, .ts-mday` — desktop unchanged, mobile saves go through. `_onTsKeydown` got the same defensive update. **Any timesheet edits made on the v3.4.83 deploy preview before this patch did NOT persist** — they need to be re-entered. (No data corruption; the save just no-op'd, the inputs showed the typed value locally.)
+- **Hours quick-select popover clamped to viewport.** Was anchored to the input's `rect.left` and overflowed the right edge on phones. Now measures itself, falls back to right-aligning to the input's right edge when a left-aligned popover would clip, with a final viewport-margin guard. Same logic on desktop — slightly more robust.
+- **`7.6h` chip dropped.** Per Royce — SKS uses 8h as the standard day. Quick-select is now `[8, 4, 0]`.
+- **"Fill Week" banner** in the mobile card body when Monday is filled and at least one of Tue–Fri is empty. Tap → calls the existing `fillTsWeekFromMon` (which already prompts before overwriting non-empty days). Sits at the top of the expanded card so it's the first thing you see after Mon is in.
+- **Card-expansion state persists across re-renders.** `_tsExpandedCards` Set tracks which person cards the supervisor has opened. After Fill Week (which calls `renderTimesheets`), the card stays open instead of snapping back to collapsed.
+
+Version stamps: `APP_VERSION = '3.4.83.1'`, SW cache `eq-field-v3.4.83.1`. The new cache key forces the SW to discard the v3.4.83 install — first phone load after deploy will hit network and pick up the fixed `timesheets.js` / `mobile.css`.
+
+---
+
 # v3.4.83 — Timesheets Phase 4a (supervisor phone view + roster bubble)
 
 **Date:** 2026-05-23

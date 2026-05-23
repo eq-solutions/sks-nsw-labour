@@ -614,8 +614,25 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.83
+  EQ Solves — Field  v3.4.83.1
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.83.1  (Phase 4a deploy-preview fixes)
+  ────────────────────────────────────────────────────────────
+  Three follow-ups after Royce's first phone test of v3.4.83:
+   • onTsCellChange now finds its peer inputs via
+     `closest('tr, .ts-mday')` — desktop unchanged, mobile saves
+     actually persist. (Pre-patch mobile edits did NOT save.)
+   • Hours quick-select popover clamped to the viewport so it
+     no longer overflows the right edge on phones.
+   • Dropped the 7.6h chip — SKS standard day is 8h. Chips
+     are now [8, 4, 0].
+   • New "Fill Week" banner in the mobile card body when Mon is
+     filled and Tue–Fri has at least one empty workable day.
+     Reuses the existing fillTsWeekFromMon function.
+   • _tsExpandedCards Set: card-expansion state persists across
+     re-renders so Fill Week / save flows don't snap cards back
+     to collapsed.
 
   CHANGES IN v3.4.83  (Timesheets — Phase 4a phone view for supervisors)
   ────────────────────────────────────────────────────────────
