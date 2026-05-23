@@ -251,9 +251,7 @@ function onTsCellChange(el) {
   if (!isManager) { showToast('Supervision access required'); el.value = ''; return; }
 
   const { name, group, week, day } = el.dataset;
-  // v3.4.83.1: also accept the mobile `.ts-mday` container so saves
-  // work in the supervisor phone view (mobile inputs aren't in a <tr>).
-  const row = el.closest('tr, .ts-mday');
+  const row = el.closest('.ts-mday');
 
   const job0El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="job"][data-slot="0"]`);
   const hrs0El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="0"]`);
@@ -278,27 +276,7 @@ function onTsCellChange(el) {
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
 
-  // v3.4.83.2: mobile surfaces (card total, status icon, variance chip,
-  // Fill Week banner) live on different DOM than the desktop table —
-  // updateTsRowTotal() targets a desktop-only #tst- id and no-ops here.
-  // Trigger a full re-render so all per-row visuals update after a save.
-  // Card expansion is preserved via _tsExpandedCards.
-  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) {
-    renderTimesheets();
-  }
-}
-
-// ── Split row toggle ──────────────────────────────────────────
-
-function toggleTsSplit(pid, btn) {
-  const row = document.getElementById('split-' + pid);
-  if (!row) return;
-  const show = row.style.display === 'none';
-  row.style.display = show ? 'flex' : 'none';
-  btn.classList.toggle('active', show);
-  if (!show) {
-    row.querySelectorAll('input').forEach(el => { el.value = ''; onTsCellChange(el); });
-  }
+  renderTimesheets();
 }
 
 // ── Fill week from Monday ─────────────────────────────────────
@@ -337,7 +315,7 @@ async function fillTsWeekFromMon(name, grp) {
   for (const d of workableDays) {
     await saveTsCell(name, grp, week, d, monJob, monHrs);
   }
-  if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) renderTimesheets();
+  renderTimesheets();
 
   const jobNum = String(monJob).split(':')[0];
   _showFillWeekUndoToast(
@@ -346,7 +324,7 @@ async function fillTsWeekFromMon(name, grp) {
       for (const d of workableDays) {
         await saveTsCell(name, grp, week, d, before[d].job, before[d].hrs);
       }
-      if (typeof _isPhoneViewport === 'function' && _isPhoneViewport()) renderTimesheets();
+      renderTimesheets();
       showToast('↩ Undone — Tue–Fri restored');
       auditLog('Undid Fill Week from Mon', 'Timesheet', name, week);
     }
@@ -871,13 +849,13 @@ function _onTsKeydown(e) {
   const day  = el.dataset.day;
   const type = el.dataset.type;
   const slot = el.dataset.slot || '0';
-  const row  = el.closest('tr, .ts-mday');
-  if (!row) return;
-  let next = row.nextElementSibling;
-  // Skip group separator rows
-  while (next && next.classList.contains('ts-group-row')) next = next.nextElementSibling;
-  if (!next) return;
-  const target = next.querySelector(
+  // Navigate to the same day/field on the next person's card.
+  const card = el.closest('.ts-mcard');
+  if (!card) return;
+  let nextCard = card.nextElementSibling;
+  while (nextCard && nextCard.classList.contains('ts-mgroup')) nextCard = nextCard.nextElementSibling;
+  if (!nextCard) return;
+  const target = nextCard.querySelector(
     `input[data-day="${day}"][data-type="${type}"][data-slot="${slot}"]`
   );
   if (target) {
@@ -1093,190 +1071,185 @@ function renderTimesheets() {
     return;
   }
 
-  // v3.4.83 — Phone view branch. At ≤768px viewport the supervisor
-  // Timesheets page renders as a card-stack (one per person, days
-  // nested) instead of the wide table. Same data, same handlers —
-  // just a different DOM. See _renderTimesheetsMobile at end of file.
-  _hookTsResizeOnce();
-  if (_isPhoneViewport()) {
-    _renderTimesheetsMobile({ people, week, weekDatesTs, days, dlabels, lockBannerHtml, filterChipHtml, disabled, _isThisWeek, _todayDayKey });
-    updateTsStats();
-    return;
-  }
+  // Unified card render — same DOM for all viewports.
+  // CSS (.ts-mdays-wrap) handles horizontal day layout at ≥769px.
+  // Collapse/expand is gated to mobile via _isPhoneViewport() so
+  // desktop cards always render open.
+  const isPhone = _isPhoneViewport();
 
-  // v3.4.80: Status column removed per Royce's feedback — the 4px
-  // left-stripe on each row already carries the green/red/grey/purple
-  // completion signal. A whole column of "— Empty" pills was redundant
-  // and stole horizontal space the data inputs needed back.
-  // Day-column min-width compressed 170 → 124 (job 64 + hrs 38 + plus
-  // 22 + gaps + padding ≈ 130). Compact, scannable, more days fit on
-  // one screen.
-  let html = lockBannerHtml + filterChipHtml +
-    `<div class="roster-card"><div class="ts-table-scroll"><table class="ts-table" style="width:100%">
-    <thead><tr>
-      <th class="ts-name-col-head">Name</th>
-      <th style="min-width:46px">Group</th>
-      ${dlabels.map(d => {
-        const dayKey = d.toLowerCase();
-        const isToday = _isThisWeek && dayKey === _todayDayKey;
-        const dateIdx = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(d);
-        return `<th class="center ts-day-head${isToday ? ' ts-day-today' : ''}" style="min-width:124px">${d}${isToday ? ' <span class="ts-today-dot" title="Today"></span>' : ''}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[dateIdx]} — Job / Hrs</span></th>`;
-      }).join('')}
-      <th class="center" style="min-width:54px">Total</th>
-    </tr></thead><tbody>`;
-
-  // ── Data rows ───────────────────────────────────────────────
+  let html = lockBannerHtml + filterChipHtml + '<div class="ts-mlist">';
   let lastGroup = '';
+
   people.forEach(p => {
-    // v3.4.79: more prominent group separator — wider band, brand
-    // colour stripe, larger label. Matches the Roster page's group
-    // strip treatment so the two pages feel consistent.
     if (p.group !== lastGroup) {
       lastGroup = p.group;
-      const icon = p.group === 'Apprentice' ? '🎓' : '🔧';
-      const stripeColor = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
-      html += `<tr class="ts-group-row"><td colspan="${days.length + 3}" style="background:var(--surface-2);border-left:5px solid ${stripeColor};font-size:12px;font-weight:700;color:var(--navy);padding:10px 14px;text-transform:uppercase;letter-spacing:.6px">${icon} ${p.group}</td></tr>`;
+      const gIcon  = p.group === 'Apprentice' ? '🎓' : '🔧';
+      const stripe = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
+      html += `<div class="ts-mgroup" style="border-left-color:${stripe}">${gIcon} ${esc(p.group)}</div>`;
     }
 
-    const entry      = getTsEntry(p.name, week);
-    const total      = tsTotalHrs(entry);
-    // v3.4.26: completion rule — every Mon–Fri ≥ 8 hrs AND total ≥ 40 hrs.
-    // Anything less colours the row red; amber state retired. Hours are
-    // the source of truth, not job-cell presence, so a row with job
-    // numbers but no hrs reads incomplete until hrs are filled in.
-    const _hrs            = ['mon','tue','wed','thu','fri'].map(d => Number((entry && entry[d + '_hrs']) || 0));
-    const _weekTotal      = _hrs.reduce((a, b) => a + b, 0);
-    const _allDaysAt8Plus = _hrs.every(h => h >= 8);
-    const _hasAnyHrs      = _hrs.some(h => h > 0);
-    const _isComplete     = _hasAnyHrs && _allDaysAt8Plus && _weekTotal >= 40;
-    // v3.4.79: roster-aware row status (drives the pill in the name col).
-    const rowStatus       = _tsRowStatus(p, week, entry);
-    const totalClass      = _isComplete ? 'ts-total-green' : (_hasAnyHrs ? 'ts-total-red' : 'ts-total-empty');
-    // v3.4.79: thinner left-stripe instead of full red-background.
-    // The full bg was the loudest thing on the page; users had to
-    // scan around it. A 4px coloured stripe carries the same signal
-    // without drowning the actual data.
-    let rowStripeStyle;
-    if (rowStatus.kind === 'complete') {
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--green);';
-    } else if (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') {
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--purple);background:rgba(124,119,185,.04);';
-    } else if (rowStatus.kind === 'empty') {
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--ink-4);';
-    } else {
-      // partial — still attention-getting but no full-red wash
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--red);background:rgba(220,38,38,.025);';
-    }
-    const pid        = p.name.replace(/\W/g, '_');
-    const grpBadge   = p.group === 'Apprentice'
-      ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
-      : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
-    // v3.4.80: status pill dropped — the 4px row left-stripe is the
-    // signal. rowStatus.kind is still used above to pick stripe colour;
-    // _tsRowStatus is otherwise unread now (kept as a public hook for
-    // any future page that wants the same classification).
+    const pid       = p.name.replace(/\W/g, '_');
+    const entry     = getTsEntry(p.name, week);
+    const total     = tsTotalHrs(entry);
+    const rowStatus = _tsRowStatus(p, week, entry);
 
-    // v3.4.81: per-row "Copy last week" affordance.
-    const _lastWkSource = _findMostRecentEntry(p.name, week, 4);
-    const _copyDisabled = !_lastWkSource || !isManager;
-    const copyLastWkLink = `<button class="ts-copylastwk-btn" title="${_copyDisabled ? 'No recent week to copy from' : 'Copy from ' + _lastWkSource.week}"
-        data-n="${esc(p.name)}" data-g="${p.group}"
-        onclick="copyLastWeekTs(this.dataset.n, this.dataset.g)"
-        ${_copyDisabled ? 'disabled' : ''}>↺ last wk</button>`;
-    // v3.4.82: variance chip — small ⚠ when this week's total is
-    // ≥40% above or ≤60% below the 4-week rolling average. Skipped
-    // when there's not enough history. Tooltip shows the maths.
-    const _variance = _tsRowVariance(p.name, week);
+    let statusIcon, statusCls, totalCls;
+    if (rowStatus.kind === 'complete')                                    { statusIcon = '✓'; statusCls = 'complete'; totalCls = 'green'; }
+    else if (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') { statusIcon = '🌴'; statusCls = 'leave';    totalCls = 'empty'; }
+    else if (rowStatus.kind === 'empty')                                  { statusIcon = '—'; statusCls = 'empty';    totalCls = 'empty'; }
+    else                                                                   { statusIcon = '⚠'; statusCls = 'partial';  totalCls = 'red';   }
+
+    const grpBadgeCls = p.group === 'Apprentice' ? 'ts-mbadge-app' : 'ts-mbadge-lh';
+    const grpBadge    = p.group === 'Apprentice' ? 'APP' : 'LH';
+
+    const _variance    = _tsRowVariance(p.name, week);
     const varianceChip = _variance
       ? `<span class="ts-variance-chip ts-variance-${_variance.tone}" title="This week ${_variance.thisHrs}h vs 4-week avg ${_variance.avg}h">⚠</span>`
       : '';
 
-    html += `<tr class="ts-data-row" style="${rowStripeStyle}">
-      <td class="ts-name-col" style="font-weight:600;color:var(--navy)">
-        <div class="ts-name-line">
-          <span class="ts-name-text">${esc(p.name)}${varianceChip}</span>
-          ${copyLastWkLink}
+    const _lastWkSource = _findMostRecentEntry(p.name, week, 4);
+    const _copyDisabled = !_lastWkSource || !isManager;
+    const copyLastWkBtn = `<button class="ts-mcard-copylast" title="${_copyDisabled ? 'No recent week to copy from' : 'Copy from ' + _lastWkSource.week}"
+        data-n="${esc(p.name)}" data-g="${p.group}"
+        onclick="event.stopPropagation();copyLastWeekTs(this.dataset.n, this.dataset.g)"
+        ${_copyDisabled ? 'disabled' : ''}>↺ last wk</button>`;
+
+    // Cards start collapsed on mobile (user opens them); always open on desktop.
+    const cardClass = isPhone ? (_tsExpandedCards.has(pid) ? '' : ' ts-mcard-collapsed') : '';
+
+    const monFilled   = entry && entry.mon_job && Number(entry.mon_hrs) > 0;
+    const monRestEmpty = monFilled && ['tue','wed','thu','fri'].some(d2 => {
+      const ds = _tsDayStatus(p.name, week, d2);
+      if (!ds.workable) return false;
+      return !(entry[d2 + '_job'] && Number(entry[d2 + '_hrs']) > 0);
+    });
+    const fillWeekBanner = (isManager && monFilled && monRestEmpty)
+      ? `<div class="ts-mfillweek">
+          <div class="ts-mfillweek-text"><span class="ts-mfillweek-icon">↻</span> Same job all week? Fill Tue–Fri with Mon (<span class="ts-mfillweek-job">${esc(String(entry.mon_job).split(':')[0])}</span>)</div>
+          <button class="ts-mfillweek-btn" data-n="${esc(p.name)}" data-g="${p.group}" onclick="event.stopPropagation();_armFillWeek(this)">Fill Week</button>
+        </div>`
+      : '';
+
+    html += `<div class="ts-mcard${cardClass} ts-mcard-status-${statusCls}" id="ts-mcard-${pid}">
+      <div class="ts-mcard-head" onclick="toggleTsCard('${pid}')">
+        <span class="ts-mcard-chev">▸</span>
+        <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
+        <span class="ts-mcard-name">${esc(p.name)}${varianceChip}</span>
+        <span class="ts-mcard-badge ${grpBadgeCls}">${grpBadge}</span>
+        <span class="ts-mcard-statusicon ${statusCls}">${statusIcon}</span>
+        <span class="ts-mcard-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
+      </div>
+      <div class="ts-mcard-body">
+        <div class="ts-mcard-meta">${copyLastWkBtn}</div>
+        ${fillWeekBanner}
+        <div class="ts-mdays-wrap">`;
+
+    days.forEach((d, i) => {
+      const rid        = pid + '_' + d;
+      const dayStatus  = _tsDayStatus(p.name, week, d);
+      const isTodayCol = _isThisWeek && d === _todayDayKey;
+
+      if (!dayStatus.workable) {
+        const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : '🌴 ' + (dayStatus.leaveLabel || 'Leave');
+        const muteCls   = dayStatus.tafeLabel ? 'ts-mday-tafe' : 'ts-mday-leave';
+        html += `<div class="ts-mday ts-mday-muted ${muteCls}">
+          <div class="ts-mday-head">
+            <span class="ts-mday-label">${dlabels[i]}</span>
+            <span class="ts-mday-date">${weekDatesTs[i]}</span>
+            <span class="ts-mday-spacer"></span>
+            <span class="ts-mday-mutepill">${muteLabel}</span>
+          </div>
+        </div>`;
+        return;
+      }
+
+      const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
+      const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
+      let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
+      if (rawJob.includes('|')) {
+        const parts = rawJob.split('|');
+        const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
+        job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
+      } else { job1 = rawJob; hrs1 = rawHrs; }
+
+      const bubble    = _tsScheduleBubble(p.name, week, d);
+      const filled    = !!(job1 && Number(hrs1) > 0);
+      // Days start collapsed on mobile when filled; always expanded on desktop.
+      const collapsed = (filled && isPhone) ? ' ts-mday-collapsed' : '';
+      const statusPill = filled
+        ? `<span class="ts-mday-status done">✓ ${hrs1}h</span>`
+        : `<span class="ts-mday-status empty">— missing</span>`;
+
+      const _otherWorkableExists = ['mon','tue','wed','thu','fri']
+        .filter(d2 => d2 !== d)
+        .some(d2 => _tsDayStatus(p.name, week, d2).workable);
+      const repeatChip = (isManager && filled && _otherWorkableExists)
+        ? `<button class="ts-mrepeat-btn" title="Repeat ${d.toUpperCase()} across the week"
+              data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
+              onclick="event.stopPropagation();repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻ repeat</button>`
+        : '';
+
+      const summary = filled
+        ? `<div class="ts-mday-summary"><span class="ts-mday-summary-job">${esc(job1)}</span><span class="ts-mday-summary-hint"> — tap to edit</span></div>`
+        : '';
+
+      html += `<div class="ts-mday${collapsed}${isTodayCol ? ' ts-mday-today' : ''}" id="ts-mday-${rid}">
+        <div class="ts-mday-head" onclick="toggleTsDay('${rid}')">
+          <span class="ts-mday-label">${dlabels[i]}</span>
+          <span class="ts-mday-date">${weekDatesTs[i]}</span>
+          ${bubble.html}
+          <span class="ts-mday-spacer"></span>
+          ${statusPill}
         </div>
-      </td>
-      <td>${grpBadge}</td>
-      ${days.map(d => {
-        // v3.4.79: mute the cell if the roster says the person is on
-        // leave or at TAFE this day. Reads the existing schedule data
-        // — no extra DB calls. View-only users get the same mute.
-        const dayStatus = _tsDayStatus(p.name, week, d);
-        if (!dayStatus.workable) {
-          const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : '🌴 ' + (dayStatus.leaveLabel || 'Leave');
-          const muteTone  = dayStatus.tafeLabel ? 'ts-cell-tafe' : 'ts-cell-leave';
-          return `<td class="ts-cell-muted ${muteTone}" style="padding:5px 6px;text-align:center" title="From roster — no timesheet entry needed">
-            <div class="ts-mute-label">${muteLabel}</div>
-          </td>`;
-        }
-        // v3.4.79: highlight today's column when viewing the current week.
-        const isTodayCol = _isThisWeek && d === _todayDayKey;
-        const todayClass = isTodayCol ? ' ts-cell-today' : '';
-        const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
-        const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
-        let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
-        if (rawJob.includes('|')) {
-          const parts = rawJob.split('|');
-          const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
-          job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
-        } else {
-          job1 = rawJob; hrs1 = rawHrs;
-        }
-        const pid2 = p.name.replace(/\W/g, '_') + '_' + d;
-        // v3.4.81: per-day "↻ repeat" chip replaces the v3.4.80
-        // "fill week →" link. Works on ANY day (not just Mon), so
-        // supervisors who nail Wednesday first can fan it across the
-        // rest of the row. Only shows when this cell has a job
-        // number AND there's at least one other workable day to
-        // repeat into. Hidden in view-only mode.
-        const _hasJobThisDay = !!job1;
-        const _otherWorkableExists = ['mon','tue','wed','thu','fri']
-          .filter(d2 => d2 !== d)
-          .some(d2 => _tsDayStatus(p.name, week, d2).workable);
-        const repeatChip = (isManager && _hasJobThisDay && _otherWorkableExists)
-          ? `<button class="ts-repeatday-btn" title="Repeat ${d.toUpperCase()} across the rest of the week"
-                data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
-                onclick="repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻</button>`
-          : '';
-        return `<td class="ts-input-cell${todayClass}" style="padding:5px 6px">
-          <div class="ts-cell">
-            <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
-              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
-              oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
-              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
-              onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
-              onchange="onTsCellChange(this)">
-            <button class="ts-split-btn${isSplit ? ' active' : ''}" title="Split: add second job" aria-label="Split day into two jobs" onclick="toggleTsSplit('${pid2}',this)"${disabled ? ' disabled' : ''}>＋</button>
+        ${summary}
+        <div class="ts-mday-body">
+          <div class="ts-minput-row">
+            <div class="ts-minput-jobwrap">
+              <label class="ts-minput-label">Job / Docket No.</label>
+              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
+                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
+                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
+            </div>
+            <div class="ts-minput-hrswrap">
+              <label class="ts-minput-label">Hours</label>
+              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
+                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
+                onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
+                onchange="onTsCellChange(this)">
+            </div>
+          </div>
+          <div class="ts-minput-row ts-msplit-row" id="msplit-${rid}" style="display:${isSplit ? 'flex' : 'none'}">
+            <div class="ts-minput-jobwrap">
+              <label class="ts-minput-label">Job 2</label>
+              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job2))}" placeholder="Second job"${disabled}
+                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
+                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
+            </div>
+            <div class="ts-minput-hrswrap">
+              <label class="ts-minput-label">Hrs 2</label>
+              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
+                onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
+                onchange="onTsCellChange(this)">
+            </div>
+          </div>
+          <div class="ts-mday-actions">
+            <button class="ts-msplit-btn${isSplit ? ' active' : ''}" title="Split: add second job"
+              onclick="toggleMTsSplit('${rid}',this)"${disabled ? ' disabled' : ''}>${isSplit ? '✕ Remove second job' : '＋ Split — add second job'}</button>
             ${repeatChip}
           </div>
-          <div class="ts-cell ts-split-row" id="split-${pid2}" style="display:${isSplit ? 'flex' : 'none'};margin-top:3px">
-            <input class="ts-job" type="text" value="${esc(String(job2))}" placeholder="Job 2"${disabled}
-              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
-              oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs2}" placeholder="8" min="0" max="24" step="0.5"${disabled}
-              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
-              onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
-              onchange="onTsCellChange(this)">
-          </div>
-        </td>`;
-      }).join('')}
-      <td class="ts-total-col ${totalClass}" id="tst-${pid}">${total > 0 ? total + 'h' : '—'}</td>
-    </tr>`;
+        </div>
+      </div>`;
+    });
+
+    html += '</div></div></div>'; // end ts-mdays-wrap, ts-mcard-body, ts-mcard
   });
 
-  html += '</tbody></table></div></div>';
+  html += '</div>'; // end ts-mlist
   const root = document.getElementById('ts-content');
-  root.innerHTML = html;
-  // v3.4.81: Enter-key navigation — wire once per render via
-  // delegation on the table. Tab still uses default browser behaviour
-  // (right within row); Enter moves DOWN to the next person's same
-  // day. Replacing the listener on each render is safe — removeEventListener
-  // would need the same fn reference; cheaper just to re-set onkeydown.
-  const tbl = root.querySelector('.ts-table');
-  if (tbl) tbl.onkeydown = _onTsKeydown;
+  if (root) root.innerHTML = html;
+  const list = root && root.querySelector('.ts-mlist');
+  if (list) list.onkeydown = _onTsKeydown;
   updateTsStats();
 }
 
@@ -1997,199 +1970,3 @@ function toggleMTsSplit(rid, btn) {
   if (!show) row.querySelectorAll('input').forEach(el => { el.value = ''; onTsCellChange(el); });
 }
 
-function _renderTimesheetsMobile(opts) {
-  const { people, week, weekDatesTs, days, dlabels, lockBannerHtml, filterChipHtml, disabled, _isThisWeek, _todayDayKey } = opts;
-
-  let html = lockBannerHtml + filterChipHtml + '<div class="ts-mlist">';
-  let lastGroup = '';
-
-  people.forEach(p => {
-    if (p.group !== lastGroup) {
-      lastGroup = p.group;
-      const gIcon  = p.group === 'Apprentice' ? '🎓' : '🔧';
-      const stripe = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
-      html += `<div class="ts-mgroup" style="border-left-color:${stripe}">${gIcon} ${esc(p.group)}</div>`;
-    }
-
-    const pid    = p.name.replace(/\W/g, '_');
-    const entry  = getTsEntry(p.name, week);
-    const total  = tsTotalHrs(entry);
-    const _hrs   = ['mon','tue','wed','thu','fri'].map(d => Number((entry && entry[d + '_hrs']) || 0));
-    const rowStatus = _tsRowStatus(p, week, entry);
-
-    let statusIcon, statusCls, totalCls;
-    if (rowStatus.kind === 'complete')        { statusIcon = '✓'; statusCls = 'complete'; totalCls = 'green'; }
-    else if (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') { statusIcon = '🌴'; statusCls = 'leave'; totalCls = 'empty'; }
-    else if (rowStatus.kind === 'empty')      { statusIcon = '—'; statusCls = 'empty';    totalCls = 'empty'; }
-    else                                      { statusIcon = '⚠'; statusCls = 'partial';  totalCls = 'red'; }
-
-    const grpBadgeCls = p.group === 'Apprentice' ? 'ts-mbadge-app' : 'ts-mbadge-lh';
-    const grpBadge    = p.group === 'Apprentice' ? 'APP' : 'LH';
-
-    const _variance    = _tsRowVariance(p.name, week);
-    const varianceChip = _variance
-      ? `<span class="ts-variance-chip ts-variance-${_variance.tone}" title="This week ${_variance.thisHrs}h vs 4-week avg ${_variance.avg}h">⚠</span>`
-      : '';
-
-    const _lastWkSource = _findMostRecentEntry(p.name, week, 4);
-    const _copyDisabled = !_lastWkSource || !isManager;
-    const copyLastWkBtn = `<button class="ts-mcard-copylast" title="${_copyDisabled ? 'No recent week to copy from' : 'Copy from ' + _lastWkSource.week}"
-        data-n="${esc(p.name)}" data-g="${p.group}"
-        onclick="event.stopPropagation();copyLastWeekTs(this.dataset.n, this.dataset.g)"
-        ${_copyDisabled ? 'disabled' : ''}>↺ last wk</button>`;
-
-    // v3.4.83.1: card stays expanded across re-renders if the user
-    // had opened it (e.g. after Fill Week triggers a renderTimesheets).
-    const cardClass = _tsExpandedCards.has(pid) ? '' : ' ts-mcard-collapsed';
-
-    // Fill-week-from-Monday banner (v3.4.83.1). Shows when Mon is
-    // fully filled and at least one workable Tue–Fri is empty.
-    // Reuses the existing fillTsWeekFromMon(name, group) function
-    // which handles the overwrite confirmation prompt.
-    const monFilled = entry && entry.mon_job && Number(entry.mon_hrs) > 0;
-    const monRestEmpty = monFilled && ['tue','wed','thu','fri'].some(d2 => {
-      const ds = _tsDayStatus(p.name, week, d2);
-      if (!ds.workable) return false;
-      return !(entry[d2 + '_job'] && Number(entry[d2 + '_hrs']) > 0);
-    });
-    const fillWeekBanner = (isManager && monFilled && monRestEmpty)
-      ? `<div class="ts-mfillweek">
-          <div class="ts-mfillweek-text"><span class="ts-mfillweek-icon">↻</span> Same job all week? Fill Tue–Fri with Mon (<span class="ts-mfillweek-job">${esc(String(entry.mon_job).split(':')[0])}</span>)</div>
-          <button class="ts-mfillweek-btn" data-n="${esc(p.name)}" data-g="${p.group}" onclick="event.stopPropagation();_armFillWeek(this)">Fill Week</button>
-        </div>`
-      : '';
-
-    html += `<div class="ts-mcard${cardClass} ts-mcard-status-${statusCls}" id="ts-mcard-${pid}">
-      <div class="ts-mcard-head" onclick="toggleTsCard('${pid}')">
-        <span class="ts-mcard-chev">▸</span>
-        <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
-        <span class="ts-mcard-name">${esc(p.name)}${varianceChip}</span>
-        <span class="ts-mcard-badge ${grpBadgeCls}">${grpBadge}</span>
-        <span class="ts-mcard-statusicon ${statusCls}">${statusIcon}</span>
-        <span class="ts-mcard-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
-      </div>
-      <div class="ts-mcard-body">
-        <div class="ts-mcard-meta">${copyLastWkBtn}</div>
-        ${fillWeekBanner}`;
-
-    days.forEach((d, i) => {
-      const rid        = pid + '_' + d;
-      const dayStatus  = _tsDayStatus(p.name, week, d);
-      const isTodayCol = _isThisWeek && d === _todayDayKey;
-
-      if (!dayStatus.workable) {
-        const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : '🌴 ' + (dayStatus.leaveLabel || 'Leave');
-        const muteCls   = dayStatus.tafeLabel ? 'ts-mday-tafe' : 'ts-mday-leave';
-        html += `<div class="ts-mday ts-mday-muted ${muteCls}">
-          <div class="ts-mday-head">
-            <span class="ts-mday-label">${dlabels[i]}</span>
-            <span class="ts-mday-date">${weekDatesTs[i]}</span>
-            <span class="ts-mday-spacer"></span>
-            <span class="ts-mday-mutepill">${muteLabel}</span>
-          </div>
-        </div>`;
-        return;
-      }
-
-      const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
-      const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
-      let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
-      if (rawJob.includes('|')) {
-        const parts = rawJob.split('|');
-        const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
-        job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
-      } else { job1 = rawJob; hrs1 = rawHrs; }
-
-      const bubble    = _tsScheduleBubble(p.name, week, d);
-      const filled    = !!(job1 && Number(hrs1) > 0);
-      const collapsed = filled ? ' ts-mday-collapsed' : '';
-      const statusPill = filled
-        ? `<span class="ts-mday-status done">✓ ${hrs1}h</span>`
-        : `<span class="ts-mday-status empty">— missing</span>`;
-
-      const _otherWorkableExists = ['mon','tue','wed','thu','fri']
-        .filter(d2 => d2 !== d)
-        .some(d2 => _tsDayStatus(p.name, week, d2).workable);
-      const repeatChip = (isManager && filled && _otherWorkableExists)
-        ? `<button class="ts-mrepeat-btn" title="Repeat ${d.toUpperCase()} across the week"
-              data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
-              onclick="event.stopPropagation();repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻ repeat</button>`
-        : '';
-
-      const summary = filled
-        ? `<div class="ts-mday-summary"><span class="ts-mday-summary-job">${esc(job1)}</span><span class="ts-mday-summary-hint"> — tap to edit</span></div>`
-        : '';
-
-      html += `<div class="ts-mday${collapsed}${isTodayCol ? ' ts-mday-today' : ''}" id="ts-mday-${rid}">
-        <div class="ts-mday-head" onclick="toggleTsDay('${rid}')">
-          <span class="ts-mday-label">${dlabels[i]}</span>
-          <span class="ts-mday-date">${weekDatesTs[i]}</span>
-          ${bubble.html}
-          <span class="ts-mday-spacer"></span>
-          ${statusPill}
-        </div>
-        ${summary}
-        <div class="ts-mday-body">
-          <div class="ts-minput-row">
-            <div class="ts-minput-jobwrap">
-              <label class="ts-minput-label">Job / Docket No.</label>
-              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
-                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
-                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            </div>
-            <div class="ts-minput-hrswrap">
-              <label class="ts-minput-label">Hours</label>
-              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
-                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
-                onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
-                onchange="onTsCellChange(this)">
-            </div>
-          </div>
-          <div class="ts-minput-row ts-msplit-row" id="msplit-${rid}" style="display:${isSplit ? 'flex' : 'none'}">
-            <div class="ts-minput-jobwrap">
-              <label class="ts-minput-label">Job 2</label>
-              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job2))}" placeholder="Second job"${disabled}
-                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
-                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            </div>
-            <div class="ts-minput-hrswrap">
-              <label class="ts-minput-label">Hrs 2</label>
-              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
-                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
-                onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
-                onchange="onTsCellChange(this)">
-            </div>
-          </div>
-          <div class="ts-mday-actions">
-            <button class="ts-msplit-btn${isSplit ? ' active' : ''}" title="Split: add second job"
-              onclick="toggleMTsSplit('${rid}',this)"${disabled ? ' disabled' : ''}>${isSplit ? '✕ Remove second job' : '＋ Split — add second job'}</button>
-            ${repeatChip}
-          </div>
-        </div>
-      </div>`;
-    });
-
-    html += '</div></div>';
-  });
-
-  html += '</div>';
-  const root = document.getElementById('ts-content');
-  if (root) root.innerHTML = html;
-}
-
-// Single resize listener — re-renders the Timesheets page when the
-// viewport crosses the phone breakpoint (rotation, window resize on
-// browser dev tools). Attached once, idempotent.
-let _tsResizeHooked = false;
-let _tsLastViewportPhone = null;
-function _hookTsResizeOnce() {
-  if (_tsResizeHooked) return;
-  _tsResizeHooked = true;
-  _tsLastViewportPhone = _isPhoneViewport();
-  window.addEventListener('resize', () => {
-    const nowPhone = _isPhoneViewport();
-    if (nowPhone === _tsLastViewportPhone) return;
-    _tsLastViewportPhone = nowPhone;
-    if (document.getElementById('ts-content')) renderTimesheets();
-  });
-}
