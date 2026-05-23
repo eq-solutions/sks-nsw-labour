@@ -92,7 +92,30 @@ function verifyToken(token) {
   } catch (e) { return null; }
 }
 
-// ── Handler ──────────────────────────────────────────────────
+// EQ Shell iframe handoff (Phase 1.C) — ported from eq-solves-field.
+// Shell mints a 60s HMAC token signed with the same EQ_SECRET_SALT and
+// passes it via URL hash (#sh=<token>). The client calls this action to
+// swap it for a 7d session token, skipping the PIN gate entirely.
+// tenant_slug is optional — if present it is passed through so the client
+// can cross-check it against TENANT.ORG_SLUG before granting access.
+function verifyShellToken(token) {
+  try {
+    const [payloadB64, sig] = (token || '').split('.');
+    if (!payloadB64 || !sig) return null;
+    const payload = Buffer.from(payloadB64, 'base64').toString();
+    const expectedSig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
+    if (sig.length !== expectedSig.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return null;
+    const data = JSON.parse(payload);
+    if (data.kind !== 'shell-token') return null;
+    if (typeof data.exp !== 'number' || data.exp < Date.now()) return null;
+    if (!data.name || !data.role) return null;
+    if (data.tenant_slug != null && typeof data.tenant_slug !== 'string') return null;
+    return data;
+  } catch (e) { return null; }
+}
+
+// ── Handler ────────────────────────────────────────���─────────
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers };
@@ -112,6 +135,21 @@ exports.handler = async (event) => {
       if (data) {
         const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
         return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
+      }
+      return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
+    }
+
+    // ── EQ Shell iframe handoff ──────────────────────────────
+    if (body.action === 'verify-shell-token') {
+      const data = verifyShellToken(body.token);
+      if (data) {
+        const detail = 'shell-token' + (data.tenant_slug ? (':' + data.tenant_slug) : '');
+        await logAttempt(data.name, true, ip, detail);
+        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
+        return {
+          statusCode: 200, headers,
+          body: JSON.stringify({ valid: true, name: data.name, role: data.role, tenant_slug: data.tenant_slug || null, sessionToken })
+        };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }

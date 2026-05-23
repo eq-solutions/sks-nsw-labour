@@ -10,6 +10,70 @@
 const ACCESS_KEY       = 'eq_access_v1';
 const STAFF_TS_SESSION = 'eq_staff_ts';
 
+// ── EQ Shell iframe handoff ───────────────────────────────────
+// Sends a status postMessage to the parent shell (core.eq.solutions).
+// No-ops silently when not in an iframe (window.parent === window).
+function _postHandoffStatus(msg) {
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(
+        Object.assign({ source: 'eq-field-shell-handoff', version: 1 }, msg),
+        '*'
+      );
+    }
+  } catch (e) { /* cross-origin postMessage can throw in restricted contexts */ }
+}
+
+// Reads #sh=<token> from the URL hash, calls verify-pin with
+// action='verify-shell-token', and on success sets sessionStorage so
+// the rest of the app starts as if the user had entered their PIN.
+// Returns true on success, false on any failure (falls through to PIN gate).
+async function _consumeShellToken() {
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  _postHandoffStatus({ kind: 'boot', hasHash: !!hash });
+  if (!hash) return false;
+  const params = new URLSearchParams(hash);
+  const token = params.get('sh');
+  if (!token) {
+    _postHandoffStatus({ kind: 'no-sh-param' });
+    return false;
+  }
+  // Clear the hash so the one-shot token is never stored in browser history.
+  try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
+  try {
+    const resp = await fetch('/.netlify/functions/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify-shell-token', token })
+    });
+    if (!resp.ok) {
+      _postHandoffStatus({ kind: 'http-error', status: resp.status });
+      return false;
+    }
+    const data = JSON.parse(await resp.text());
+    if (!data.valid) {
+      _postHandoffStatus({ kind: 'rejected' });
+      return false;
+    }
+    if (data.tenant_slug && data.tenant_slug !== TENANT.ORG_SLUG) {
+      _postHandoffStatus({ kind: 'tenant-mismatch', expected: TENANT.ORG_SLUG, got: data.tenant_slug });
+      return false;
+    }
+    sessionStorage.setItem(ACCESS_KEY, '1');
+    sessionStorage.setItem('eq_logged_in_name', data.name || '');
+    if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+    if (data.sessionToken) {
+      sessionStorage.setItem('eq_session_token', data.sessionToken);
+      localStorage.setItem('eq_agent_token', data.sessionToken);
+    }
+    _postHandoffStatus({ kind: 'accepted', name: data.name, role: data.role });
+    return true;
+  } catch (e) {
+    _postHandoffStatus({ kind: 'network-error', detail: (e && e.message) || String(e) });
+    return false;
+  }
+}
+
 let staffTsMode   = false;
 let staffTsPerson = null;
 let agencyMode    = false;
@@ -345,7 +409,18 @@ async function checkPin() {
 }
 
 async function checkAccess() {
-  if (sessionStorage.getItem(ACCESS_KEY) === '1') return true;
+  if (sessionStorage.getItem(ACCESS_KEY) === '1') {
+    // Already authenticated — tell the shell overlay to clear.
+    _postHandoffStatus({
+      kind: 'accepted',
+      name: sessionStorage.getItem('eq_logged_in_name') || '',
+      role: sessionStorage.getItem('eq_auto_admin') === '1' ? 'supervisor' : 'staff'
+    });
+    return true;
+  }
+
+  // EQ Shell iframe SSO — try to consume a #sh= token before PIN gate.
+  if (await _consumeShellToken()) return true;
 
   // Local "remember me" restore for tenant-code gate (no server).
   try {
