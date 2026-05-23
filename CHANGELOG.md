@@ -6,6 +6,20 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.91 — Pipeline: Won column "· all shown" label when value filter is active
+
+**Date:** 2026-05-24
+**Scope:** UX clarification — value filter applies to Watch and Likely only.
+
+- **Won column header** — when a value filter (≥$100k etc.) is active, the Won column now shows `· all shown` next to the `100%` label. Won tenders are always visible regardless of the value filter because they are committed work tracked for resource allocation, not prospects being screened.
+- **Value filter tooltip** — `title` attribute added: "Applies to Watch and Likely only — Won tenders always shown".
+
+No logic changes. The filter behaviour (Won exempt) was already correct from v3.4.90; this release makes it legible.
+
+Version stamps: `APP_VERSION = '3.4.91'`, SW cache `eq-field-v3.4.91`.
+
+---
+
 # v3.4.90 — Pipeline bug fixes (Won filter, UUID integrity, import diff, pipeline_enabled nav)
 
 **Date:** 2026-05-24
