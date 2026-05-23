@@ -473,7 +473,7 @@ function renderContacts() {
   const isMobile = window.innerWidth <= 768;
 
   if (isMobile) {
-    const groups   = ['Direct', 'Apprentice', 'Labour Hire'];
+    const groups   = PEOPLE_GROUPS;
     const gColors  = { 'Direct': 'var(--navy)', 'Apprentice': 'var(--purple)', 'Labour Hire': 'var(--navy-3)' };
     let html = '';
     groups.forEach(g => {

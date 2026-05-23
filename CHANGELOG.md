@@ -6,6 +6,21 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.84 — Audit fixes + tender pipeline foundation
+
+**Date:** 2026-05-24
+**Scope:** Four code-quality findings from an internal audit, plus the schema and parser for the tender pipeline (dark — not yet wired into the UI or DB).
+
+- **`netlify/functions/verify-pin.js` — constant-time HMAC compare.** Previous implementation used `===` string comparison, which leaks timing information and is susceptible to timing attacks on the PIN. Replaced with `crypto.timingSafeEqual()` using `Buffer.from()` on both sides, matching the pattern already in `approve-leave.js`.
+- **`.gitignore` added.** Baseline patterns for OS/editor noise and the existing `__perm_test` file. Additive only — no files un-committed.
+- **`PEOPLE_GROUPS` constant extracted to `scripts/app-state.js`.** Previously defined inline in 6 separate places across batch, people, roster, auth, and import-export. Now a single constant; all six sites import from `app-state.js`. Pure refactor — no semantic change.
+- **Apprentices `skills_ratings` reads/writes routed through `sbFetch()`.** Two direct fetch calls in `scripts/apprentices.js` were bypassing the tenant's `TENANT_DISABLED_TABLES` gate and the offline IDB queue. Both calls now go through `sbFetch()`.
+- **Tender pipeline — schema + parser (dark).** `migrations/2026-05-22_tender_pipeline.sql` defines 6 tables, 4 enums, 1 view, 2 trigger functions, and 25 RLS policies for the upstream labour-planning pipeline. `scripts/tender-parser.js` parses the SKS "Open 12m Tenders (State) - NSW" Smartsheet xlsx export into normalised tender rows. Neither file is wired into the app UI; the migration has not been applied to any Supabase project. Both ship in this release as inert code, pending Phase 2 (schema apply) and Phase 3 (UI build).
+
+Version stamps: `APP_VERSION = '3.4.84'`, SW cache `eq-field-v3.4.84`.
+
+---
+
 # v3.4.83.3 — Docs sweep (Help tab + deploy.md)
 
 **Date:** 2026-05-23

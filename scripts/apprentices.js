@@ -1740,18 +1740,10 @@ async function submitSelfAssessment() {
   try {
     if (ratingRows.length) {
       // UPSERT — ON CONFLICT update rating. Send as batch.
-      const res = await fetch(SB_URL + '/rest/v1/skills_ratings', {
-        method: 'POST',
-        headers: {
-          'apikey': SB_KEY,
-          'Authorization': 'Bearer ' + SB_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates,return=minimal',
-        },
-        credentials: 'omit',
-        body: JSON.stringify(ratingRows),
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // sbFetch routes through TENANT_DISABLED_TABLES (skills_ratings is
+      // disabled on SKS, so the call is a no-op there instead of a 404)
+      // and through the offline IDB write queue.
+      await sbFetch('skills_ratings', 'POST', ratingRows, 'resolution=merge-duplicates,return=minimal');
     }
 
     if (Object.keys(customUpdates).length) {
@@ -2174,18 +2166,9 @@ async function submitTradesmanRating() {
 
   try {
     if (ratingRows.length) {
-      const res = await fetch(SB_URL + '/rest/v1/skills_ratings', {
-        method: 'POST',
-        headers: {
-          'apikey': SB_KEY,
-          'Authorization': 'Bearer ' + SB_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates,return=minimal',
-        },
-        credentials: 'omit',
-        body: JSON.stringify(ratingRows),
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // Same as the self-rating path above — sbFetch handles
+      // TENANT_DISABLED_TABLES + offline queue + error throwing.
+      await sbFetch('skills_ratings', 'POST', ratingRows, 'resolution=merge-duplicates,return=minimal');
     }
 
     if (Object.keys(customUpdates).length) {

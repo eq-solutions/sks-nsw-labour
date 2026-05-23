@@ -245,7 +245,7 @@ function renderRoster() {
   const printWeek = document.getElementById('roster-print-week');
   if (printWeek) printWeek.textContent = formatWeekLabel(week);
 
-  const groups = ['Direct', 'Apprentice', 'Labour Hire'].filter(g => !groupFilter || g === groupFilter);
+  const groups = PEOPLE_GROUPS.filter(g => !groupFilter || g === groupFilter);
   const allPeople = groups.flatMap(g => getRosterPeopleForGroup(g));
 
   // Unified table view — desktop and mobile both render the same table,
@@ -478,7 +478,7 @@ function renderEditor() {
   const edLabel   = document.getElementById('editor-week-label');
   if (edLabel) edLabel.textContent = formatWeekLabel(week);
 
-  const groups    = ['Direct', 'Apprentice', 'Labour Hire'];
+  const groups    = PEOPLE_GROUPS;
   const gIcon     = { 'Direct':'⚡', 'Apprentice':'🎓', 'Labour Hire':'🔧' };
   const days      = ['mon','tue','wed','thu','fri','sat','sun'];
   const dayLabels = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };

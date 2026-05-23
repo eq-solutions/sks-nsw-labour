@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.83.3';
+const APP_VERSION = '3.4.84';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -58,6 +58,14 @@ let TENANT = {
 let SB_URL         = '';
 let SB_KEY         = '';
 let MANAGER_PASSWORD = '';
+
+// Worker group categories — the three buckets used across the roster,
+// contacts, batch-fill, and the gate's name picker. Single source of
+// truth so a future rename (e.g. "Labour Hire" → "Sub-contractor")
+// stays a one-line change instead of a 5+ file sweep. Files that
+// prepend / append (e.g. auth.js gate adds "Supervision" up front)
+// spread this and decorate.
+const PEOPLE_GROUPS = ['Direct', 'Apprentice', 'Labour Hire'];
 
 // Tables that get auto org_id filtering/stamping
 // (used by scripts/supabase.js — _isOrgTable lives there)
