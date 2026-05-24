@@ -148,9 +148,11 @@
     _setStatus('<div style="color:var(--ink-2);font-size:13px">Comparing with existing…</div>');
     var existing = [];
     try {
-      // tenders is in ORG_TABLES — org_id filter auto-applied
-      // missing_import_count included so confirm() can increment it for absent tenders
-      var rows = await sbFetch('tenders?select=external_ref,probability_pct,quote_value,stage,missing_import_count&limit=5000');
+      // tenders is in ORG_TABLES — org_id filter auto-applied.
+      // below_threshold=eq.false: compare like-for-like (above-threshold xlsx rows vs
+      // above-threshold DB rows). Without this, any below-threshold tender previously
+      // imported with "Include anyway" shows as MISSING every subsequent run.
+      var rows = await sbFetch('tenders?select=external_ref,probability_pct,quote_value,stage,missing_import_count&below_threshold=eq.false&limit=5000');
       existing = Array.isArray(rows) ? rows : [];
     } catch (e) { /* non-fatal — diff will show all as new */ }
 
