@@ -661,6 +661,14 @@ function renderSchedule() {
     const isOff = !s || isLeave(s);
     const st    = STATE.sites.find(x => x.abbr === s);
 
+    // Co-workers at same site this day — show only when total crew ≤ 3
+    const coworkers = (!isOff && s)
+      ? (STATE.schedule || [])
+          .filter(r => r.name !== name && r.week === week && r[d] === s)
+          .map(r => r.name)
+      : [];
+    const showCoworkers = coworkers.length >= 1 && coworkers.length <= 2;
+
     const wrapExtra = isToday ? 'border-left:3px solid #1F335C;' : isPast ? 'opacity:0.5;' : '';
 
     return `<div style="display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);${wrapExtra}">
@@ -676,7 +684,8 @@ function renderSchedule() {
           : `<div style="font-size:13.5px;font-weight:700;color:${color}">${esc(fullN)}</div>
              ${addr ? `<div style="font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:5px"><span>📍</span>${esc(addr)}</div>` : ''}
              ${fullN !== s && s ? `<div style="font-size:10px;color:var(--ink-4);font-family:monospace;margin-top:1px">${esc(s)}</div>` : ''}
-             ${st && st.site_lead ? `<div style="font-size:11px;color:var(--navy);margin-top:3px;display:flex;align-items:center;gap:5px"><span>👤</span><strong>${esc(st.site_lead)}</strong>${st.site_lead_phone ? ` — <a href="tel:${st.site_lead_phone}" style="color:var(--blue);text-decoration:none">${st.site_lead_phone}</a>` : ''}</div>` : ''}`
+             ${st && st.site_lead ? `<div style="font-size:11px;color:var(--navy);margin-top:3px;display:flex;align-items:center;gap:5px"><span>👤</span><strong>${esc(st.site_lead)}</strong>${st.site_lead_phone ? ` — <a href="tel:${st.site_lead_phone}" style="color:var(--blue);text-decoration:none">${st.site_lead_phone}</a>` : ''}</div>` : ''}
+             ${showCoworkers ? `<div style="font-size:11px;color:var(--ink-3);margin-top:3px;display:flex;align-items:center;gap:5px"><span>🤝</span>${coworkers.map(n => esc(n)).join(', ')}</div>` : ''}`
         }
       </div>
       ${!isOff && addr

@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.10 — My Schedule: show co-workers at same site
+
+**Date:** 2026-05-24
+**Scope:** My Schedule day cards — crew awareness.
+
+- Each day card now shows a 🤝 line with the name(s) of anyone else rostered to the same site that day
+- Only shown when total crew at that site is ≤ 3 (1–2 co-workers) — larger teams are hidden to keep the cards clean
+
+---
+
 # v3.10.9 — Week default: always open on current week
 
 **Date:** 2026-05-24
