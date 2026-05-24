@@ -130,22 +130,16 @@
     var html = '';
     if (_addingJob) html += _addJobPanel();
 
+    // Full-width stacked layout — chart on top, card grid below
     if (_floatChart) {
-      // Chart is floating — jobs go full-width, small dock button at top
-      html += '<div style="margin-bottom:12px">' +
+      html += '<div style="margin-bottom:16px">' +
         '<button class="btn btn-secondary btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()">⊞ Dock chart</button>' +
       '</div>';
-      html += _needsAllocSection(won) + _confirmedSection(confirmed);
     } else {
-      // Resizable two-column split
-      html += '<div id="ra-split" style="display:flex">';
-      html += '<div id="ra-left" style="flex:0 0 ' + _splitPct + '%;min-width:200px;overflow:hidden;display:flex;flex-direction:column">' + _capacitySection() + '</div>';
-      html += '<div id="ra-divider" title="Drag to resize" style="flex-shrink:0;width:16px;align-self:stretch;cursor:col-resize;display:flex;align-items:center;justify-content:center">' +
-        '<div id="ra-divider-bar" style="width:3px;height:36px;background:#e2e8f0;border-radius:2px;pointer-events:none"></div>' +
-      '</div>';
-      html += '<div id="ra-right" style="flex:1;min-width:180px;overflow:hidden">' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
-      html += '</div>';
+      html += _capacitySection();
     }
+    html += _confirmedSection(confirmed);
+    html += _needsAllocSection(won);
 
     el.innerHTML = html;
 
@@ -154,7 +148,6 @@
     } else {
       var stalePanel = document.getElementById('ra-float-panel');
       if (stalePanel) stalePanel.remove();
-      _initSplitter();
     }
     if (_openPanel) suggestWorkers(_openPanel);
   }
@@ -421,7 +414,7 @@
       return e && e.start_date_estimated && e.peak_workers && e.duration_weeks;
     });
 
-    var html = '<div style="flex:1;display:flex;flex-direction:column">';
+    var html = '<div style="margin-bottom:24px">';
     html += '<div style="display:flex;align-items:center;margin-bottom:16px">' +
       '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2)">CAPACITY PLANNING — NEXT 26 WEEKS</div>' +
       '<div style="flex:1"></div>' +
@@ -446,7 +439,7 @@
       : Math.max(peakDem > 0 ? Math.ceil(peakDem * 1.5) : 10, 10);
     var maxVal  = Math.max(scaleMax, 1);
     var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
-    var CHART_H = 260;
+    var CHART_H = 220;
 
     // Y-axis: pick a clean interval (target 5-6 labels)
     var yIntervals = [1,2,5,10,20,25,50,100,200,500];
@@ -466,8 +459,8 @@
     if (lockedVal) html += _statPill('Locked in', '$' + _fmtK(lockedVal), 'contracted', '#166534');
     html += '</div>';
 
-    // ── Chart card — flex:1 so it fills the remaining left-column height
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px;flex:1">';
+    // ── Chart card
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px">';
 
     // Y-axis + bars row
     html += '<div style="display:flex;gap:6px;align-items:flex-end">';
@@ -550,14 +543,14 @@
 
   // ── Needs allocation ───────────────────────────────────────
   function _needsAllocSection(wonTenders) {
-    var html = '<div class="roster-card" style="margin-bottom:20px">';
-    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);margin-bottom:14px">NEEDS ALLOCATION (' + wonTenders.length + ')</div>';
+    if (!wonTenders.length) return ''; // nothing to show — don't waste space
 
-    if (!wonTenders.length) {
-      html += '<div style="padding:20px 0 4px;text-align:center;color:var(--ink-3);font-size:13px">No Won tenders waiting for allocation.<br>Move tenders to Won on the Pipeline board.</div>';
-      html += '</div>';
-      return html;
-    }
+    var html = '<div style="margin-bottom:24px">';
+    // Section header
+    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">';
+    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:#f97316;white-space:nowrap">NEEDS ALLOCATION (' + wonTenders.length + ')</div>';
+    html += '<div style="flex:1;height:1px;background:#fed7aa"></div>';
+    html += '</div>';
 
     wonTenders.forEach(function (t) {
       var id   = String(t.id);
@@ -794,90 +787,92 @@
 
   // ── Phase B: Confirmed jobs ────────────────────────────────
   function _confirmedSection(confirmed) {
-    var html = '<div style="margin-bottom:4px">';
-    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);margin-bottom:16px">CONFIRMED JOBS (' + confirmed.length + ')</div>';
+    if (!confirmed.length) return '';
 
-    if (!confirmed.length) {
-      html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--ink-3);font-size:13px">No confirmed jobs yet.</div>';
-      html += '</div>';
-      return html;
-    }
+    var html = '<div style="margin-bottom:28px">';
+    // Section header with ruled line
+    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">';
+    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);white-space:nowrap">CONFIRMED JOBS (' + confirmed.length + ')</div>';
+    html += '<div style="flex:1;height:1px;background:#e2e8f0"></div>';
+    html += '</div>';
+
+    // Horizontal card grid
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:' + (_openConfirmedPanel ? '16px' : '0') + '">';
 
     confirmed.forEach(function (t) {
       var id       = String(t.id);
       var enr      = _enr[id] || {};
       var nom      = _noms[id] || { pm: null, supervisor: null };
-      var pmN      = nom.pm       ? _mgrName(nom.pm.person_id)       : null;
+      var pmN      = nom.pm         ? _mgrName(nom.pm.person_id)         : null;
       var spN      = nom.supervisor ? _mgrName(nom.supervisor.person_id) : null;
       var rows     = _pending[id] || [];
       var isOpen   = _openConfirmedPanel === id;
+      var accent   = _tenderColor(id);
       var unpushed = rows.filter(function (r) { return !r._pushed; });
       var hasPushed = rows.some(function (r) { return r._pushed; });
-      var accent   = _tenderColor(id);
 
-      // Status badge
       var badge = '';
       if (unpushed.length) {
-        badge = '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:20px;font-weight:600">' + unpushed.length + ' to assign</span>';
+        badge = '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:600">' + unpushed.length + ' to assign</span>';
       } else if (hasPushed || (enr.peak_workers && enr.duration_weeks)) {
-        badge = '<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 9px;border-radius:20px;font-weight:600">✓ On roster</span>';
+        badge = '<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:20px;font-weight:600">✓ On roster</span>';
       }
 
-      html += '<div id="ra-conf-row-' + id + '" style="border:1px solid #e2e8f0;border-left:4px solid ' + accent + ';border-radius:10px;margin-bottom:12px;background:#fff;overflow:hidden">';
+      html += '<div id="ra-conf-row-' + id + '" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" ' +
+        'style="cursor:pointer;background:#fff;' +
+        'border:1px solid ' + (isOpen ? accent : '#e2e8f0') + ';' +
+        'border-top:4px solid ' + accent + ';' +
+        'border-radius:10px;padding:16px 18px 14px;' +
+        'user-select:none;-webkit-user-select:none;' +
+        (isOpen ? 'box-shadow:0 0 0 3px ' + accent + '28' : 'transition:box-shadow .15s') + '">';
 
-      // Clickable header
-      html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" style="padding:16px 18px 14px;cursor:pointer;user-select:none;-webkit-user-select:none">';
-
-      // Top row: ref chip + badge + chevron
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+      // Ref chip + badge
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
       html += '<span style="font-size:10px;font-family:monospace;background:#f1f5f9;color:var(--ink-2);padding:2px 7px;border-radius:4px">' + _esc(t.external_ref || '—') + '</span>';
       if (badge) html += badge;
       html += '<div style="flex:1"></div>';
-      html += '<div style="font-size:12px;color:var(--ink-3)">' + (isOpen ? '▲' : '▼') + '</div>';
+      html += '<div style="font-size:11px;color:var(--ink-3)">' + (isOpen ? '▲' : '▼') + '</div>';
       html += '</div>';
 
-      // Job name
-      html += '<div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.job_name || '—') + '</div>';
-      if (t.client) {
-        html += '<div style="font-size:11px;color:var(--ink-3);margin-bottom:12px">' + _esc(t.client) + (t.vertical ? ' · ' + _esc(t.vertical) : '') + '</div>';
-      }
+      // Job name + client
+      html += '<div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.job_name || '—') + '</div>';
+      if (t.client) html += '<div style="font-size:11px;color:var(--ink-3);margin-bottom:14px">' + _esc(t.client) + (t.vertical ? ' · ' + _esc(t.vertical) : '') + '</div>';
 
-      // Metrics row
-      html += '<div style="display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap">';
-      if (enr.peak_workers) {
-        html += '<div><div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1">' + enr.peak_workers + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">workers</div></div>';
-      }
-      if (enr.duration_weeks) {
-        html += '<div><div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1">' + enr.duration_weeks + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">weeks</div></div>';
-      }
-      if (t.quote_value) {
-        html += '<div><div style="font-size:24px;font-weight:700;color:#16a34a;line-height:1">$' + _fmtK(t.quote_value) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">value</div></div>';
-      }
-      if (enr.hours_estimated) {
-        html += '<div><div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1">' + _fmtK(enr.hours_estimated) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">hours est.</div></div>';
-      }
-      html += '<div style="flex:1"></div>';
-      // PM + Sup (right-aligned in same row)
+      // Metrics
+      html += '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px">';
+      if (enr.peak_workers)   html += '<div><div style="font-size:22px;font-weight:700;color:var(--navy);line-height:1">' + enr.peak_workers   + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">workers</div></div>';
+      if (enr.duration_weeks) html += '<div><div style="font-size:22px;font-weight:700;color:var(--navy);line-height:1">' + enr.duration_weeks + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">weeks</div></div>';
+      if (t.quote_value)      html += '<div><div style="font-size:22px;font-weight:700;color:#16a34a;line-height:1">$' + _fmtK(t.quote_value) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">value</div></div>';
+      if (enr.hours_estimated) html += '<div><div style="font-size:22px;font-weight:700;color:var(--navy);line-height:1">' + _fmtK(enr.hours_estimated) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">hours est.</div></div>';
+      html += '</div>';
+
+      // PM / Sup
       var people = [];
       if (pmN) people.push(pmN.split(' ')[0] + ' (PM)');
       if (spN) people.push(spN.split(' ')[0] + ' (Sup)');
       if (people.length) {
-        html += '<div style="text-align:right;align-self:flex-end">';
-        people.forEach(function (p) {
-          html += '<div style="font-size:11px;color:var(--ink-2)">' + _esc(p) + '</div>';
-        });
-        html += '</div>';
+        html += '<div style="font-size:11px;color:var(--ink-2);margin-bottom:10px">' + people.map(_esc).join(' · ') + '</div>';
       }
-      html += '</div>'; // metrics
 
       // Mini 26-week timeline strip
       html += _miniTimeline(enr, accent);
 
-      html += '</div>'; // clickable header
-
-      if (isOpen && rows.length) html += _labourCurvePanel(t, rows);
       html += '</div>'; // card
     });
+
+    html += '</div>'; // grid
+
+    // Full-width expansion panel below the grid
+    if (_openConfirmedPanel) {
+      var ot   = confirmed.find(function (t) { return String(t.id) === _openConfirmedPanel; });
+      var oRows = _pending[_openConfirmedPanel] || [];
+      if (ot && oRows.length) {
+        var oacc = _tenderColor(_openConfirmedPanel);
+        html += '<div style="border:1px solid #e2e8f0;border-top:3px solid ' + oacc + ';border-radius:10px;overflow:hidden;background:#fff">';
+        html += _labourCurvePanel(ot, oRows);
+        html += '</div>';
+      }
+    }
 
     html += '</div>';
     return html;
@@ -936,7 +931,7 @@
     var unpushed   = rows.filter(function (r) { return !r._pushed; }).length;
     var siteVal    = _siteCodes[id] || '';
 
-    var html = '<div style="padding:14px 14px 16px;border-top:1px solid #fde68a;background:#fffdf5">';
+    var html = '<div style="padding:16px 18px 18px;background:#fffdf5">';
     html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);margin-bottom:10px">ASSIGN WORKERS TO ROSTER</div>';
 
     // Site code + summary row
