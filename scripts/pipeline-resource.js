@@ -41,7 +41,7 @@
   async function _load() {
     try {
       var results = await Promise.all([
-        sbFetch('tenders?stage=in.(won,confirmed)&archived_at=is.null&order=quote_value.desc.nullslast&limit=500'),
+        sbFetch('tenders?stage=in.(won,confirmed)&archived_at=is.null&below_threshold=eq.false&order=quote_value.desc.nullslast&limit=500'),
         sbFetch('tender_enrichment?select=*&limit=1000'),
         sbFetch('nominations?select=*&limit=2000'),
         sbFetch('people?select=id&archived=eq.false&limit=1000')
