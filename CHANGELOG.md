@@ -6,6 +6,18 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.3 — Sidebar restructure: Job Numbers live, Pipeline section, Testing removed
+
+**Date:** 2026-05-24
+**Scope:** Nav sidebar cleanup — reduce crowding, promote Job Numbers, clean up hidden pages.
+
+- Job Numbers promoted to Operations section — BETA label removed, now live for all supervisors
+- Pipeline and Resources moved to their own "Pipeline" section — Resources no longer sub-indented
+- Testing section removed entirely — Trial Dashboard and Apprentices hidden from nav
+- Pipeline NEW badge removed (it's been live long enough)
+
+---
+
 # v3.10.2 — My Schedule: today highlight + past day fade
 
 **Date:** 2026-05-24

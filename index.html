@@ -618,7 +618,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.2
+  EQ Solves — Field  v3.10.3
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -2736,6 +2736,12 @@
       <button class="nav-item" onclick="showPage('roster')" id="nav-roster"><span class="nav-icon">⊞</span> Weekly Roster</button>
       <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets</button>
+      <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers</button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Pipeline</div>
+      <button class="nav-item edit-only" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">◈</span> Pipeline</button>
+      <button class="nav-item edit-only" onclick="showPage('pipeline-resource')" id="nav-pipeline-resource"><span class="nav-icon">⬦</span> Resources</button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Manage</div>
@@ -2744,14 +2750,6 @@
       <button class="nav-item" onclick="openAddPerson()" id="nav-addperson"><span class="nav-icon">＋</span> Add Person</button>
       <button class="nav-item" onclick="showPage('data')" id="nav-data"><span class="nav-icon">⇅</span> Import / Export</button>
       <button class="nav-item" onclick="showPage('help')" id="nav-help"><span class="nav-icon">❓</span> Help</button>
-      <button class="nav-item edit-only" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">◈</span> Pipeline <span style="font-size:8px;font-weight:700;color:#16a34a;background:#dcfce7;padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
-      <button class="nav-item edit-only" onclick="showPage('pipeline-resource')" id="nav-pipeline-resource" style="padding-left:32px"><span class="nav-icon" style="font-size:13px">⬦</span> Resources</button>
-    </div>
-    <div class="nav-section">
-      <div class="nav-label">Testing (DO NOT USE)</div>
-      <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
   </div>
   <div class="sidebar-footer" style="padding:0">
