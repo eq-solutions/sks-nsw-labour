@@ -31,6 +31,11 @@
   var _siteCodes = {};   // tenderId → site code string (persists across re-renders)
   var _splitOpen = null; // 'tid:ti:si' — which segment's split-week picker is open
 
+  // Resizable split — persisted across sessions
+  var _splitPct = (function () {
+    try { return parseFloat(localStorage.getItem('ra_split_pct')) || 70; } catch (x) { return 70; }
+  }());
+
   // ── Entry point ───────────────────────────────────────────
   async function renderPipelineResource() {
     var el = document.getElementById('page-pipeline-resource');
@@ -111,15 +116,69 @@
     var html = '';
     if (_addingJob) html += _addJobPanel();
 
-    // Two-column: chart hero left, jobs list right
-    html += '<div style="display:grid;grid-template-columns:minmax(0,5fr) minmax(0,2fr);gap:24px;align-items:start">';
-    html += '<div>' + _capacitySection() + '</div>';
-    html += '<div>' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
+    // Resizable two-column split
+    html += '<div id="ra-split" style="display:flex;align-items:start">';
+    html += '<div id="ra-left" style="flex:0 0 ' + _splitPct + '%;min-width:200px;overflow:hidden">' + _capacitySection() + '</div>';
+    html += '<div id="ra-divider" title="Drag to resize" style="flex-shrink:0;width:16px;align-self:stretch;cursor:col-resize;display:flex;align-items:center;justify-content:center">' +
+      '<div id="ra-divider-bar" style="width:3px;height:36px;background:#e2e8f0;border-radius:2px;pointer-events:none"></div>' +
+    '</div>';
+    html += '<div id="ra-right" style="flex:1;min-width:180px;overflow:hidden">' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
     html += '</div>';
 
     el.innerHTML = html;
 
+    _initSplitter();
     if (_openPanel) suggestWorkers(_openPanel);
+  }
+
+  // ── Resizable splitter ───────────────────────────────────
+  function _initSplitter() {
+    var container = document.getElementById('ra-split');
+    var leftCol   = document.getElementById('ra-left');
+    var handle    = document.getElementById('ra-divider');
+    var bar       = document.getElementById('ra-divider-bar');
+    if (!handle || !container || !leftCol) return;
+
+    var dragging = false;
+    var startX, startLeftW;
+
+    handle.addEventListener('pointerenter', function () {
+      if (bar) bar.style.background = '#94a3b8';
+    });
+    handle.addEventListener('pointerleave', function () {
+      if (!dragging && bar) bar.style.background = '#e2e8f0';
+    });
+
+    handle.addEventListener('pointerdown', function (e) {
+      dragging   = true;
+      startX     = e.clientX;
+      startLeftW = leftCol.getBoundingClientRect().width;
+      handle.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor     = 'col-resize';
+      if (bar) bar.style.background  = '#7C77B9';
+      e.preventDefault();
+    });
+
+    handle.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var totalW = container.getBoundingClientRect().width;
+      var newW   = Math.max(200, Math.min(startLeftW + (e.clientX - startX), totalW - 196));
+      var pct    = (newW / totalW * 100).toFixed(1);
+      leftCol.style.flex = '0 0 ' + pct + '%';
+      _splitPct = parseFloat(pct);
+    });
+
+    function _endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor     = '';
+      if (bar) bar.style.background  = '#e2e8f0';
+      try { localStorage.setItem('ra_split_pct', _splitPct); } catch (x) {}
+    }
+    handle.addEventListener('pointerup',     _endDrag);
+    handle.addEventListener('pointercancel', _endDrag);
   }
 
   // ── Design helpers ────────────────────────────────────────
