@@ -812,6 +812,11 @@
   .ts-fillweek-undo-toast { bottom: 32px; }
 }
 
+/* ── Staff schedule page: hide person picker ────────
+   Staff always see their own schedule — the dropdown
+   is only needed by managers picking another person. */
+body:not(.manager-mode) #page-schedule .filter-row { display: none; }
+
 /* ── 320px emergency overrides ─────────────────────── */
 @media (max-width: 340px) {
   .mobile-nav-item { font-size: 8px; letter-spacing: 0; padding: 3px 0; }

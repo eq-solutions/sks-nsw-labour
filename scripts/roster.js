@@ -589,7 +589,31 @@ function slideScheduleWeek(dir) {
 }
 
 function renderSchedule() {
-  const name = document.getElementById('schedule-person').value;
+  // For staff: always derive name from sessionStorage + fuzzy match against
+  // STATE.people. This is immune to timing issues with refreshPersonSelects()
+  // and means staff never see an empty "select your name" prompt.
+  // Managers use the dropdown as before.
+  let name;
+  if (typeof window.isManager !== 'undefined' && !window.isManager) {
+    const raw = sessionStorage.getItem('eq_logged_in_name') || '';
+    if (raw && window.STATE && Array.isArray(STATE.people) && STATE.people.length) {
+      const m = STATE.people.find(p => p.name === raw)
+             || STATE.people.find(p =>
+                  p.name.toLowerCase() === raw.toLowerCase() ||
+                  p.name.toLowerCase().includes(raw.toLowerCase()) ||
+                  raw.toLowerCase().includes(p.name.toLowerCase())
+                );
+      name = m ? m.name : raw;
+    } else {
+      name = raw;
+    }
+    // Keep dropdown in sync so manager-mode restore still works
+    const sel = document.getElementById('schedule-person');
+    if (sel && name && sel.value !== name) sel.value = name;
+  } else {
+    name = document.getElementById('schedule-person').value;
+  }
+
   const week = STATE.currentWeek;
   const days = ['mon','tue','wed','thu','fri'];
   const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];

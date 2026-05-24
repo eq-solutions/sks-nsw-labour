@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.16
+  EQ Solves — Field  v3.10.17
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3887,6 +3887,10 @@ async function initApp() {
                           String(_m.getFullYear()).slice(-2);
     }
     if (typeof applyStaffMode === 'function') applyStaffMode();
+    // Populate schedule-person dropdown now so navigating to Schedule from
+    // the home tiles is never blank (belt-and-suspenders — renderSchedule
+    // now reads sessionStorage directly, but this keeps the dropdown right).
+    refreshPersonSelects();
     mobileNav('home');
     _earlyHomeShown = true;
   }

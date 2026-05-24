@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.17 — My Schedule: never blank for staff
+
+**Date:** 2026-05-25
+**Scope:** Staff schedule reliability — the core app use-case.
+
+- **`renderSchedule()` now self-sufficient for staff** — instead of relying on the `schedule-person` dropdown being pre-populated by `refreshPersonSelects()`, non-manager renders always derive the name directly from `sessionStorage.eq_logged_in_name` + fuzzy match against `STATE.people`. This eliminates the timing race between the early home render and the sequential data loads — staff always see their schedule regardless of when they navigate there.
+- **`refreshPersonSelects()` called early** — still called right after `loadFromSupabase()` so the dropdown is in sync for manager-mode restore, but it's no longer the critical path for schedule display.
+- **Person picker hidden for staff on mobile** — `body:not(.manager-mode) #page-schedule .filter-row { display: none }` removes the "Select your name above" prompt from non-manager sessions. Staff should never see it.
+
+---
+
 # v3.10.16 — Staff mobile nav: 4-item bar + stripped More drawer
 
 **Date:** 2026-05-25
