@@ -51,9 +51,19 @@
     var el = document.getElementById('page-pipeline-resource');
     if (!el) return;
     _injectStyles();
-    el.innerHTML = _shell();
-    await _load();
-    _render();
+
+    var firstVisit = !document.getElementById('ra-body');
+    if (firstVisit) el.innerHTML = _shell();
+
+    if (_lastLoaded) {
+      // Repeat visit — paint cached data instantly, then silently refresh in background
+      _render();
+      _load().then(function () { _render(); }).catch(function () {});
+    } else {
+      // First visit — wait for data before painting
+      await _load();
+      _render();
+    }
   }
 
   async function refresh() {
