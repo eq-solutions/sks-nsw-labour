@@ -6,6 +6,20 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.8 — Mobile home screen for staff
+
+**Date:** 2026-05-24
+**Scope:** Staff mobile experience — new tile-based home screen.
+
+- **Home screen** — staff on mobile (≤768px) land on a tile screen instead of the raw schedule page. Shows a personalised greeting ("G'day, {first name}" on first visit of the day, date thereafter), a next-shift pill, and 3 action tiles: My Schedule, Timesheets, Leave
+- **Supervisor variant** — managers on mobile get a 5-tile layout (Schedule, Timesheets, Leave, Team, Reports) plus an action strip showing pending leave requests ("All clear" or "X requests to approve")
+- **Cog drawer** — ⚙ button opens a slide-up sheet with role-appropriate links to all other pages; staff get Schedule, Leave, Privacy, Log out; supervisors get the full nav (Edit Roster, Contacts, Sites, Job Numbers, etc.)
+- **Offline aware** — banner shown when `navigator.onLine === false`; re-renders on connectivity change
+- **Topbar + bottom nav hidden** — home page runs edge-to-edge with no chrome; both restored on any navigation away
+- **New files:** `scripts/home.js`, `styles/home.css`
+
+---
+
 # v3.10.7 — Apprentice timesheets: TAFE counts toward 40h + approval indicator
 
 **Date:** 2026-05-24

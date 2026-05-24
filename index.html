@@ -45,6 +45,7 @@
 <link rel="stylesheet" href="styles/print.css">
 <link rel="stylesheet" href="styles/mobile.css">
 <link rel="stylesheet" href="styles/apprentices.css">
+<link rel="stylesheet" href="styles/home.css">
 
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
@@ -84,6 +85,7 @@
 <script src="scripts/pipeline-import.js"></script>
 <script src="scripts/pipeline.js"></script>
 <script src="scripts/pipeline-resource.js"></script>
+<script src="scripts/home.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -618,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.7
+  EQ Solves — Field  v3.10.8
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -2853,6 +2855,8 @@
     <div id="dashboard-anniversaries" style="margin-top:20px"></div>
   </div>
 
+  <div class="page hidden" id="page-home" style="padding:0"></div>
+
   <div class="page hidden" id="page-roster">
     <div id="roster-print-header" style="display:none"></div>
     <div class="legend-bar" id="legend-bar" style="display:none"></div>
@@ -3551,7 +3555,8 @@ const PAGE_TITLES = {
   data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
-  pipeline:'Pipeline', 'pipeline-import':'Import Smartsheet', 'pipeline-resource':'Resource Allocation'
+  pipeline:'Pipeline', 'pipeline-import':'Import Smartsheet', 'pipeline-resource':'Resource Allocation',
+  home:'Home'
 };
 
 function showPage(id) {
@@ -3568,6 +3573,14 @@ function showPage(id) {
   currentPage = id;
   const lb = document.getElementById('legend-bar');
   if (lb) lb.style.display = (id === 'roster') ? '' : 'none';
+
+  // On the home page hide the whole topbar + mobile nav bar so the tile
+  // screen fills edge-to-edge. Restore both when navigating away.
+  const _isMobile = window.innerWidth <= 768;
+  const topbar    = document.querySelector('.topbar');
+  const mobileNav = document.getElementById('mobile-nav');
+  if (topbar)    topbar.style.display    = (id === 'home' && _isMobile) ? 'none' : '';
+  if (mobileNav) mobileNav.style.display = (id === 'home' && _isMobile) ? 'none' : '';
 
   // On the schedule page for non-managers the in-content week nav (v3.10.5)
   // is sufficient — the topbar week picker is redundant and makes the bar
@@ -3614,6 +3627,7 @@ function renderCurrentPage() {
   else if (currentPage === 'pipeline')          { if (typeof SKS_PIPELINE          !== 'undefined') SKS_PIPELINE.renderPipeline(); }
   else if (currentPage === 'pipeline-import')   { if (typeof SKS_PIPELINE_IMPORT   !== 'undefined') SKS_PIPELINE_IMPORT.renderPipelineImport(); }
   else if (currentPage === 'pipeline-resource') { if (typeof SKS_PIPELINE_RESOURCE !== 'undefined') SKS_PIPELINE_RESOURCE.renderPipelineResource(); }
+  else if (currentPage === 'home')              { if (typeof renderHomeScreen === 'function') renderHomeScreen(); }
 }
 
 // ── Week controls ─────────────────────────────────────────────
@@ -3927,8 +3941,12 @@ async function initApp() {
     if (typeof applyAgencyMode === 'function') applyAgencyMode();
   } else if (!isManager) {
     if (typeof applyStaffMode === 'function') applyStaffMode();
-    showPage('schedule');
-    mobileNav('schedule');
+    if (window.innerWidth <= 768) {
+      showPage('home');
+    } else {
+      showPage('schedule');
+      mobileNav('schedule');
+    }
   }
 
   // v3.4.72: seed the state signature now so the first poll cycle doesn't
