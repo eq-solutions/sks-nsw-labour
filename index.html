@@ -618,8 +618,39 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.85
+  EQ Solves — Field  v3.10.0
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.0  (Resource Allocation — polish pass)
+  ────────────────────────────────────────────────────────────
+   • Float placeholder: ghost dock box with "Chart is floating" + Dock button
+     replaces the bare dock button when chart is detached.
+   • Confirmed jobs empty state: 🏗 icon + call to action shown when no
+     confirmed jobs exist yet.
+   • Smart needs-alloc empty state: suppressed when confirmed jobs already
+     exist (full pipeline = good state, no noise).
+   • Partial push feedback: roster push failure toast shows "Partial — N of M
+     written" when some writes succeeded before the error.
+   • Headcount label moved to left edge with dark pill background — no more
+     overlap with chart bars.
+   • Hover tint on job rows and alloc cards via injected <style> (survives
+     all innerHTML re-renders).
+   • Mini timeline tooltip: hovering the 26-week bar shows start date,
+     duration, and end date.
+   • Labour assign panel: white background replaces grey.
+   • N-of-M assigned badge in expansion header — green when fully staffed,
+     amber when partial.
+   • Last-refreshed timestamp + ↻ Refresh button in capacity chart hero.
+   • Auto-scroll: new confirmed job row scrolls into view after Save & Confirm.
+
+  CHANGES IN v3.9.0  (Resource Allocation — audit fixes)
+  ────────────────────────────────────────────────────────────
+   • Float button hidden when chart is already floating (was visible inside
+     its own panel — confusing).
+   • Confirmed jobs table wrapped in overflow-x:auto for narrow screens.
+   • Dead code removed: _statPill() function (unused badge builder).
+   • Dead code removed: _initSplitter() + _splitPct variable (old drag-
+     splitter remnant from an earlier layout experiment).
 
   CHANGES IN v3.4.85  (Tender Pipeline — live UI)
   ────────────────────────────────────────────────────────────

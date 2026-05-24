@@ -6,6 +6,37 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.0 — Resource Allocation: polish pass
+
+**Date:** 2026-05-24
+**Scope:** 11 UX improvements to the Resource Allocation module following audit.
+
+- Float placeholder ghost box when chart is detached (replaces bare dock button)
+- Confirmed jobs empty state with 🏗 icon and call to action
+- Smart needs-alloc empty state — suppressed when confirmed jobs already exist
+- Partial roster push failure feedback ("Partial — N of M written")
+- Headcount label moved to left edge with dark pill background
+- CSS hover tint on job rows and alloc cards (injected `<style>`, survives re-renders)
+- Mini timeline tooltip: start date, duration, end date on hover
+- Labour assign panel: white background
+- N-of-M assigned badge in expansion header (green = full, amber = partial)
+- Last-refreshed timestamp + ↻ Refresh button in capacity chart hero
+- Auto-scroll new confirmed job row into view after Save & Confirm
+
+---
+
+# v3.9.0 — Resource Allocation: audit fixes
+
+**Date:** 2026-05-24
+**Scope:** Four issues caught in post-build audit of the Resource Allocation module.
+
+- Float button hidden when chart is already floating
+- Confirmed jobs table gets `overflow-x:auto` wrapper for narrow screens
+- Dead code removed: `_statPill()` (unused badge builder)
+- Dead code removed: `_initSplitter()` + `_splitPct` (old drag-splitter remnant)
+
+---
+
 # v3.4.92 — Pipeline: final polish sprint
 
 **Date:** 2026-05-24
