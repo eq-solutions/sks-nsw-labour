@@ -31,11 +31,6 @@
   var _siteCodes = {};   // tenderId → site code string (persists across re-renders)
   var _splitOpen = null; // 'tid:ti:si' — which segment's split-week picker is open
 
-  // Resizable split — persisted across sessions
-  var _splitPct = (function () {
-    try { return parseFloat(localStorage.getItem('ra_split_pct')) || 70; } catch (x) { return 70; }
-  }());
-
   // Floating chart panel — persisted across sessions
   var _floatChart = (function () {
     try { return localStorage.getItem('ra_float') === '1'; } catch (x) { return false; }
@@ -150,56 +145,6 @@
       if (stalePanel) stalePanel.remove();
     }
     if (_openPanel) suggestWorkers(_openPanel);
-  }
-
-  // ── Resizable splitter ───────────────────────────────────
-  function _initSplitter() {
-    var container = document.getElementById('ra-split');
-    var leftCol   = document.getElementById('ra-left');
-    var handle    = document.getElementById('ra-divider');
-    var bar       = document.getElementById('ra-divider-bar');
-    if (!handle || !container || !leftCol) return;
-
-    var dragging = false;
-    var startX, startLeftW;
-
-    handle.addEventListener('pointerenter', function () {
-      if (bar) bar.style.background = '#94a3b8';
-    });
-    handle.addEventListener('pointerleave', function () {
-      if (!dragging && bar) bar.style.background = '#e2e8f0';
-    });
-
-    handle.addEventListener('pointerdown', function (e) {
-      dragging   = true;
-      startX     = e.clientX;
-      startLeftW = leftCol.getBoundingClientRect().width;
-      handle.setPointerCapture(e.pointerId);
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor     = 'col-resize';
-      if (bar) bar.style.background  = '#7C77B9';
-      e.preventDefault();
-    });
-
-    handle.addEventListener('pointermove', function (e) {
-      if (!dragging) return;
-      var totalW = container.getBoundingClientRect().width;
-      var newW   = Math.max(200, Math.min(startLeftW + (e.clientX - startX), totalW - 196));
-      var pct    = (newW / totalW * 100).toFixed(1);
-      leftCol.style.flex = '0 0 ' + pct + '%';
-      _splitPct = parseFloat(pct);
-    });
-
-    function _endDrag() {
-      if (!dragging) return;
-      dragging = false;
-      document.body.style.userSelect = '';
-      document.body.style.cursor     = '';
-      if (bar) bar.style.background  = '#e2e8f0';
-      try { localStorage.setItem('ra_split_pct', _splitPct); } catch (x) {}
-    }
-    handle.addEventListener('pointerup',     _endDrag);
-    handle.addEventListener('pointercancel', _endDrag);
   }
 
   // ── Floating chart panel ──────────────────────────────────
@@ -326,14 +271,6 @@
   }
 
   // ── Design helpers ────────────────────────────────────────
-  function _statPill(label, num, unit, accentColor) {
-    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 20px;min-width:120px;flex:1">' +
-      '<div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">' + _esc(label) + '</div>' +
-      '<div style="font-size:32px;font-weight:700;color:' + accentColor + ';line-height:1">' + _esc(String(num)) + '</div>' +
-      (unit ? '<div style="font-size:11px;color:var(--ink-3);margin-top:3px">' + _esc(unit) + '</div>' : '') +
-      '</div>';
-  }
-
   function _tenderColor(tenderId) {
     var id  = String(tenderId);
     var ci  = 0;
@@ -423,9 +360,9 @@
     html += '<div style="display:flex;align-items:center;margin-bottom:20px">' +
       '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,0.45);text-transform:uppercase">Capacity Planning — 26 Weeks</div>' +
       '<div style="flex:1"></div>' +
-      '<button onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" ' +
+      (_floatChart ? '' : '<button onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" ' +
         'style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.65);' +
-        'font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer">⤢ Float</button>' +
+        'font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer">⤢ Float</button>') +
     '</div>';
 
     if (!allocated.length) {
@@ -816,8 +753,9 @@
     html += '<div style="flex:1;height:1px;background:#e2e8f0"></div>';
     html += '</div>';
 
-    // Table
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">';
+    // Table — overflow-x:auto for narrow viewports
+    html += '<div style="overflow-x:auto">';
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;min-width:640px">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
 
     // Header
@@ -899,7 +837,7 @@
 
       html += '</tr>';
     });
-    html += '</tbody></table></div>'; // table + card
+    html += '</tbody></table></div></div>'; // table + border card + scroll wrapper
 
     // Full-width expansion panel below the table
     if (_openConfirmedPanel) {
