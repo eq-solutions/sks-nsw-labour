@@ -41,7 +41,7 @@
   }
 
   function _shell() {
-    return '<div style="max-width:900px;margin:0 auto" id="ra-root">' +
+    return '<div style="max-width:1100px;margin:0 auto" id="ra-root">' +
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">' +
         '<button class="btn btn-secondary btn-sm" onclick="showPage(\'pipeline\')">← Pipeline</button>' +
         '<h2 style="margin:0;font-size:16px;font-weight:700;color:var(--navy)">Resource Allocation</h2>' +
@@ -119,6 +119,48 @@
     if (_openPanel) suggestWorkers(_openPanel);
   }
 
+  // ── Design helpers ────────────────────────────────────────
+  function _statPill(label, value, accentColor) {
+    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 18px;min-width:110px;flex:1">' +
+      '<div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">' + _esc(label) + '</div>' +
+      '<div style="font-size:22px;font-weight:700;color:' + accentColor + ';line-height:1.1">' + _esc(String(value)) + '</div>' +
+      '</div>';
+  }
+
+  function _tenderColor(tenderId) {
+    var id  = String(tenderId);
+    var ci  = 0;
+    var hit = false;
+    _tenders.every(function (t) {
+      var e = _enr[String(t.id)];
+      if (!e || !e.start_date_estimated || !e.peak_workers || !e.duration_weeks) return true;
+      if (String(t.id) === id) { hit = true; return false; }
+      ci++;
+      return true;
+    });
+    return hit ? _CHART_PALETTE[ci % _CHART_PALETTE.length] : '#94a3b8';
+  }
+
+  function _miniTimeline(enr, color) {
+    var NOW  = new Date(); NOW.setHours(0, 0, 0, 0);
+    var WEEK = 7 * 24 * 60 * 60 * 1000;
+    var SEGS = 26;
+    var html = '<div style="display:flex;gap:2px;margin-top:12px">';
+    for (var w = 0; w < SEGS; w++) {
+      var active = false;
+      if (enr.start_date_estimated && enr.duration_weeks) {
+        var start = new Date(enr.start_date_estimated); start.setHours(0, 0, 0, 0);
+        var end   = new Date(start.getTime() + enr.duration_weeks * WEEK);
+        var ws    = new Date(NOW.getTime() + w * WEEK);
+        var we    = new Date(ws.getTime() + WEEK);
+        active = start < we && end > ws;
+      }
+      html += '<div style="flex:1;height:5px;border-radius:1px;background:' + (active ? color : '#e2e8f0') + '"></div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   // ── Capacity planning chart ───────────────────────────────
   var _CHART_PALETTE = [
     '#3b82f6','#10b981','#f59e0b','#8b5cf6',
@@ -165,14 +207,11 @@
       return e && e.start_date_estimated && e.peak_workers && e.duration_weeks;
     });
 
-    var html = '<div class="roster-card" style="margin-bottom:20px">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:' + (allocated.length ? '14' : '0') + 'px">';
-    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2)">CAPACITY PLANNING — NEXT 26 WEEKS</div>';
-    html += '<div style="font-size:12px;color:var(--ink-2)">' + _headcount + ' active staff</div>';
-    html += '</div>';
+    var html = '<div style="margin-bottom:28px">';
+    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);margin-bottom:16px">CAPACITY PLANNING — NEXT 26 WEEKS</div>';
 
     if (!allocated.length) {
-      html += '<div style="padding:20px 0 4px;text-align:center;color:var(--ink-3);font-size:13px">Set start dates and worker counts on Won jobs below to see the demand forecast.</div>';
+      html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--ink-3);font-size:13px">Set start dates and worker counts on Won jobs below to see the demand forecast.</div>';
       html += '</div>';
       return html;
     }
@@ -183,26 +222,41 @@
     var labels  = data.labels;
     var maxVal  = Math.max(_headcount, Math.max.apply(null, totals), 1);
     var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
-    var CHART_H = 100;
+    var peakDem = Math.max.apply(null, totals);
+    var CHART_H = 160;
 
-    // Stacked bars — one column per week, segments per project
-    html += '<div style="display:flex;align-items:flex-end;gap:1px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid var(--border);margin-bottom:4px">';
+    // ── Stat pills
+    var bench = _headcount > 0 ? _headcount - peakDem : null;
+    var lockedVal = _tenders.filter(function (t) { return t.stage === 'confirmed'; })
+      .reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
+    html += _statPill('Peak demand', peakDem + ' workers', peakDem > 0 && peakDem > _headcount ? '#dc2626' : '#1d4ed8');
+    html += _statPill('Active jobs', allocated.length + (allocated.length === 1 ? ' job' : ' jobs'), '#166534');
+    if (bench !== null) html += _statPill('Bench', Math.max(0, bench) + ' available', bench > 0 ? '#374151' : '#dc2626');
+    if (lockedVal) html += _statPill('Locked in', '$' + _fmtK(lockedVal), '#166534');
+    html += '</div>';
+
+    // ── Chart card
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px">';
+
+    // Stacked bars
+    html += '<div style="display:flex;align-items:flex-end;gap:1px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid #e2e8f0;margin-bottom:4px">';
+    // Grid lines
+    [0.25, 0.5, 0.75].forEach(function (pct) {
+      html += '<div style="position:absolute;left:0;right:0;bottom:' + (pct * 100) + '%;border-top:1px solid #f1f5f9;pointer-events:none"></div>';
+    });
     for (var wi = 0; wi < totals.length; wi++) {
       var tot   = totals[wi];
       var barH  = tot > 0 ? Math.max(Math.round((tot / maxVal) * CHART_H), 2) : 0;
       var isGap = _headcount > 0 && tot > _headcount;
-      // Tooltip: total + per-project breakdown
       var tipParts = [labels[wi] + ': ' + tot + ' workers'];
-      bands.forEach(function (b) { if (b.weeks[wi]) tipParts.push(b.name.split(/\s+/).slice(0,3).join(' ') + ': ' + b.weeks[wi]); });
-      var tip = tipParts.join(' | ');
-      html += '<div title="' + _esc(tip) + '" style="flex:1;height:' + barH + 'px;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden' + (isGap ? ';outline:1px solid #dc262680' : '') + '">';
+      bands.forEach(function (b) { if (b.weeks[wi]) tipParts.push(b.name.split(/\s+/).slice(0, 3).join(' ') + ': ' + b.weeks[wi]); });
+      html += '<div title="' + _esc(tipParts.join(' | ')) + '" style="flex:1;height:' + barH + 'px;display:flex;flex-direction:column-reverse;border-radius:2px 2px 0 0;overflow:hidden' + (isGap ? ';box-shadow:0 0 0 1px #fca5a5' : '') + '">';
       if (tot > 0) {
         bands.forEach(function (b, ci) {
           if (!b.weeks[wi]) return;
           html += '<div style="flex:' + b.weeks[wi] + ';background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + '"></div>';
         });
-      } else {
-        html += '<div style="flex:1;background:#f1f5f9"></div>';
       }
       html += '</div>';
     }
@@ -212,27 +266,29 @@
     }
     html += '</div>';
 
-    // X-axis labels
-    html += '<div style="display:flex;gap:1px;margin-bottom:10px">';
+    // X-axis
+    html += '<div style="display:flex;gap:1px;margin-bottom:14px">';
     labels.forEach(function (l, i) {
       html += '<div style="flex:1;font-size:8px;color:var(--ink-3);text-align:center;overflow:hidden">' + (i % 4 === 0 ? l : '') + '</div>';
     });
     html += '</div>';
 
-    // Per-project legend
-    html += '<div style="display:flex;gap:10px 16px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)">';
+    // Legend
+    html += '<div style="display:flex;gap:8px 16px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)">';
     bands.forEach(function (b, ci) {
-      var lbl = b.name.length > 22 ? b.name.slice(0, 20) + '…' : b.name;
+      var lbl = b.name.length > 24 ? b.name.slice(0, 22) + '…' : b.name;
       html += '<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:4px;vertical-align:middle"></span>' + _esc(lbl) + '</span>';
     });
     if (_headcount > 0) {
-      html += '<span style="white-space:nowrap"><span style="display:inline-block;width:14px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>Headcount (' + _headcount + ')</span>';
+      html += '<span style="white-space:nowrap;margin-left:4px"><span style="display:inline-block;width:16px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>Headcount (' + _headcount + ')</span>';
     }
     if (hasGap) {
-      html += '<span style="color:#dc2626;font-weight:600;white-space:nowrap">⚠ Exceeds headcount</span>';
+      html += '<span style="color:#dc2626;font-weight:600;white-space:nowrap;margin-left:4px">⚠ Exceeds headcount</span>';
     }
     html += '</div>';
-    html += '</div>';
+
+    html += '</div>'; // chart card
+    html += '</div>'; // section
     return html;
   }
 
@@ -482,65 +538,89 @@
 
   // ── Phase B: Confirmed jobs ────────────────────────────────
   function _confirmedSection(confirmed) {
-    var total = confirmed.reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
-
-    var html = '<div class="roster-card">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
-    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2)">CONFIRMED JOBS (' + confirmed.length + ')</div>';
-    if (confirmed.length) html += '<div style="font-size:13px;font-weight:700;color:#16a34a">$' + _fmtK(total) + ' locked in</div>';
-    html += '</div>';
+    var html = '<div style="margin-bottom:4px">';
+    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);margin-bottom:16px">CONFIRMED JOBS (' + confirmed.length + ')</div>';
 
     if (!confirmed.length) {
-      html += '<div style="padding:20px 0 4px;text-align:center;color:var(--ink-3);font-size:13px">No confirmed jobs yet.</div>';
+      html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--ink-3);font-size:13px">No confirmed jobs yet.</div>';
       html += '</div>';
       return html;
     }
 
     confirmed.forEach(function (t) {
-      var id    = String(t.id);
-      var enr   = _enr[id] || {};
-      var nom   = _noms[id] || { pm: null, supervisor: null };
-      var pmN   = nom.pm ? _mgrName(nom.pm.person_id) : null;
-      var spN   = nom.supervisor ? _mgrName(nom.supervisor.person_id) : null;
-      var rows  = _pending[id] || [];
-      var isOpen = _openConfirmedPanel === id;
-
+      var id       = String(t.id);
+      var enr      = _enr[id] || {};
+      var nom      = _noms[id] || { pm: null, supervisor: null };
+      var pmN      = nom.pm       ? _mgrName(nom.pm.person_id)       : null;
+      var spN      = nom.supervisor ? _mgrName(nom.supervisor.person_id) : null;
+      var rows     = _pending[id] || [];
+      var isOpen   = _openConfirmedPanel === id;
       var unpushed = rows.filter(function (r) { return !r._pushed; });
       var hasPushed = rows.some(function (r) { return r._pushed; });
+      var accent   = _tenderColor(id);
 
-      var meta = [];
-      if (enr.start_date_estimated) meta.push('Start ' + _esc(enr.start_date_estimated));
-      if (enr.duration_weeks)       meta.push(enr.duration_weeks + 'w');
-      if (enr.peak_workers)         meta.push(enr.peak_workers + ' workers');
-      if (pmN)                      meta.push('PM: ' + _esc(pmN));
-      if (spN)                      meta.push('Sup: ' + _esc(spN));
-
+      // Status badge
       var badge = '';
-      var borderColor = '#bbf7d0';
-      var bgColor     = '#f0fdf4';
       if (unpushed.length) {
-        badge       = ' <span style="font-size:10px;background:#fef9c3;color:#854d0e;padding:1px 6px;border-radius:3px;vertical-align:middle">' + unpushed.length + ' slots to assign</span>';
-        borderColor = '#fde68a';
-        bgColor     = '#fffbeb';
+        badge = '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:20px;font-weight:600">' + unpushed.length + ' to assign</span>';
       } else if (hasPushed || (enr.peak_workers && enr.duration_weeks)) {
-        badge = ' <span style="font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;vertical-align:middle">✓ On roster</span>';
+        badge = '<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 9px;border-radius:20px;font-weight:600">✓ On roster</span>';
       }
 
-      html += '<div id="ra-conf-row-' + id + '" style="border:1px solid ' + borderColor + ';border-radius:8px;margin-bottom:8px;overflow:hidden">';
-      html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;background:' + bgColor + ';user-select:none;-webkit-user-select:none">';
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:11px;font-family:monospace;color:var(--ink-2)">' + _esc(t.external_ref || '—') + '</div>';
-      html += '<div style="font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">' + _esc(t.job_name || '—') + badge + '</div>';
-      html += '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + (meta.length ? meta.join(' · ') : 'No resource details yet') + '</div>';
-      html += '</div>';
-      html += '<div style="text-align:right;flex-shrink:0">';
-      html += '<div style="font-size:14px;font-weight:700;color:#16a34a">' + (t.quote_value ? '$' + _fmtK(t.quote_value) : '—') + '</div>';
-      html += '<div style="font-size:10px;color:' + (unpushed.length ? '#854d0e' : '#16a34a') + ';margin-top:2px">✓ Confirmed ' + (isOpen ? '▲' : '▼') + '</div>';
-      html += '</div>';
+      html += '<div id="ra-conf-row-' + id + '" style="border:1px solid #e2e8f0;border-left:4px solid ' + accent + ';border-radius:10px;margin-bottom:12px;background:#fff;overflow:hidden">';
+
+      // Clickable header
+      html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" style="padding:16px 18px 14px;cursor:pointer;user-select:none;-webkit-user-select:none">';
+
+      // Top row: ref chip + badge + chevron
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+      html += '<span style="font-size:10px;font-family:monospace;background:#f1f5f9;color:var(--ink-2);padding:2px 7px;border-radius:4px">' + _esc(t.external_ref || '—') + '</span>';
+      if (badge) html += badge;
+      html += '<div style="flex:1"></div>';
+      html += '<div style="font-size:12px;color:var(--ink-3)">' + (isOpen ? '▲' : '▼') + '</div>';
       html += '</div>';
 
+      // Job name
+      html += '<div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.job_name || '—') + '</div>';
+      if (t.client) {
+        html += '<div style="font-size:11px;color:var(--ink-3);margin-bottom:12px">' + _esc(t.client) + (t.vertical ? ' · ' + _esc(t.vertical) : '') + '</div>';
+      }
+
+      // Metrics row
+      html += '<div style="display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap">';
+      if (enr.peak_workers) {
+        html += '<div><div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1">' + enr.peak_workers + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">workers</div></div>';
+      }
+      if (enr.duration_weeks) {
+        html += '<div><div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1">' + enr.duration_weeks + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">weeks</div></div>';
+      }
+      if (t.quote_value) {
+        html += '<div><div style="font-size:24px;font-weight:700;color:#16a34a;line-height:1">$' + _fmtK(t.quote_value) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">value</div></div>';
+      }
+      if (enr.hours_estimated) {
+        html += '<div><div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1">' + _fmtK(enr.hours_estimated) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:1px">hours est.</div></div>';
+      }
+      html += '<div style="flex:1"></div>';
+      // PM + Sup (right-aligned in same row)
+      var people = [];
+      if (pmN) people.push(pmN.split(' ')[0] + ' (PM)');
+      if (spN) people.push(spN.split(' ')[0] + ' (Sup)');
+      if (people.length) {
+        html += '<div style="text-align:right;align-self:flex-end">';
+        people.forEach(function (p) {
+          html += '<div style="font-size:11px;color:var(--ink-2)">' + _esc(p) + '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>'; // metrics
+
+      // Mini 26-week timeline strip
+      html += _miniTimeline(enr, accent);
+
+      html += '</div>'; // clickable header
+
       if (isOpen && rows.length) html += _labourCurvePanel(t, rows);
-      html += '</div>';
+      html += '</div>'; // card
     });
 
     html += '</div>';
