@@ -28,6 +28,7 @@
   var _filterVert  = '';
   var _filterValue = 100000; // default: hide <$100k jobs
   var _loading    = false;
+  var _lastImport = null;  // most recent tender_import_runs row
 
   // ── Load ─────────────────────────────────────────────────
   async function _load() {
@@ -65,6 +66,12 @@
         var mRows = await sbFetch('managers?archived=eq.false&select=id,name,category&order=name');
         _managers = Array.isArray(mRows) ? mRows : [];
       }
+
+      // Last import timestamp (non-fatal)
+      try {
+        var iRows = await sbFetch('tender_import_runs?order=imported_at.desc&limit=1&select=imported_at,file_name');
+        _lastImport = (Array.isArray(iRows) && iRows[0]) ? iRows[0] : null;
+      } catch (e) { _lastImport = null; }
     } catch (e) {
       console.error('[pipeline] load error:', e);
     }
@@ -135,7 +142,10 @@
     });
     html +=     '</select>';
     html +=   '</div>';
+    html +=   '<div style="display:flex;align-items:center;gap:10px">';
+    if (_lastImport) html += '<span style="font-size:11px;color:var(--ink-3)" title="' + _esc(_lastImport.file_name || '') + '">Last import: ' + _timeAgo(_lastImport.imported_at) + '</span>';
     html +=   '<button class="btn btn-primary btn-sm" onclick="showPage(\'pipeline-import\')">↑ Import Smartsheet</button>';
+    html +=   '</div>';
     html += '</div>';
 
     // ── Summary strip ──────────────────────────────────────
@@ -195,12 +205,12 @@
       html += '</div>';
     });
 
-    // Confirmed column (collapsed count only)
+    // Confirmed column — click navigates to Resource Allocation
     if (confirmed.length) {
-      html += '<div style="flex:0 0 180px;background:#f0fdf4;border-radius:14px;padding:12px;opacity:.8">';
+      html += '<div onclick="showPage(\'pipeline-resource\')" style="flex:0 0 180px;background:#f0fdf4;border-radius:14px;padding:12px;opacity:.85;cursor:pointer;transition:opacity .12s" onmouseenter="this.style.opacity=\'1\'" onmouseleave="this.style.opacity=\'.85\'">';
       html +=   '<div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:4px">Confirmed</div>';
       html +=   '<div style="font-size:28px;font-weight:700;color:#16a34a">' + confirmed.length + '</div>';
-      html +=   '<div style="font-size:11px;color:#4ade80;margin-top:4px">On the board</div>';
+      html +=   '<div style="font-size:11px;color:#166534;margin-top:4px">→ Resources</div>';
       html += '</div>';
     }
     html += '</div>';
@@ -340,9 +350,6 @@
     html +=   '</div>';
     html +=   '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:4px">Notes</label>';
     html +=     '<textarea class="form-input" id="enr-notes" rows="2" placeholder="Confidence, scope, assumptions…" style="resize:vertical">' + _esc(enr.confidence_notes || '') + '</textarea></div>';
-    html +=   '<button class="btn btn-secondary btn-sm" id="enr-save-btn" onclick="SKS_PIPELINE.saveEnrichment(\'' + t.id + '\')">Save estimates</button>';
-    html += '</div>';
-
     // ── Nominations ───────────────────────────────────────
     html += '<div style="border-top:1px solid var(--border);padding-top:18px">';
     html +=   '<div style="font-size:11px;font-weight:700;color:var(--ink-2);letter-spacing:.06em;margin-bottom:14px">NOMINATIONS</div>';
@@ -355,7 +362,7 @@
     });
     html +=     '</select></div>';
 
-    html +=   '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:4px">Supervisor</label>';
+    html +=   '<div style="margin-bottom:20px"><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:4px">Supervisor</label>';
     html +=     '<select class="form-input" id="nom-sup">';
     html +=       '<option value="">— not nominated —</option>';
     supMgrs.forEach(function (m) {
@@ -363,11 +370,53 @@
     });
     html +=     '</select></div>';
 
-    html +=   '<button class="btn btn-secondary btn-sm" id="nom-save-btn" onclick="SKS_PIPELINE.saveNominations(\'' + t.id + '\')">Save nominations</button>';
+    html +=   '<button class="btn btn-primary btn-sm" id="panel-save-btn" style="width:100%" onclick="SKS_PIPELINE.savePanel(\'' + t.id + '\')">Save</button>';
     html += '</div>';
 
     html += '</div>';
     return html;
+  }
+
+  // ── Save panel (estimates + nominations in one hit) ───────
+  async function savePanel(tenderId) {
+    var btn = document.getElementById('panel-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var enrData = {
+      tender_id:            tenderId,
+      hours_estimated:      _numVal('enr-hours'),
+      peak_workers:         _intVal('enr-workers'),
+      start_date_estimated: _strVal('enr-start') || null,
+      duration_weeks:       _intVal('enr-duration'),
+      confidence_notes:     _strVal('enr-notes'),
+      updated_at:           new Date().toISOString()
+    };
+    var pmId  = _intVal('nom-pm');
+    var supId = _intVal('nom-sup');
+
+    try {
+      // Enrichment upsert
+      var existing = _enrichment[tenderId];
+      if (existing) {
+        await sbFetch('tender_enrichment?tender_id=eq.' + tenderId, 'PATCH', enrData);
+        _enrichment[tenderId] = Object.assign({}, existing, enrData);
+      } else {
+        var rows = await sbFetch('tender_enrichment', 'POST', enrData, 'return=representation');
+        _enrichment[tenderId] = (Array.isArray(rows) && rows[0]) ? rows[0] : enrData;
+      }
+      // Nominations upsert
+      if (!_noms[tenderId]) _noms[tenderId] = { pm: null, supervisor: null };
+      var nom = _noms[tenderId];
+      await Promise.all([
+        _upsertNom(tenderId, 'pm',         pmId,  nom.pm),
+        _upsertNom(tenderId, 'supervisor',  supId, nom.supervisor)
+      ]);
+      showToast('Saved');
+      _refreshCard(tenderId);
+    } catch (e) {
+      showToast('Save failed — ' + e.message);
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   }
 
   // ── Save enrichment ───────────────────────────────────────
@@ -503,6 +552,16 @@
   function _intVal(id) { var e = document.getElementById(id); return (e && e.value !== '') ? parseInt(e.value, 10) : null; }
   function _strVal(id) { var e = document.getElementById(id); return e ? (e.value || '').trim() : ''; }
 
+  function _timeAgo(iso) {
+    var diff = Date.now() - new Date(iso).getTime();
+    var mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return hrs + 'h ago';
+    return Math.floor(hrs / 24) + 'd ago';
+  }
+
   function _esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -517,8 +576,7 @@
     renderPipeline:  renderPipeline,
     openPanel:       openPanel,
     closePanel:      closePanel,
-    saveEnrichment:  saveEnrichment,
-    saveNominations: saveNominations,
+    savePanel:       savePanel,
     setDept:         setDept,
     setVert:         setVert,
     setValueFilter:  setValueFilter,

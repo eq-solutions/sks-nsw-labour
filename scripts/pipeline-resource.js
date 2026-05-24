@@ -360,23 +360,26 @@
     }
 
     try {
-      // Upsert enrichment
-      var enrData = {
+      // Upsert enrichment.
+      // updated_at is intentionally omitted from PATCH — the DB trigger
+      // (trg_tender_enrichment_updated_at) handles it on UPDATE.
+      // It IS included on POST (INSERT) because the trigger only fires on UPDATE.
+      var enrBase = {
         tender_id:            id,
         hours_estimated:      hours,
         peak_workers:         workers,
         start_date_estimated: start,
         duration_weeks:       dur,
-        confidence_notes:     notes,
-        updated_at:           new Date().toISOString()
+        confidence_notes:     notes
       };
       var existing = _enr[id];
       if (existing) {
-        await sbFetch('tender_enrichment?tender_id=eq.' + id, 'PATCH', enrData);
-        _enr[id] = Object.assign({}, existing, enrData);
+        await sbFetch('tender_enrichment?tender_id=eq.' + id, 'PATCH', enrBase);
+        _enr[id] = Object.assign({}, existing, enrBase);
       } else {
-        var rows = await sbFetch('tender_enrichment', 'POST', enrData, 'return=representation');
-        _enr[id] = (Array.isArray(rows) && rows[0]) ? rows[0] : enrData;
+        var enrInsert = Object.assign({ updated_at: new Date().toISOString() }, enrBase);
+        var rows = await sbFetch('tender_enrichment', 'POST', enrInsert, 'return=representation');
+        _enr[id] = (Array.isArray(rows) && rows[0]) ? rows[0] : enrInsert;
       }
 
       // Nominations

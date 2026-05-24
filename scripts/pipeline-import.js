@@ -32,21 +32,29 @@
   }
 
   // ── Module state ─────────────────────────────────────────
-  var _parsed       = null; // { rows:[], errors:[] }
-  var _aboveRows    = [];   // rows with quote_value >= $100k
-  var _belowRows    = [];   // rows with quote_value < $100k (below_threshold flag)
-  var _diff         = null; // diff of _aboveRows against existing
-  var _includeBelow = false; // toggle: also import below-threshold rows
-  var _fileName     = '';
+  var _parsed        = null; // { rows:[], errors:[] }
+  var _aboveRows     = [];   // rows with quote_value >= $100k
+  var _belowRows     = [];   // rows with quote_value < $100k (below_threshold flag)
+  var _diff          = null; // diff of _aboveRows against existing
+  var _includeBelow  = false; // toggle: also import below-threshold rows
+  var _fileName      = '';
+  // Keyed by external_ref — carries current DB state (stage, missing_import_count)
+  // so confirm() can protect confirmed tenders and increment missing counts.
+  var _existingByRef = {};
 
   // ── Render ────────────────────────────────────────────────
-  function renderPipelineImport() {
+  async function renderPipelineImport() {
     var el = document.getElementById('page-pipeline-import');
     if (!el) return;
     _parsed = null; _diff = null; _fileName = '';
-    _aboveRows = []; _belowRows = []; _includeBelow = false;
+    _aboveRows = []; _belowRows = []; _includeBelow = false; _existingByRef = {};
     el.innerHTML = _pageHtml();
     _bindEvents();
+    // Show last import timestamp (non-fatal)
+    try {
+      var runs = await sbFetch('tender_import_runs?order=imported_at.desc&limit=1&select=imported_at,file_name,rows_total');
+      if (Array.isArray(runs) && runs[0]) _showLastImport(runs[0]);
+    } catch (e) { /* non-fatal */ }
   }
 
   function _pageHtml() {
@@ -55,6 +63,7 @@
         '<button class="btn btn-secondary btn-sm" onclick="showPage(\'pipeline\')">← Pipeline</button>' +
         '<h2 style="margin:0;font-size:16px;font-weight:700;color:var(--navy)">Import Smartsheet</h2>' +
       '</div>' +
+      '<div id="imp-last-import"></div>' +
       '<div class="roster-card">' +
         '<div id="imp-drop" style="border:2px dashed var(--border);border-radius:12px;padding:52px 24px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s" onclick="document.getElementById(\'imp-file\').click()">' +
           '<div style="font-size:36px;margin-bottom:8px">📂</div>' +
@@ -140,9 +149,13 @@
     var existing = [];
     try {
       // tenders is in ORG_TABLES — org_id filter auto-applied
-      var rows = await sbFetch('tenders?select=external_ref,probability_pct,quote_value,stage&limit=5000');
+      // missing_import_count included so confirm() can increment it for absent tenders
+      var rows = await sbFetch('tenders?select=external_ref,probability_pct,quote_value,stage,missing_import_count&limit=5000');
       existing = Array.isArray(rows) ? rows : [];
     } catch (e) { /* non-fatal — diff will show all as new */ }
+
+    _existingByRef = {};
+    existing.forEach(function (e) { _existingByRef[e.external_ref] = e; });
 
     _diff = window.SKS_TENDER_PARSER.diffAgainstExisting(_aboveRows, existing);
     _renderDiff(_aboveRows, _diff);
@@ -239,6 +252,13 @@
       Object.keys(r).forEach(function (k) {
         if (EXCLUDE.indexOf(k) === -1) row[k] = r[k];
       });
+      // ── Confirmed stage protection ──────────────────────────────────────
+      // If this tender is already Confirmed in the app (start date set, resources
+      // committed), do NOT let the import reset its stage back to the
+      // probability-derived value. Confirmed is the terminal app-managed stage;
+      // Smartsheet probability no longer drives it.
+      var dbRow = _existingByRef[r.external_ref];
+      if (dbRow && dbRow.stage === 'confirmed') row.stage = 'confirmed';
       return row;
     });
 
@@ -257,6 +277,27 @@
     }
 
     if (ok) {
+      // ── Missing import count ────────────────────────────────────────────
+      // Tenders in the DB but absent from this import get their missing_import_count
+      // incremented. At 2 consecutive misses the tender is archived — it has
+      // probably been closed or removed from Smartsheet. Confirmed tenders are
+      // excluded: a job on-site won't appear in an open-tenders export.
+      if (_diff && _diff.missing.length) {
+        var missingPatches = _diff.missing
+          .filter(function (m) { return m.stage !== 'confirmed'; })
+          .map(function (m) {
+            var newCount = (m.missing_import_count || 0) + 1;
+            var patch = { missing_import_count: newCount };
+            if (newCount >= 2) { patch.archived_at = now; patch.stage = 'archived'; }
+            return sbFetch(
+              'tenders?external_ref=eq.' + m.external_ref + '&org_id=eq.' + TENANT.ORG_UUID,
+              'PATCH', patch
+            );
+          });
+        try { await Promise.all(missingPatches); }
+        catch (e) { console.warn('[pipeline-import] missing count patch failed:', e); }
+      }
+
       // Record import run (non-fatal if this fails)
       try {
         var stats = window.SKS_TENDER_PARSER.summariseImport(_diff, rowsToUpsert);
@@ -286,6 +327,26 @@
     var btn = document.getElementById('imp-confirm-btn');
     var count = _includeBelow ? (_aboveRows.length + _belowRows.length) : _aboveRows.length;
     if (btn) btn.textContent = 'Confirm Import (' + count + ')';
+  }
+
+  // ── Last import timestamp ─────────────────────────────────
+  function _showLastImport(run) {
+    var el = document.getElementById('imp-last-import');
+    if (!el || !run) return;
+    var parts = ['Last import: <strong>' + _timeAgo(run.imported_at) + '</strong>'];
+    if (run.file_name)  parts.push(_esc(run.file_name));
+    if (run.rows_total) parts.push(run.rows_total + ' tenders');
+    el.innerHTML = '<div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">' + parts.join(' · ') + '</div>';
+  }
+
+  function _timeAgo(iso) {
+    var diff = Date.now() - new Date(iso).getTime();
+    var mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return hrs + 'h ago';
+    return Math.floor(hrs / 24) + 'd ago';
   }
 
   // ── DOM helpers ───────────────────────────────────────────
