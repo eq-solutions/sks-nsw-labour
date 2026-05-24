@@ -110,9 +110,12 @@
 
     var html = '';
     if (_addingJob) html += _addJobPanel();
-    html += _capacitySection();
-    html += _needsAllocSection(won);
-    html += _confirmedSection(confirmed);
+
+    // Two-column: chart hero left, jobs list right
+    html += '<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px;align-items:start">';
+    html += '<div>' + _capacitySection() + '</div>';
+    html += '<div>' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
+    html += '</div>';
 
     el.innerHTML = html;
 
