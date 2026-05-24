@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.9 — Week default: always open on current week
+
+**Date:** 2026-05-24
+**Scope:** Week selector default on page load.
+
+- Page always opens on this week's Monday — stale localStorage value no longer overrides the default. Supervisors who reviewed an old week last session will now land on the current week on next load.
+
+---
+
 _Rolling changelog for `sks-nsw-labour` — the SKS deployment of EQ Solves Field. EQ owns the code; this repo is the stable deploy lane for SKS, forked from `eq-solves-field` so the live SKS app isn't churned by active EQ Field development. Most recent release first. Older entries below were written when this code lived in `eq-solves-field` and reference its demo→main flow — that flow no longer applies here._
 
 _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in and removed._

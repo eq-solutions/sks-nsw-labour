@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.8
+  EQ Solves — Field  v3.10.9
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3908,8 +3908,8 @@ async function initApp() {
     mon.setDate(d.getDate() - d.getDay() + 1);
     return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
   })();
-  const savedWeek = STATE.currentWeek;
-  const weekToUse = allWeeks.includes(savedWeek) ? savedWeek : (allWeeks.includes(todayStr) ? todayStr : allWeeks[0]);
+  // Always open on this week — never restore a stale saved week across sessions.
+  const weekToUse = allWeeks.includes(todayStr) ? todayStr : allWeeks[allWeeks.length - 1];
   STATE.currentWeek = weekToUse;
   sel.value = weekToUse;
 
