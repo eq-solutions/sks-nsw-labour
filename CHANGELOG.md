@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.12 — Home screen: fix shift lookup for partial gate names
+
+**Date:** 2026-05-24
+**Scope:** Bug fix — home screen shift pill and count.
+
+- `getLoggedInName()` now fuzzy-matches the sessionStorage name against `STATE.people`, mirroring the same resolution logic in `refreshPersonSelects()`. Fixes "No shifts this week" when the access gate stores a shorter name (e.g. "Phillip") than the full people record ("Phillip Smith").
+
+---
+
 # v3.10.11 — Home screen: navigation fix, week nav, tidy-up
 
 **Date:** 2026-05-24

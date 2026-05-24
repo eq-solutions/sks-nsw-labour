@@ -23,7 +23,21 @@
   // ── Shared helpers ───────────────────────────────────────────
 
   function getLoggedInName() {
-    try { return sessionStorage.getItem('eq_logged_in_name') || ''; } catch (e) { return ''; }
+    try {
+      const raw = sessionStorage.getItem('eq_logged_in_name') || '';
+      if (!raw || !window.STATE || !Array.isArray(STATE.people)) return raw;
+      // Exact match — common case
+      if (STATE.people.find(p => p.name === raw)) return raw;
+      // Fuzzy match — mirrors refreshPersonSelects() so partial gate names
+      // (e.g. "Phillip" stored but "Phillip Smith" in STATE) still resolve
+      const lower = raw.toLowerCase();
+      const fuzzy = STATE.people.find(p =>
+        p.name.toLowerCase() === lower ||
+        p.name.toLowerCase().includes(lower) ||
+        lower.includes(p.name.toLowerCase())
+      );
+      return fuzzy ? fuzzy.name : raw;
+    } catch (e) { return ''; }
   }
 
   function getTodayKey() {
