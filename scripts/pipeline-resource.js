@@ -29,7 +29,8 @@
   var _ca        = {};   // tenderId → { tracks: [{label,weekStrs[],rowIds[],segments:[{fromIdx,toIdx,personId}]}] }
   var _wplan     = {};   // tenderId → pending write plan awaiting conflict resolution
   var _siteCodes = {};   // tenderId → site code string (persists across re-renders)
-  var _splitOpen = null; // 'tid:ti:si' — which segment's split-week picker is open
+  var _splitOpen   = null; // 'tid:ti:si' — which segment's split-week picker is open
+  var _lastLoaded  = null; // Date of last successful data load
 
   // Floating chart panel — persisted across sessions
   var _floatChart = (function () {
@@ -49,9 +50,27 @@
     if (old) old.remove();
     var el = document.getElementById('page-pipeline-resource');
     if (!el) return;
+    _injectStyles();
     el.innerHTML = _shell();
     await _load();
     _render();
+  }
+
+  async function refresh() {
+    var bodyEl = document.getElementById('ra-body');
+    if (bodyEl) bodyEl.innerHTML = '<div style="color:var(--ink-3);font-size:12px;padding:12px 0">Refreshing…</div>';
+    await _load();
+    _render();
+  }
+
+  function _injectStyles() {
+    if (document.getElementById('ra-styles')) return;
+    var s = document.createElement('style');
+    s.id = 'ra-styles';
+    s.textContent =
+      '#ra-body .ra-job-row:not(.ra-open):hover { background-color: #f0f7ff !important; }' +
+      '#ra-body .ra-alloc-row:hover { background-color: #f5f9ff !important; }';
+    document.head.appendChild(s);
   }
 
   function _shell() {
@@ -109,6 +128,7 @@
         var mRows = await sbFetch('managers?archived=eq.false&select=id,name,category&order=name');
         _managers = Array.isArray(mRows) ? mRows : [];
       }
+      _lastLoaded = new Date();
     } catch (e) {
       console.error('[pipeline-resource] load failed:', e);
     }
@@ -127,8 +147,12 @@
 
     // Full-width stacked layout — chart on top, card grid below
     if (_floatChart) {
-      html += '<div style="margin-bottom:16px">' +
-        '<button class="btn btn-secondary btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()">⊞ Dock chart</button>' +
+      html += '<div style="background:rgba(31,51,92,0.05);border:2px dashed rgba(31,51,92,0.15);border-radius:16px;' +
+        'padding:36px 32px;margin-bottom:28px;display:flex;align-items:center;justify-content:center;min-height:110px">' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(31,51,92,0.3);text-transform:uppercase;margin-bottom:10px">Chart is floating</div>' +
+          '<button class="btn btn-secondary btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()">⊞ Dock chart</button>' +
+        '</div>' +
       '</div>';
     } else {
       html += _capacitySection();
@@ -289,7 +313,16 @@
     var NOW  = new Date(); NOW.setHours(0, 0, 0, 0);
     var WEEK = 7 * 24 * 60 * 60 * 1000;
     var SEGS = 26;
-    var html = '<div style="display:flex;gap:2px">';
+    var tip  = 'No schedule set';
+    if (enr.start_date_estimated) {
+      var sd = new Date(enr.start_date_estimated);
+      tip = 'Starts ' + sd.getDate() + '/' + (sd.getMonth() + 1) + '/' + String(sd.getFullYear()).slice(-2);
+      if (enr.duration_weeks) {
+        var ed = new Date(sd.getTime() + enr.duration_weeks * WEEK);
+        tip += ' · ' + enr.duration_weeks + ' weeks · Ends ' + ed.getDate() + '/' + (ed.getMonth() + 1) + '/' + String(ed.getFullYear()).slice(-2);
+      }
+    }
+    var html = '<div title="' + _esc(tip) + '" style="display:flex;gap:2px">';
     for (var w = 0; w < SEGS; w++) {
       var active = false;
       if (enr.start_date_estimated && enr.duration_weeks) {
@@ -357,9 +390,16 @@
     var html = '<div style="background:#1F335C;border-radius:16px;padding:28px 32px 24px;margin-bottom:28px">';
 
     // Header
+    var loadedStr = _lastLoaded
+      ? String(_lastLoaded.getHours()).padStart(2,'0') + ':' + String(_lastLoaded.getMinutes()).padStart(2,'0')
+      : '';
     html += '<div style="display:flex;align-items:center;margin-bottom:20px">' +
       '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,0.45);text-transform:uppercase">Capacity Planning — 26 Weeks</div>' +
       '<div style="flex:1"></div>' +
+      (loadedStr ? '<span style="font-size:10px;color:rgba(255,255,255,0.25);margin-right:10px">Updated ' + loadedStr + '</span>' : '') +
+      '<button onclick="SKS_PIPELINE_RESOURCE.refresh()" ' +
+        'style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.45);' +
+        'font-size:10px;padding:3px 10px;border-radius:5px;cursor:pointer;margin-right:8px">↻ Refresh</button>' +
       (_floatChart ? '' : '<button onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" ' +
         'style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.65);' +
         'font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer">⤢ Float</button>') +
@@ -456,7 +496,8 @@
     if (_headcount > 0) {
       var hcPct = _headcount / maxVal * 100;
       html += '<div style="position:absolute;left:0;right:0;bottom:' + hcPct + '%;border-top:2px dashed rgba(252,165,165,0.75);pointer-events:none">' +
-        '<span style="position:absolute;right:0;top:-16px;font-size:9px;color:rgba(252,165,165,0.9);font-weight:700;letter-spacing:.02em">' + _headcount + '</span>' +
+        '<span style="position:absolute;left:4px;top:-14px;font-size:9px;color:rgba(252,165,165,0.95);font-weight:700;' +
+          'letter-spacing:.02em;background:rgba(31,51,92,0.75);padding:1px 5px;border-radius:3px">HC ' + _headcount + '</span>' +
       '</div>';
     }
     html += '</div>'; // bars
@@ -499,7 +540,16 @@
 
   // ── Needs allocation ───────────────────────────────────────
   function _needsAllocSection(wonTenders) {
-    if (!wonTenders.length) return ''; // nothing to show — don't waste space
+    if (!wonTenders.length) {
+      // If confirmed jobs are visible above, stay quiet — empty needs-alloc is a good state
+      var hasConfirmed = _tenders.some(function (t) { return t.stage === 'confirmed'; });
+      if (hasConfirmed) return '';
+      return '<div style="text-align:center;padding:48px 20px;color:var(--ink-3)">' +
+        '<div style="font-size:22px;margin-bottom:10px">📋</div>' +
+        '<div style="font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:5px">Nothing in the pipeline yet</div>' +
+        '<div style="font-size:12px">Won jobs from the Pipeline will appear here to be scheduled and confirmed.</div>' +
+      '</div>';
+    }
 
     var html = '<div style="margin-bottom:24px">';
     // Section header
@@ -522,7 +572,7 @@
       var chipHtml = chips.length ? chips.join('') : '<span style="font-size:10px;color:#f97316;font-weight:600">Not allocated</span>';
 
       html += '<div id="ra-row-' + id + '" style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">';
-      html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openPanel(\'' + id + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;background:' + (isOpen ? '#f0f9ff' : 'transparent') + ';user-select:none;-webkit-user-select:none">';
+      html += '<div class="ra-alloc-row" onpointerdown="SKS_PIPELINE_RESOURCE.openPanel(\'' + id + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;background:' + (isOpen ? '#f0f9ff' : 'transparent') + ';user-select:none;-webkit-user-select:none">';
       html += '<div style="flex:1;min-width:0">';
       html += '<div style="font-size:11px;font-family:monospace;color:var(--ink-2)">' + _esc(t.external_ref || '—') + '</div>';
       html += '<div style="font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">' + _esc(t.job_name || '—') + '</div>';
@@ -743,7 +793,19 @@
 
   // ── Phase B: Confirmed jobs ────────────────────────────────
   function _confirmedSection(confirmed) {
-    if (!confirmed.length) return '';
+    if (!confirmed.length) {
+      return '<div style="margin-bottom:28px">' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
+          '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-3);white-space:nowrap">CONFIRMED JOBS</div>' +
+          '<div style="flex:1;height:1px;background:#e2e8f0"></div>' +
+        '</div>' +
+        '<div style="text-align:center;padding:32px 20px;background:#fafafa;border:1px dashed #e2e8f0;border-radius:12px">' +
+          '<div style="font-size:24px;margin-bottom:8px">🏗</div>' +
+          '<div style="font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:4px">No confirmed jobs yet</div>' +
+          '<div style="font-size:12px;color:var(--ink-3)">Fill in details on a Won job below, then hit <strong>Save &amp; Confirm</strong> to move it here.</div>' +
+        '</div>' +
+      '</div>';
+    }
 
     var html = '<div style="margin-bottom:28px">';
 
@@ -794,7 +856,8 @@
       var rowBg = isOpen ? accent + '0d' : (ri % 2 === 0 ? '#fff' : '#fafafa');
       var tdBase = 'padding:12px 14px;vertical-align:middle;border-bottom:1px solid #f1f5f9';
 
-      html += '<tr id="ra-conf-row-' + id + '" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" ' +
+      html += '<tr id="ra-conf-row-' + id + '" class="ra-job-row' + (isOpen ? ' ra-open' : '') + '" ' +
+        'onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" ' +
         'style="cursor:pointer;background:' + rowBg + ';user-select:none;-webkit-user-select:none' + (isOpen ? ';outline:2px solid ' + accent + ';outline-offset:-2px' : '') + '">';
 
       // Job name cell — accent bar + ref + name + client
@@ -903,13 +966,24 @@
     var ca = _ca[id];
     if (!ca || !ca.tracks.length) return '';
 
-    var totalWeeks = ca.tracks[0].weekStrs.length;
-    var totalSlots = rows.length;
-    var unpushed   = rows.filter(function (r) { return !r._pushed; }).length;
-    var siteVal    = _siteCodes[id] || '';
+    var totalWeeks  = ca.tracks[0].weekStrs.length;
+    var totalSlots  = rows.length;
+    var unpushed    = rows.filter(function (r) { return !r._pushed; }).length;
+    var siteVal     = _siteCodes[id] || '';
+    var totalTracks = ca.tracks.length;
+    var assignedTracks = ca.tracks.reduce(function (n, track) {
+      return n + (track.segments.some(function (seg) { return seg.personId; }) ? 1 : 0);
+    }, 0);
+    var badgeColor = assignedTracks === totalTracks
+      ? 'background:#dcfce7;color:#166534'
+      : 'background:#fef3c7;color:#92400e';
 
-    var html = '<div style="padding:16px 18px 18px;background:#fffdf5">';
-    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);margin-bottom:10px">ASSIGN WORKERS TO ROSTER</div>';
+    var html = '<div style="padding:16px 18px 18px;background:#fff">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2)">ASSIGN WORKERS TO ROSTER</div>' +
+      '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;' + badgeColor + '">' +
+        assignedTracks + ' of ' + totalTracks + ' assigned</span>' +
+    '</div>';
 
     // Site code + summary row
     html += '<div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;padding:10px 12px;background:white;border:1px solid var(--border);border-radius:6px">';
@@ -1237,7 +1311,10 @@
 
       _render();
     } catch (e) {
-      showToast('Push failed — ' + e.message);
+      var partialMsg = pushed > 0
+        ? 'Partial — ' + pushed + ' of ' + writePlan.length + ' written. '
+        : '';
+      showToast(partialMsg + 'Push failed — ' + e.message);
       if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push to Roster →'; }
     }
   }
@@ -1329,6 +1406,11 @@
 
       showToast('✓ Active job created — assign workers below');
       _render();
+      // Scroll the new job's table row into view after render settles
+      setTimeout(function () {
+        var newRow = document.getElementById('ra-conf-row-' + String(tender.id));
+        if (newRow) newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 80);
     } catch (e) {
       showToast('Failed — ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = 'Create & Plan Labour →'; }
@@ -1367,6 +1449,7 @@
   // ── Export ─────────────────────────────────────────────────
   window.SKS_PIPELINE_RESOURCE = {
     renderPipelineResource: renderPipelineResource,
+    refresh:                refresh,
     openPanel:              openPanel,
     openConfirmedPanel:     openConfirmedPanel,
     suggestWorkers:         suggestWorkers,
