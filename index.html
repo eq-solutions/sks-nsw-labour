@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.14
+  EQ Solves — Field  v3.10.15
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3863,6 +3863,27 @@ window.addEventListener('beforeprint', function() {
 // ── Init ──────────────────────────────────────────────────────
 async function initApp() {
   await loadFromSupabase();
+
+  // For mobile staff: show the home screen immediately after schedule data
+  // is ready — don't make them wait for supervisor-only loads (leave queue,
+  // job numbers, apprentice data) that the home screen doesn't use.
+  let _earlyHomeShown = false;
+  if (!isManager && window.innerWidth <= 768) {
+    // Set currentWeek now (same formula used in the full block below) so
+    // home.js currentWeekKey() returns the right value before the week
+    // selector is built.
+    if (!STATE.currentWeek) {
+      const _d = new Date(), _m = new Date(_d);
+      _m.setDate(_d.getDate() - _d.getDay() + 1);
+      STATE.currentWeek = String(_m.getDate()).padStart(2,'0') + '.' +
+                          String(_m.getMonth()+1).padStart(2,'0') + '.' +
+                          String(_m.getFullYear()).slice(-2);
+    }
+    if (typeof applyStaffMode === 'function') applyStaffMode();
+    mobileNav('home');
+    _earlyHomeShown = true;
+  }
+
   if (typeof loadLeaveRequests  === 'function') await loadLeaveRequests();
   if (typeof loadLeaveCCList    === 'function') await loadLeaveCCList();
   if (typeof loadJobNumbers     === 'function') await loadJobNumbers();
@@ -3941,7 +3962,13 @@ async function initApp() {
   } else if (!isManager) {
     if (typeof applyStaffMode === 'function') applyStaffMode();
     if (window.innerWidth <= 768) {
-      mobileNav('home');
+      if (_earlyHomeShown) {
+        // Already on home — just re-render to pick up data loaded after
+        // the early render (leave balance etc. if added later).
+        if (typeof renderHomeScreen === 'function') renderHomeScreen();
+      } else {
+        mobileNav('home');
+      }
     } else {
       showPage('schedule');
       mobileNav('schedule');

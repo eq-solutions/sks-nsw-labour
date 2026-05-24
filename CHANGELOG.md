@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.15 — Home screen: show immediately for mobile staff
+
+**Date:** 2026-05-25
+**Scope:** Staff mobile experience — load time.
+
+- **Early render** — staff on mobile now see the home screen as soon as schedule data is ready, without waiting for supervisor-only sequential loads (leave request queue, leave CC list, job numbers, apprentice data). Each of those is a separate Supabase round-trip that staff don't need on the home screen. `mobileNav('home')` is called right after `loadFromSupabase()` completes; the background loads continue and a silent re-render runs when they finish.
+- `STATE.currentWeek` is set early (same formula as the full week-selector block) so `home.js` reads the correct week key before the selector is built.
+
+---
+
 # v3.10.14 — Home screen: fix shift lookup on Sunday
 
 **Date:** 2026-05-25
