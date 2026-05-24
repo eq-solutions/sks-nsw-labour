@@ -252,7 +252,10 @@
           '<span class="eqh-shift-chev">›</span>' +
         '</button>';
 
-    const scheduleSub = shiftCount === 0 ? 'Nothing rostered'
+    const _dbg = shiftCount === 0
+      ? 'Nothing rostered · ' + (name||'(no name)') + ' · ' + week + ' · ' + ((window.STATE&&STATE.schedule)?STATE.schedule.length:'?') + ' rows'
+      : '';
+    const scheduleSub = shiftCount === 0 ? _dbg
       : shiftCount === 1 ? '1 shift this week'
       : shiftCount + ' shifts this week';
 
