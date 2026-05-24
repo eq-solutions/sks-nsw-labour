@@ -1,0 +1,334 @@
+/*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
+/* ─────────────────────────────────────────────────────────────
+   styles/home.css  —  EQ Solves Field (SKS deploy)
+   Ported from eq-solves-field v3.5.1.
+   Mobile-first home tile screen for staff and supervisor roles.
+   Loaded after base.css, mobile.css, apprentices.css.
+   Inherits palette vars from base.css.
+   Scope: page-home only. Other pages unaffected.
+   ───────────────────────────────────────────────────────────── */
+
+/* Page container — full mobile viewport, light bg, padded. */
+#page-home {
+  background: var(--bg);
+  min-height: 100vh;
+  padding: 18px 16px 32px;
+}
+
+/* Hide entirely on desktop — desktop staff still get the existing
+   shell. The routing in initApp() also gates by viewport, but this
+   is belt-and-braces in case the user resizes after first paint. */
+@media (min-width: 768px) {
+  #page-home { display: none !important; }
+}
+
+/* ── Header (brand label + greeting + cog) ─────────────────── */
+.eqh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.eqh-brand {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.eqh-greeting {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 2px;
+  letter-spacing: -0.3px;
+}
+.eqh-cog {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: background .15s;
+  padding: 0;
+  font-family: inherit;
+}
+.eqh-cog:active { background: var(--bg); }
+
+/* ── Next-shift pill ────────────────────────────────────────── */
+.eqh-shift {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.eqh-shift-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--blue-lt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.eqh-shift-label {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+.eqh-shift-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 1px;
+}
+.eqh-shift-chev {
+  color: var(--ink-4);
+  font-size: 18px;
+}
+
+/* ── Tile grid (2 columns) ──────────────────────────────────── */
+.eqh-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.eqh-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 14px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 130px;
+  position: relative;
+  font-family: inherit;
+  transition: transform .1s;
+  box-shadow: var(--shadow-sm);
+}
+.eqh-tile:active { transform: scale(0.98); }
+.eqh-tile:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.eqh-tile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.eqh-tile-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.1px;
+}
+.eqh-tile-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 3px;
+  font-weight: 400;
+}
+
+/* Tile colour variants */
+.eqh-tile.eqh-t-schedule .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
+.eqh-tile.eqh-t-time     .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
+.eqh-tile.eqh-t-leave    .eqh-tile-icon { background: var(--amber-lt);  color: var(--amber); }
+.eqh-tile.eqh-t-team     .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
+.eqh-tile.eqh-t-reports  .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.eqh-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 10px;
+  letter-spacing: 0.2px;
+}
+.eqh-badge-warn { background: var(--amber-lt); color: var(--amber); }
+.eqh-badge-new  { background: var(--purple-lt); color: var(--purple); }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.eqh-footer {
+  text-align: center;
+  margin-top: 22px;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+/* ── Loading skeleton ───────────────────────────────────────── */
+.eqh-skel {
+  background: linear-gradient(90deg,
+    rgba(0,0,0,.04) 0%,
+    rgba(0,0,0,.08) 50%,
+    rgba(0,0,0,.04) 100%);
+  background-size: 200% 100%;
+  animation: eqh-shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+  display: inline-block;
+  height: 12px;
+}
+.eqh-skel-line { height: 12px; width: 80%; }
+.eqh-skel-sm   { height: 10px; width: 60%; }
+@keyframes eqh-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Offline banner ─────────────────────────────────────────── */
+.eqh-offline {
+  background: var(--amber-lt);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Error banner ───────────────────────────────────────────── */
+.eqh-error {
+  background: var(--red-lt);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.eqh-error button {
+  margin-left: auto;
+  background: var(--red);
+  color: #fff;
+  border: 0;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ── Supervisor role chip ────────────────────────────────────── */
+.eqh-role-chip {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-lt);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.4px;
+  vertical-align: 1px;
+}
+
+/* Supervisor action strip variants */
+.eqh-shift-allclear { cursor: default; }
+.eqh-shift-icon-ok    { background: var(--green-lt); color: var(--green); }
+.eqh-shift-icon-warn  { background: var(--amber-lt); color: var(--amber); }
+
+/* ── Cog drawer (slide-up sheet) ────────────────────────────── */
+.eqh-drawer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9000;
+  display: none;
+  align-items: flex-end;
+}
+.eqh-drawer.open { display: flex; }
+.eqh-drawer-sheet {
+  background: var(--surface);
+  width: 100%;
+  max-height: 85vh;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  padding: 16px;
+  overflow-y: auto;
+  animation: eqh-sheet-up .25s ease-out;
+}
+@keyframes eqh-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.eqh-drawer-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--ink-4);
+  border-radius: 2px;
+  margin: 0 auto 14px;
+  opacity: 0.4;
+}
+.eqh-drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--ink);
+}
+.eqh-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  font-size: 14px;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius);
+  font-family: inherit;
+}
+.eqh-drawer-item:hover { background: var(--bg); }
+.eqh-drawer-item:active { background: var(--slate-lt); }
+.eqh-drawer-item-icon { font-size: 18px; width: 24px; text-align: center; }
+.eqh-drawer-close {
+  margin-top: 12px;
+  width: 100%;
+  padding: 12px;
+  background: var(--bg);
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+}
