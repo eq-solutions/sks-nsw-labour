@@ -129,7 +129,7 @@
       { label: '≥$500k',      val: 500000  },
       { label: '≥$1M',        val: 1000000 }
     ];
-    html +=     '<select class="form-input" style="height:32px;font-size:12px;padding:0 8px;width:auto" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
+    html +=     '<select class="form-input" title="Applies to Watch and Likely only — Won tenders always shown" style="height:32px;font-size:12px;padding:0 8px;width:auto" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
     valueOpts.forEach(function (o) {
       html += '<option value="' + o.val + '"' + (o.val === _filterValue ? ' selected' : '') + '>' + _esc(o.label) + '</option>';
     });
@@ -182,6 +182,7 @@
       html +=   '<div>';
       html +=     '<span style="font-weight:700;color:' + s.color + ';font-size:14px">' + s.label + '</span>';
       html +=     '<span style="font-size:11px;color:var(--ink-3);margin-left:5px">' + s.desc + '</span>';
+      if (s.key === 'won' && _filterValue > 0) html += '<span style="font-size:10px;color:var(--ink-3);margin-left:6px" title="Won tenders always shown regardless of value filter">· all shown</span>';
       html +=   '</div>';
       html +=   '<span style="background:' + s.bg + ';color:' + s.color + ';font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px">' + cards.length + '</span>';
       html += '</div>';
