@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.19 — Fix: "Saving…" badge permanently stuck for staff
+
+**Date:** 2026-05-24
+**Scope:** Save indicator / push subscription edge case.
+
+- **`sbFetch` 4xx leak fixed** — when a non-GET request fails with a 4xx client error (e.g. push subscription POST rejected by RLS), `_pendingWriteCount` was incremented but never decremented because the 4xx path fell through to `throw err` without clearing the counter. The "↑ Saving…" badge stayed on screen indefinitely. Now decrements and clears the indicator before throwing.
+
+---
+
 # v3.10.18 — My Schedule: fix schedule always blank for staff
 
 **Date:** 2026-05-24

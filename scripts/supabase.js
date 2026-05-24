@@ -537,6 +537,14 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
       _sbLog('warn', 'queued', method + ' ' + path + ' (' + msg + ')');
       return [];
     }
+    // Client error (4xx) on a write — don't queue for retry, but still clear
+    // the save indicator. Without this, _pendingWriteCount stays elevated and
+    // the "↑ Saving…" badge gets permanently stuck (e.g. push subscription
+    // POST rejected by RLS).
+    if (method !== 'GET' && !isDemo) {
+      _pendingWriteCount = Math.max(0, _pendingWriteCount - 1);
+      if (_pendingWriteCount === 0) _setSaveIndicator('clear');
+    }
     throw err;
   }
 }
