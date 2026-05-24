@@ -4,7 +4,7 @@
 // Resource Allocation screen: Won tenders → fill in start date,
 // hours, workers, PM → confirm → capacity planning chart.
 // Phase A: generate pending_schedule rows on confirm.
-// Phase B: review + push labour curve to live roster.
+// Phase B: track-based labour assignment + push to live roster.
 // Phase C: add active job (bypasses tender pipeline).
 //
 // Depends on: app-state.js, supabase.js, pipeline.js (STATE.managers)
@@ -14,16 +14,22 @@
   'use strict';
 
   // ── State ─────────────────────────────────────────────────
-  var _tenders            = [];   // won + confirmed tenders
-  var _enr                = {};   // keyed by tender_id → enrichment row
-  var _noms               = {};   // keyed by tender_id → { pm, supervisor }
+  var _tenders            = [];
+  var _enr                = {};
+  var _noms               = {};
   var _managers           = [];
-  var _people             = [];   // active people (id, name) for picker
-  var _pending            = {};   // keyed by tender_id → [pending_schedule rows]
+  var _people             = [];
+  var _pending            = {};   // tenderId → [pending_schedule rows] (includes pushed rows in-session)
   var _headcount          = 0;
-  var _openPanel          = null; // won tender_id with open alloc form
-  var _openConfirmedPanel = null; // confirmed tender_id with open review panel
+  var _openPanel          = null;
+  var _openConfirmedPanel = null;
   var _addingJob          = false;
+
+  // Phase B: contract assignment state (persists across re-renders within session)
+  var _ca        = {};   // tenderId → { tracks: [{label,weekStrs[],rowIds[],segments:[{fromIdx,toIdx,personId}]}] }
+  var _wplan     = {};   // tenderId → pending write plan awaiting conflict resolution
+  var _siteCodes = {};   // tenderId → site code string (persists across re-renders)
+  var _splitOpen = null; // 'tid:ti:si' — which segment's split-week picker is open
 
   // ── Entry point ───────────────────────────────────────────
   async function renderPipelineResource() {
@@ -154,9 +160,7 @@
     html += '</div>';
 
     if (!allocated.length) {
-      html += '<div style="padding:20px 0 4px;text-align:center;color:var(--ink-3);font-size:13px">';
-      html += 'Set start dates and worker counts on Won jobs below to see the demand forecast.';
-      html += '</div>';
+      html += '<div style="padding:20px 0 4px;text-align:center;color:var(--ink-3);font-size:13px">Set start dates and worker counts on Won jobs below to see the demand forecast.</div>';
       html += '</div>';
       return html;
     }
@@ -225,7 +229,6 @@
       var chipHtml = chips.length ? chips.join('') : '<span style="font-size:10px;color:#f97316;font-weight:600">Not allocated</span>';
 
       html += '<div id="ra-row-' + id + '" style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">';
-
       html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openPanel(\'' + id + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;background:' + (isOpen ? '#f0f9ff' : 'transparent') + ';user-select:none;-webkit-user-select:none">';
       html += '<div style="flex:1;min-width:0">';
       html += '<div style="font-size:11px;font-family:monospace;color:var(--ink-2)">' + _esc(t.external_ref || '—') + '</div>';
@@ -258,46 +261,33 @@
     var curSup = nom.supervisor && nom.supervisor.person_id ? String(nom.supervisor.person_id) : '';
 
     var html = '<div style="padding:14px 14px 16px;border-top:1px solid var(--border);background:#f8fafc">';
-
     html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">';
 
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Start date</label>';
-    html += '<input class="form-input" type="date" id="ra-start-' + id + '" value="' + _esc(enr.start_date_estimated || '') + '">';
-    html += '</div>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Start date</label>';
+    html += '<input class="form-input" type="date" id="ra-start-' + id + '" value="' + _esc(enr.start_date_estimated || '') + '"></div>';
 
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Est. hours</label>';
-    html += '<input class="form-input" type="number" min="0" step="any" id="ra-hours-' + id + '" value="' + (enr.hours_estimated || '') + '" placeholder="—" oninput="SKS_PIPELINE_RESOURCE.suggestWorkers(\'' + id + '\')">';
-    html += '</div>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Est. hours</label>';
+    html += '<input class="form-input" type="number" min="0" step="any" id="ra-hours-' + id + '" value="' + (enr.hours_estimated || '') + '" placeholder="—" oninput="SKS_PIPELINE_RESOURCE.suggestWorkers(\'' + id + '\')"></div>';
 
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Duration (weeks)</label>';
-    html += '<input class="form-input" type="number" min="1" id="ra-dur-' + id + '" value="' + (enr.duration_weeks || '') + '" placeholder="—" oninput="SKS_PIPELINE_RESOURCE.suggestWorkers(\'' + id + '\')">';
-    html += '</div>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Duration (weeks)</label>';
+    html += '<input class="form-input" type="number" min="1" id="ra-dur-' + id + '" value="' + (enr.duration_weeks || '') + '" placeholder="—" oninput="SKS_PIPELINE_RESOURCE.suggestWorkers(\'' + id + '\')"></div>';
 
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Peak workers <span id="ra-sug-' + id + '" style="color:#3DA8D8;font-size:10px"></span></label>';
-    html += '<input class="form-input" type="number" min="1" id="ra-workers-' + id + '" value="' + (enr.peak_workers || '') + '" placeholder="—">';
-    html += '</div>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Peak workers <span id="ra-sug-' + id + '" style="color:#3DA8D8;font-size:10px"></span></label>';
+    html += '<input class="form-input" type="number" min="1" id="ra-workers-' + id + '" value="' + (enr.peak_workers || '') + '" placeholder="—"></div>';
 
     html += '</div>';
 
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
 
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Project Manager</label>';
-    html += '<select class="form-input" id="ra-pm-' + id + '">';
-    html += '<option value="">— not nominated —</option>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Project Manager</label>';
+    html += '<select class="form-input" id="ra-pm-' + id + '"><option value="">— not nominated —</option>';
     pmMgrs.forEach(function (m) {
       html += '<option value="' + m.id + '"' + (String(m.id) === curPm ? ' selected' : '') + '>' + _esc(m.name) + '</option>';
     });
     html += '</select></div>';
 
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Supervisor</label>';
-    html += '<select class="form-input" id="ra-sup-' + id + '">';
-    html += '<option value="">— not nominated —</option>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Supervisor</label>';
+    html += '<select class="form-input" id="ra-sup-' + id + '"><option value="">— not nominated —</option>';
     spMgrs.forEach(function (m) {
       html += '<option value="' + m.id + '"' + (String(m.id) === curSup ? ' selected' : '') + '>' + _esc(m.name) + '</option>';
     });
@@ -305,10 +295,8 @@
 
     html += '</div>';
 
-    html += '<div style="margin-bottom:14px">';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Notes</label>';
-    html += '<textarea class="form-input" id="ra-notes-' + id + '" rows="2" placeholder="Scope assumptions, conditions, access…" style="resize:vertical">' + _esc(enr.confidence_notes || '') + '</textarea>';
-    html += '</div>';
+    html += '<div style="margin-bottom:14px"><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Notes</label>';
+    html += '<textarea class="form-input" id="ra-notes-' + id + '" rows="2" placeholder="Scope assumptions, conditions, access…" style="resize:vertical">' + _esc(enr.confidence_notes || '') + '</textarea></div>';
 
     html += '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:12px">';
     html += '<button class="btn btn-secondary btn-sm" id="ra-save-' + id + '" onclick="SKS_PIPELINE_RESOURCE.saveAlloc(\'' + id + '\',false)">Save</button>';
@@ -388,8 +376,8 @@
 
       var nom = _noms[id] || { pm: null, supervisor: null };
       await Promise.all([
-        _upsertNom(id, 'pm',         pmId,  nom.pm),
-        _upsertNom(id, 'supervisor',  supId, nom.supervisor)
+        _upsertNom(id, 'pm',        pmId,  nom.pm),
+        _upsertNom(id, 'supervisor', supId, nom.supervisor)
       ]);
 
       if (andConfirm) {
@@ -397,13 +385,13 @@
         var t = _tenders.find(function (x) { return String(x.id) === id; });
         if (t) t.stage = 'confirmed';
 
-        // Phase A: generate pending_schedule rows (skip if already exists)
         if (workers && dur && start && !(_pending[id] && _pending[id].length)) {
           await _generatePendingSchedule(id, start, workers, dur);
+          delete _ca[id]; // force track re-init with fresh rows
         }
 
         _openPanel = null;
-        _openConfirmedPanel = id; // open review panel on the newly confirmed job
+        _openConfirmedPanel = id;
       }
 
       showToast(andConfirm ? '✓ Confirmed — assign workers below' : 'Saved');
@@ -419,7 +407,6 @@
   async function _upsertNom(tenderId, role, newId, existing) {
     var nom = _noms[String(tenderId)] || (_noms[String(tenderId)] = { pm: null, supervisor: null });
     var key = role === 'pm' ? 'pm' : 'supervisor';
-
     if (newId && existing) {
       if (String(existing.person_id) !== String(newId)) {
         await sbFetch('nominations?id=eq.' + existing.id, 'PATCH', { person_id: newId });
@@ -437,11 +424,10 @@
 
   // ── Phase A: Generate pending_schedule rows ────────────────
   async function _generatePendingSchedule(tenderId, startDate, workers, durationWeeks) {
-    // Snap startDate to the Monday of its containing week
     var d   = new Date(startDate);
-    var dow = d.getDay(); // 0=Sun, 1=Mon…6=Sat
+    var dow = d.getDay();
     var back = dow === 0 ? 6 : dow - 1;
-    d.setDate(d.getDate() - back);
+    d.setDate(d.getDate() - back); // snap to Monday
 
     var rows = [];
     for (var w = 0; w < durationWeeks; w++) {
@@ -451,8 +437,6 @@
         rows.push({ tender_id: tenderId, person_name_placeholder: 'Worker ' + p, week: wStr });
       }
     }
-
-    // pending_schedule is in ORG_TABLES — sbFetch auto-stamps org_id on each row
     var inserted = await sbFetch('pending_schedule', 'POST', rows, 'return=representation');
     _pending[String(tenderId)] = Array.isArray(inserted) ? inserted : rows;
   }
@@ -489,24 +473,29 @@
       var rows  = _pending[id] || [];
       var isOpen = _openConfirmedPanel === id;
 
+      var unpushed = rows.filter(function (r) { return !r._pushed; });
+      var hasPushed = rows.some(function (r) { return r._pushed; });
+
       var meta = [];
       if (enr.start_date_estimated) meta.push('Start ' + _esc(enr.start_date_estimated));
       if (enr.duration_weeks)       meta.push(enr.duration_weeks + 'w');
       if (enr.peak_workers)         meta.push(enr.peak_workers + ' workers');
-      if (enr.hours_estimated)      meta.push(enr.hours_estimated + 'h est.');
       if (pmN)                      meta.push('PM: ' + _esc(pmN));
       if (spN)                      meta.push('Sup: ' + _esc(spN));
 
       var badge = '';
-      if (rows.length) {
-        badge = ' <span style="font-size:10px;background:#fef9c3;color:#854d0e;padding:1px 6px;border-radius:3px;vertical-align:middle">' + rows.length + ' slots to assign</span>';
-      } else if (enr.peak_workers && enr.duration_weeks) {
+      var borderColor = '#bbf7d0';
+      var bgColor     = '#f0fdf4';
+      if (unpushed.length) {
+        badge       = ' <span style="font-size:10px;background:#fef9c3;color:#854d0e;padding:1px 6px;border-radius:3px;vertical-align:middle">' + unpushed.length + ' slots to assign</span>';
+        borderColor = '#fde68a';
+        bgColor     = '#fffbeb';
+      } else if (hasPushed || (enr.peak_workers && enr.duration_weeks)) {
         badge = ' <span style="font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;vertical-align:middle">✓ On roster</span>';
       }
 
-      html += '<div id="ra-conf-row-' + id + '" style="border:1px solid ' + (rows.length ? '#fde68a' : '#bbf7d0') + ';border-radius:8px;margin-bottom:8px;overflow:hidden">';
-
-      html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;background:' + (rows.length ? '#fffbeb' : '#f0fdf4') + ';user-select:none;-webkit-user-select:none">';
+      html += '<div id="ra-conf-row-' + id + '" style="border:1px solid ' + borderColor + ';border-radius:8px;margin-bottom:8px;overflow:hidden">';
+      html += '<div onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;background:' + bgColor + ';user-select:none;-webkit-user-select:none">';
       html += '<div style="flex:1;min-width:0">';
       html += '<div style="font-size:11px;font-family:monospace;color:var(--ink-2)">' + _esc(t.external_ref || '—') + '</div>';
       html += '<div style="font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">' + _esc(t.job_name || '—') + badge + '</div>';
@@ -514,7 +503,7 @@
       html += '</div>';
       html += '<div style="text-align:right;flex-shrink:0">';
       html += '<div style="font-size:14px;font-weight:700;color:#16a34a">' + (t.quote_value ? '$' + _fmtK(t.quote_value) : '—') + '</div>';
-      html += '<div style="font-size:10px;color:' + (rows.length ? '#854d0e' : '#16a34a') + ';margin-top:2px">✓ Confirmed ' + (isOpen ? '▲' : '▼') + '</div>';
+      html += '<div style="font-size:10px;color:' + (unpushed.length ? '#854d0e' : '#16a34a') + ';margin-top:2px">✓ Confirmed ' + (isOpen ? '▲' : '▼') + '</div>';
       html += '</div>';
       html += '</div>';
 
@@ -526,55 +515,135 @@
     return html;
   }
 
-  // ── Phase B: Labour curve review panel ────────────────────
+  // ── Phase B: Initialise contract assignment tracks ─────────
+  function _initCA(tenderId, rows) {
+    var id = String(tenderId);
+    if (_ca[id]) return; // preserve in-session state across re-renders
+
+    // Group rows by worker placeholder, sort each group by week date
+    var byWorker = {};
+    rows.forEach(function (r) {
+      var key = r.person_name_placeholder || 'Worker 1';
+      if (!byWorker[key]) byWorker[key] = [];
+      byWorker[key].push(r);
+    });
+
+    function parseWk(s) {
+      var p = s.split('.');
+      return new Date('20' + p[2] + '-' + p[1] + '-' + p[0]);
+    }
+
+    var workerKeys = Object.keys(byWorker).sort(function (a, b) {
+      var na = parseInt(a.replace(/\D/g, ''), 10) || 0;
+      var nb = parseInt(b.replace(/\D/g, ''), 10) || 0;
+      return na - nb;
+    });
+
+    var tracks = workerKeys.map(function (key) {
+      var sorted = byWorker[key].slice().sort(function (a, b) {
+        return parseWk(a.week) - parseWk(b.week);
+      });
+      return {
+        label:    key,
+        weekStrs: sorted.map(function (r) { return r.week; }),
+        rowIds:   sorted.map(function (r) { return String(r.id); }),
+        rowPushed: sorted.map(function (r) { return !!r._pushed; }),
+        segments: [{ fromIdx: 0, toIdx: sorted.length - 1, personId: null }]
+      };
+    });
+
+    _ca[id] = { tracks: tracks };
+  }
+
+  // ── Phase B: Labour curve panel (track-based) ──────────────
   function _labourCurvePanel(t, rows) {
     var id = String(t.id);
 
-    var byWeek = {};
-    rows.forEach(function (r) {
-      if (!byWeek[r.week]) byWeek[r.week] = [];
-      byWeek[r.week].push(r);
-    });
+    _initCA(id, rows);
+    var ca = _ca[id];
+    if (!ca || !ca.tracks.length) return '';
 
-    var weeks = Object.keys(byWeek).sort(function (a, b) {
-      var pa = a.split('.'), pb = b.split('.');
-      return new Date('20' + pa[2] + '-' + pa[1] + '-' + pa[0]) - new Date('20' + pb[2] + '-' + pb[1] + '-' + pb[0]);
-    });
+    var totalWeeks = ca.tracks[0].weekStrs.length;
+    var totalSlots = rows.length;
+    var unpushed   = rows.filter(function (r) { return !r._pushed; }).length;
+    var siteVal    = _siteCodes[id] || '';
 
     var html = '<div style="padding:14px 14px 16px;border-top:1px solid #fde68a;background:#fffdf5">';
     html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);margin-bottom:10px">ASSIGN WORKERS TO ROSTER</div>';
 
-    // Site code + summary
+    // Site code + summary row
     html += '<div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;padding:10px 12px;background:white;border:1px solid var(--border);border-radius:6px">';
-    html += '<div>';
-    html += '<label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Site code (Mon–Fri for all workers)</label>';
-    html += '<input class="form-input" type="text" id="ra-site-' + id + '" placeholder="e.g. DC1" style="width:100px;text-transform:uppercase" maxlength="10">';
-    html += '</div>';
-    html += '<div style="font-size:11px;color:var(--ink-3);padding-bottom:6px">' + weeks.length + ' week' + (weeks.length !== 1 ? 's' : '') + ' · ' + rows.length + ' slots · assign people then push</div>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Site code (Mon–Fri for all workers)</label>';
+    html += '<input class="form-input" type="text" id="ra-site-' + id + '" value="' + _esc(siteVal) + '" placeholder="e.g. DC1" style="width:100px;text-transform:uppercase" maxlength="10" oninput="SKS_PIPELINE_RESOURCE.setSiteCode(\'' + id + '\',this.value)"></div>';
+    html += '<div style="font-size:11px;color:var(--ink-3);padding-bottom:6px">' + totalWeeks + ' week' + (totalWeeks !== 1 ? 's' : '') + ' · ' + totalSlots + ' slots' + (unpushed < totalSlots ? ' · ' + (totalSlots - unpushed) + ' already on roster' : '') + '</div>';
     html += '</div>';
 
-    // Worker rows per week
-    weeks.forEach(function (week) {
-      html += '<div style="margin-bottom:10px">';
-      html += '<div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Week of ' + _esc(week) + '</div>';
-      byWeek[week].forEach(function (r) {
-        var rId = String(r.id);
-        html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border-lt)">';
-        html += '<div style="font-size:11px;color:var(--ink-3);min-width:60px">' + _esc(r.person_name_placeholder || '—') + '</div>';
-        html += '<select class="form-input" id="ra-ps-' + rId + '" style="flex:1">';
+    // Conflict panel placeholder
+    html += '<div id="ra-conflict-' + id + '"></div>';
+
+    // Worker tracks
+    ca.tracks.forEach(function (track, ti) {
+      html += '<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:6px;overflow:hidden">';
+      html += '<div style="font-size:11px;font-weight:700;color:var(--ink-2);padding:7px 10px;background:#f8fafc;border-bottom:1px solid var(--border)">' + _esc(track.label) + ' <span style="font-weight:400;color:var(--ink-3)">(' + track.weekStrs.length + ' weeks)</span></div>';
+
+      track.segments.forEach(function (seg, si) {
+        var splitKey = id + ':' + ti + ':' + si;
+        var isSplitOpen = (_splitOpen === splitKey);
+        var fromWk  = track.weekStrs[seg.fromIdx] || '—';
+        var toWk    = track.weekStrs[seg.toIdx]   || '—';
+        var wkCount = seg.toIdx - seg.fromIdx + 1;
+
+        var rangeLabel = (track.segments.length === 1 && wkCount === totalWeeks)
+          ? 'all ' + totalWeeks + ' weeks'
+          : 'wks ' + (seg.fromIdx + 1) + '–' + (seg.toIdx + 1) + ' (' + _esc(fromWk) + ' → ' + _esc(toWk) + ')';
+
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;' + (si < track.segments.length - 1 ? 'border-bottom:1px solid var(--border-lt)' : '') + '">';
+
+        // Person picker
+        html += '<select class="form-input" style="flex:1;min-width:0" onchange="SKS_PIPELINE_RESOURCE.setSegmentPerson(\'' + id + '\',' + ti + ',' + si + ',this.value)">';
         html += '<option value="">— assign person —</option>';
         _people.forEach(function (p) {
-          html += '<option value="' + p.id + '">' + _esc(p.name) + '</option>';
+          html += '<option value="' + p.id + '"' + (seg.personId === p.id ? ' selected' : '') + '>' + _esc(p.name) + '</option>';
         });
         html += '</select>';
+
+        // Range label
+        html += '<span style="font-size:11px;color:var(--ink-3);white-space:nowrap;min-width:120px;flex-shrink:0">' + rangeLabel + '</span>';
+
+        // Split button (only when more than 1 week in this segment)
+        if (wkCount > 1 && !isSplitOpen) {
+          html += '<button class="btn btn-ghost btn-sm" style="white-space:nowrap;font-size:11px;flex-shrink:0" onpointerdown="SKS_PIPELINE_RESOURCE.splitSegment(\'' + id + '\',' + ti + ',' + si + ')">÷ Split</button>';
+        }
+
+        // Remove-this-split button (for all segments after the first)
+        if (si > 0) {
+          html += '<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#dc2626;flex-shrink:0;padding:3px 6px" title="Merge with previous segment" onpointerdown="SKS_PIPELINE_RESOURCE.mergeSegment(\'' + id + '\',' + ti + ',' + (si - 1) + ')">✕</button>';
+        }
+
         html += '</div>';
+
+        // Inline split-week picker
+        if (isSplitOpen) {
+          html += '<div style="padding:8px 10px;background:#f0f9ff;border-top:1px solid var(--border-lt);display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+          html += '<span style="font-size:11px;color:var(--ink-2);white-space:nowrap">Split after week:</span>';
+          html += '<select class="form-input" style="max-width:200px" onchange="SKS_PIPELINE_RESOURCE.confirmSplit(\'' + id + '\',' + ti + ',' + si + ',parseInt(this.value,10))">';
+          html += '<option value="-1">— pick a week —</option>';
+          for (var wi = seg.fromIdx; wi < seg.toIdx; wi++) {
+            html += '<option value="' + wi + '">' + _esc(track.weekStrs[wi]) + '</option>';
+          }
+          html += '</select>';
+          html += '<button class="btn btn-ghost btn-sm" style="font-size:11px" onpointerdown="SKS_PIPELINE_RESOURCE.cancelSplit()">Cancel</button>';
+          html += '</div>';
+        }
       });
+
       html += '</div>';
     });
 
+    // Push / close footer
     html += '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">';
     html += '<button class="btn btn-primary btn-sm" id="ra-push-' + id + '" onclick="SKS_PIPELINE_RESOURCE.pushToRoster(\'' + id + '\')">Push to Roster →</button>';
-    html += '<div style="font-size:11px;color:var(--ink-3);flex:1">Writes to the live roster. Unassigned slots are skipped.</div>';
+    html += '<div style="font-size:11px;color:var(--ink-3);flex:1">Headcount-only tracks are skipped. Writes Mon–Fri for all weeks.</div>';
     html += '<button class="btn btn-ghost btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(null)">Close</button>';
     html += '</div>';
 
@@ -585,67 +654,247 @@
   // ── Toggle confirmed review panel ──────────────────────────
   function openConfirmedPanel(tenderId) {
     _openConfirmedPanel = (_openConfirmedPanel === tenderId) ? null : (tenderId || null);
+    _splitOpen = null;
     _render();
   }
 
-  // ── Phase B: Push labour curve to live roster ──────────────
-  async function pushToRoster(tenderId) {
-    var id   = String(tenderId);
-    var rows = _pending[id] || [];
-    if (!rows.length) return;
+  // ── Track assignment state mutations ───────────────────────
+  function setSiteCode(tenderId, val) {
+    _siteCodes[String(tenderId)] = (val || '').toUpperCase().trim();
+  }
 
-    var siteEl = document.getElementById('ra-site-' + id);
-    var site   = siteEl ? siteEl.value.toUpperCase().trim() : '';
+  function setSegmentPerson(tenderId, trackIdx, segIdx, personIdStr) {
+    var track = _ca[tenderId] && _ca[tenderId].tracks[trackIdx];
+    var seg   = track && track.segments[segIdx];
+    if (!seg) return;
+    seg.personId = parseInt(personIdStr, 10) || null;
+  }
+
+  function splitSegment(tenderId, trackIdx, segIdx) {
+    _splitOpen = tenderId + ':' + trackIdx + ':' + segIdx;
+    _render();
+  }
+
+  function cancelSplit() {
+    _splitOpen = null;
+    _render();
+  }
+
+  function confirmSplit(tenderId, trackIdx, segIdx, splitWeekIdx) {
+    if (splitWeekIdx < 0) return; // "— pick a week —" selected
+    var track = _ca[tenderId] && _ca[tenderId].tracks[trackIdx];
+    if (!track) return;
+    var seg    = track.segments[segIdx];
+    var oldTo  = seg.toIdx;
+
+    seg.toIdx = splitWeekIdx; // first segment ends here
+    track.segments.splice(segIdx + 1, 0, {
+      fromIdx:  splitWeekIdx + 1,
+      toIdx:    oldTo,
+      personId: null
+    });
+
+    _splitOpen = null;
+    _render();
+  }
+
+  function mergeSegment(tenderId, trackIdx, firstSegIdx) {
+    var track = _ca[tenderId] && _ca[tenderId].tracks[trackIdx];
+    if (!track) return;
+    if (firstSegIdx < 0 || firstSegIdx >= track.segments.length - 1) return;
+
+    var seg  = track.segments[firstSegIdx];
+    var next = track.segments[firstSegIdx + 1];
+    seg.toIdx = next.toIdx;
+    track.segments.splice(firstSegIdx + 1, 1);
+
+    _splitOpen = null;
+    _render();
+  }
+
+  // ── Phase B: Push to roster ────────────────────────────────
+  async function pushToRoster(tenderId) {
+    var id = String(tenderId);
+    var ca = _ca[id];
+    var rows = _pending[id] || [];
+    if (!ca || !rows.length) return;
+
+    var site = _siteCodes[id] || '';
     if (!site) { showToast('Enter a site code first'); return; }
 
-    var pushBtn = document.getElementById('ra-push-' + id);
-    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Pushing…'; }
+    // Build write plan from tracks
+    var writePlan = [];
+    ca.tracks.forEach(function (track, ti) {
+      track.segments.forEach(function (seg) {
+        if (!seg.personId) return; // headcount only — skip
+        var person = _people.find(function (p) { return p.id === seg.personId; });
+        if (!person) return;
+        for (var wi = seg.fromIdx; wi <= seg.toIdx; wi++) {
+          writePlan.push({
+            personName: person.name,
+            week:       track.weekStrs[wi],
+            rowId:      track.rowIds[wi],
+            personId:   seg.personId
+          });
+        }
+      });
+    });
 
-    var now       = new Date().toISOString();
-    var pushed    = 0;
-    var skipped   = 0;
+    if (!writePlan.length) {
+      showToast('Assign at least one person before pushing');
+      return;
+    }
+
+    var pushBtn = document.getElementById('ra-push-' + id);
+    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Checking…'; }
 
     try {
-      for (var i = 0; i < rows.length; i++) {
-        var r        = rows[i];
-        var selEl    = document.getElementById('ra-ps-' + String(r.id));
-        var personId = selEl ? (parseInt(selEl.value, 10) || null) : null;
-        var person   = personId ? _people.find(function (p) { return String(p.id) === String(personId); }) : null;
+      // Batch GET existing schedule rows for all affected people + weeks
+      var namesObj = {};
+      var weeksObj = {};
+      writePlan.forEach(function (p) { namesObj[p.personName] = true; weeksObj[p.week] = true; });
+      var names = Object.keys(namesObj);
+      var weeks = Object.keys(weeksObj);
 
-        if (!person) { skipped++; continue; }
+      var nameFilter = 'name=in.(' + names.map(function (n) { return '"' + n.replace(/"/g, '\\"') + '"'; }).join(',') + ')';
+      var weekFilter = 'week=in.(' + weeks.map(function (w) { return '"' + w + '"'; }).join(',') + ')';
 
-        var name = person.name;
+      var existing = await sbFetch('schedule?' + nameFilter + '&' + weekFilter + '&select=*&limit=5000');
+      var schedIdx = {};
+      (Array.isArray(existing) ? existing : []).forEach(function (row) {
+        schedIdx[row.name + '|' + row.week] = row;
+      });
 
-        // GET the existing schedule row to avoid overwriting occupied days
-        var existing = await sbFetch('schedule?name=eq.' + encodeURIComponent(name) + '&week=eq.' + encodeURIComponent(r.week) + '&select=*&limit=1');
-        var schedRow = Array.isArray(existing) && existing[0];
-
-        var days = ['mon', 'tue', 'wed', 'thu', 'fri'];
-        if (schedRow) {
-          // PATCH only empty weekday slots
-          var patch = {};
-          days.forEach(function (d) { if (!schedRow[d]) patch[d] = site; });
-          if (Object.keys(patch).length) {
-            await sbFetch('schedule?id=eq.' + schedRow.id, 'PATCH', patch);
+      // Find conflicts: (person, week) where any weekday slot has a different site code
+      var conflicts = [];
+      var seen = {};
+      writePlan.forEach(function (plan) {
+        var key = plan.personName + '|' + plan.week;
+        if (seen[key]) return;
+        seen[key] = true;
+        var existingRow = schedIdx[key];
+        if (!existingRow) return;
+        var conflictSites = [];
+        ['mon','tue','wed','thu','fri'].forEach(function (d) {
+          if (existingRow[d] && existingRow[d] !== site) {
+            if (conflictSites.indexOf(existingRow[d]) < 0) conflictSites.push(existingRow[d]);
           }
+        });
+        if (conflictSites.length) {
+          conflicts.push({ personName: plan.personName, week: plan.week, existingSites: conflictSites });
+        }
+      });
+
+      if (conflicts.length) {
+        if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push to Roster →'; }
+        _wplan[id] = { writePlan: writePlan, site: site, schedIdx: schedIdx, conflicts: conflicts };
+        _renderConflictPanel(id, conflicts);
+        return;
+      }
+
+      // No conflicts — write immediately
+      await _executeRosterWrite(id, writePlan, site, schedIdx, pushBtn);
+
+    } catch (e) {
+      showToast('Push failed — ' + e.message);
+      if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push to Roster →'; }
+    }
+  }
+
+  function _renderConflictPanel(tenderId, conflicts) {
+    var id = String(tenderId);
+    var el = document.getElementById('ra-conflict-' + id);
+    if (!el) return;
+
+    var html = '<div style="margin-bottom:14px;padding:12px;background:#fef9c3;border:1px solid #fde68a;border-radius:6px">';
+    html += '<div style="font-size:12px;font-weight:700;color:#854d0e;margin-bottom:6px">⚠ ' + conflicts.length + ' conflict' + (conflicts.length !== 1 ? 's' : '') + ' — these people are already on another job that week</div>';
+    html += '<div style="max-height:120px;overflow-y:auto;margin-bottom:10px;font-size:11px">';
+    conflicts.forEach(function (c) {
+      html += '<div style="padding:2px 0"><strong>' + _esc(c.personName) + '</strong> — week ' + _esc(c.week) + ' <span style="color:var(--ink-3)">(has: ' + c.existingSites.map(_esc).join(', ') + ')</span></div>';
+    });
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    html += '<button class="btn btn-secondary btn-sm" onclick="SKS_PIPELINE_RESOURCE.pushOverwrite(\'' + id + '\')">Overwrite — replace their existing assignment</button>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="SKS_PIPELINE_RESOURCE.pushSkipConflicts(\'' + id + '\')">Skip those weeks</button>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ra-conflict-' + id + '\').innerHTML=\'\'">Cancel</button>';
+    html += '</div></div>';
+
+    el.innerHTML = html;
+  }
+
+  async function pushOverwrite(tenderId) {
+    var id   = String(tenderId);
+    var plan = _wplan[id];
+    if (!plan) return;
+    var conflictEl = document.getElementById('ra-conflict-' + id);
+    if (conflictEl) conflictEl.innerHTML = '';
+    var btn = document.getElementById('ra-push-' + id);
+    if (btn) { btn.disabled = true; btn.textContent = 'Pushing…'; }
+    await _executeRosterWrite(id, plan.writePlan, plan.site, plan.schedIdx, btn);
+  }
+
+  async function pushSkipConflicts(tenderId) {
+    var id   = String(tenderId);
+    var plan = _wplan[id];
+    if (!plan) return;
+    var conflictEl = document.getElementById('ra-conflict-' + id);
+    if (conflictEl) conflictEl.innerHTML = '';
+    var btn = document.getElementById('ra-push-' + id);
+    if (btn) { btn.disabled = true; btn.textContent = 'Pushing…'; }
+
+    // Remove conflicted (person, week) pairs from the write plan
+    var skipKeys = {};
+    plan.conflicts.forEach(function (c) { skipKeys[c.personName + '|' + c.week] = true; });
+    var filtered = plan.writePlan.filter(function (p) { return !skipKeys[p.personName + '|' + p.week]; });
+
+    await _executeRosterWrite(id, filtered, plan.site, plan.schedIdx, btn);
+  }
+
+  async function _executeRosterWrite(tenderId, writePlan, site, schedIdx, pushBtn) {
+    var id  = String(tenderId);
+    var now = new Date().toISOString();
+    var pushed = 0;
+
+    try {
+      for (var i = 0; i < writePlan.length; i++) {
+        var plan      = writePlan[i];
+        var key       = plan.personName + '|' + plan.week;
+        var existing  = schedIdx[key];
+
+        if (existing) {
+          await sbFetch('schedule?id=eq.' + existing.id, 'PATCH', { mon: site, tue: site, wed: site, thu: site, fri: site });
         } else {
-          // POST new row
-          var newRow = { name: name, week: r.week, mon: site, tue: site, wed: site, thu: site, fri: site, sat: null, sun: null };
-          await sbFetch('schedule', 'POST', newRow, 'return=minimal');
+          await sbFetch('schedule', 'POST', { name: plan.personName, week: plan.week, mon: site, tue: site, wed: site, thu: site, fri: site, sat: null, sun: null }, 'return=minimal');
         }
 
-        // Mark pending_schedule row confirmed
-        await sbFetch('pending_schedule?id=eq.' + r.id, 'PATCH', { confirmed_at: now, person_id: personId });
+        await sbFetch('pending_schedule?id=eq.' + plan.rowId, 'PATCH', { confirmed_at: now, person_id: plan.personId });
+
+        // Mark row as pushed in local state
+        var localRows = _pending[id] || [];
+        var localRow  = localRows.find(function (r) { return String(r.id) === plan.rowId; });
+        if (localRow) localRow._pushed = true;
+
         pushed++;
       }
 
-      // Remove pushed rows from local state
-      delete _pending[id];
+      delete _wplan[id];
 
-      var msg = '✓ ' + pushed + ' rows pushed to roster';
-      if (skipped) msg += ' (' + skipped + ' unassigned skipped)';
+      var headcountSkipped = 0;
+      if (_ca[id]) {
+        _ca[id].tracks.forEach(function (track) {
+          track.segments.forEach(function (seg) {
+            if (!seg.personId) headcountSkipped += (seg.toIdx - seg.fromIdx + 1);
+          });
+        });
+      }
+
+      var msg = '✓ ' + pushed + ' weeks pushed to roster';
+      if (headcountSkipped) msg += ' (' + headcountSkipped + ' headcount-only slots skipped)';
       showToast(msg);
-      _openConfirmedPanel = null;
+
+      var allPushed = (_pending[id] || []).every(function (r) { return r._pushed; });
+      if (allPushed) _openConfirmedPanel = null;
+
       _render();
     } catch (e) {
       showToast('Push failed — ' + e.message);
@@ -731,6 +980,7 @@
       await sbFetch('tender_enrichment', 'POST', enrData, 'return=minimal');
 
       await _generatePendingSchedule(tender.id, start, workers, dur);
+      delete _ca[String(tender.id)]; // fresh track init on render
 
       _tenders.push(tender);
       _enr[String(tender.id)] = enrData;
@@ -781,7 +1031,15 @@
     openConfirmedPanel:     openConfirmedPanel,
     suggestWorkers:         suggestWorkers,
     saveAlloc:              saveAlloc,
+    setSiteCode:            setSiteCode,
+    setSegmentPerson:       setSegmentPerson,
+    splitSegment:           splitSegment,
+    cancelSplit:            cancelSplit,
+    confirmSplit:           confirmSplit,
+    mergeSegment:           mergeSegment,
     pushToRoster:           pushToRoster,
+    pushOverwrite:          pushOverwrite,
+    pushSkipConflicts:      pushSkipConflicts,
     openAddJob:             openAddJob,
     submitAddJob:           submitAddJob
   };
