@@ -618,7 +618,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.5
+  EQ Solves — Field  v3.10.6
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3568,6 +3568,15 @@ function showPage(id) {
   currentPage = id;
   const lb = document.getElementById('legend-bar');
   if (lb) lb.style.display = (id === 'roster') ? '' : 'none';
+
+  // On the schedule page for non-managers the in-content week nav (v3.10.5)
+  // is sufficient — the topbar week picker is redundant and makes the bar
+  // crowd on mobile. Restore it for all other pages.
+  const topbarWeek = document.querySelector('.topbar-week');
+  if (topbarWeek) {
+    topbarWeek.style.display = (id === 'schedule' && typeof isManager !== 'undefined' && !isManager) ? 'none' : '';
+  }
+
   // v3.4.78: refresh the teams pill row so it shows on roster /
   // contacts / schedule pages and hides everywhere else. renderTeamPills
   // is no-op if scripts/teams.js hasn't loaded yet.
@@ -3917,6 +3926,7 @@ async function initApp() {
   if (typeof agencyMode !== 'undefined' && agencyMode) {
     if (typeof applyAgencyMode === 'function') applyAgencyMode();
   } else if (!isManager) {
+    if (typeof applyStaffMode === 'function') applyStaffMode();
     showPage('schedule');
     mobileNav('schedule');
   }
