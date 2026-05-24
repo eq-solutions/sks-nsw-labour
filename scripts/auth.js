@@ -663,6 +663,14 @@ function applyManagerMode() {
   if (redoBtn) redoBtn.style.display = isManager ? '' : 'none';
   if (typeof _updateUndoButton === 'function') _updateUndoButton();
 
+  // Restore anything applyStaffMode() hid if a supervisor unlocks mid-session.
+  if (isManager) {
+    document.querySelectorAll('[data-staff-hidden]').forEach(el => {
+      el.style.display = '';
+      el.removeAttribute('data-staff-hidden');
+    });
+  }
+
   if (isManager) {
     document.body.classList.add('manager-mode');
     if (icon)     icon.textContent    = '🔓';
@@ -711,6 +719,22 @@ function updateMobileLock() {
     if (icon)   icon.textContent   = '🔒';
     if (status) status.textContent = 'View only — tap to unlock';
   }
+}
+
+// ── Staff (non-manager) mobile cleanup ───────────────────────
+// Hides nav items and UI chrome that are irrelevant to employees
+// viewing their own schedule. Marks hidden elements with
+// data-staff-hidden so applyManagerMode() can restore them if a
+// supervisor unlocks mid-session on the same device.
+function applyStaffMode() {
+  if (isManager) return;
+  ['mnav-dashboard', 'mnav-roster', 'mnav-calendar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.style.display !== 'none') {
+      el.setAttribute('data-staff-hidden', '1');
+      el.style.display = 'none';
+    }
+  });
 }
 
 // ── Agency access ─────────────────────────────────────────────

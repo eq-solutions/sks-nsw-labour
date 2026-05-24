@@ -6,6 +6,18 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.6 — Employee mobile: clean topbar, no irrelevant nav
+
+**Date:** 2026-05-24
+**Scope:** Staff (non-manager) mobile view polish.
+
+- **Topbar declutter** — week picker hidden on My Schedule for employees (in-content ‹ › nav is sufficient); `margin-left:auto` on actions keeps sync button pinned right
+- **Mobile nav** — Home, Roster, Calendar hidden for non-managers; only My Week + More shown
+- **Teams filter** — suppressed on My Schedule for non-managers (supervisor-only tool)
+- **Supervisor restore** — `applyManagerMode()` un-hides all `data-staff-hidden` elements if a supervisor unlocks mid-session on the same device
+
+---
+
 # v3.10.5 — My Schedule: week navigation, all-week banner, swipe
 
 **Date:** 2026-05-24

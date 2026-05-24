@@ -108,6 +108,11 @@ function renderTeamPills() {
     row.style.display = 'none';
     return;
   }
+  // Teams filter is a supervisor tool — employees on My Schedule don't need it.
+  if (currentPage === 'schedule' && typeof isManager !== 'undefined' && !isManager) {
+    row.style.display = 'none';
+    return;
+  }
   row.style.display = '';
 
   const teams  = (STATE.teams || []).slice().sort((a, b) => a.name.localeCompare(b.name));
