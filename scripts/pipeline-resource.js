@@ -120,10 +120,11 @@
   }
 
   // ── Design helpers ────────────────────────────────────────
-  function _statPill(label, value, accentColor) {
-    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 18px;min-width:110px;flex:1">' +
-      '<div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">' + _esc(label) + '</div>' +
-      '<div style="font-size:22px;font-weight:700;color:' + accentColor + ';line-height:1.1">' + _esc(String(value)) + '</div>' +
+  function _statPill(label, num, unit, accentColor) {
+    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 20px;min-width:120px;flex:1">' +
+      '<div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">' + _esc(label) + '</div>' +
+      '<div style="font-size:32px;font-weight:700;color:' + accentColor + ';line-height:1">' + _esc(String(num)) + '</div>' +
+      (unit ? '<div style="font-size:11px;color:var(--ink-3);margin-top:3px">' + _esc(unit) + '</div>' : '') +
       '</div>';
   }
 
@@ -220,9 +221,14 @@
     var bands   = data.bands;
     var totals  = data.totals;
     var labels  = data.labels;
-    var maxVal  = Math.max(_headcount, Math.max.apply(null, totals), 1);
-    var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
     var peakDem = Math.max.apply(null, totals);
+    // Scale: use demand-relative scale when headcount far exceeds demand,
+    // so bars aren't crushed at the bottom. Show headcount as annotation if off-chart.
+    var scaleMax = (_headcount > 0 && _headcount <= peakDem * 2)
+      ? _headcount
+      : Math.max(peakDem > 0 ? Math.ceil(peakDem * 1.5) : 10, 10);
+    var maxVal  = Math.max(scaleMax, 1);
+    var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
     var CHART_H = 160;
 
     // ── Stat pills
@@ -230,10 +236,10 @@
     var lockedVal = _tenders.filter(function (t) { return t.stage === 'confirmed'; })
       .reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
-    html += _statPill('Peak demand', peakDem + ' workers', peakDem > 0 && peakDem > _headcount ? '#dc2626' : '#1d4ed8');
-    html += _statPill('Active jobs', allocated.length + (allocated.length === 1 ? ' job' : ' jobs'), '#166534');
-    if (bench !== null) html += _statPill('Bench', Math.max(0, bench) + ' available', bench > 0 ? '#374151' : '#dc2626');
-    if (lockedVal) html += _statPill('Locked in', '$' + _fmtK(lockedVal), '#166534');
+    html += _statPill('Peak demand', peakDem, peakDem === 1 ? 'worker' : 'workers', peakDem > 0 && peakDem > _headcount ? '#dc2626' : '#1d4ed8');
+    html += _statPill('Active jobs', allocated.length, allocated.length === 1 ? 'job' : 'jobs', '#166534');
+    if (bench !== null) html += _statPill('Bench', Math.max(0, bench), 'available', bench > 0 ? '#374151' : '#dc2626');
+    if (lockedVal) html += _statPill('Locked in', '$' + _fmtK(lockedVal), 'contracted', '#166534');
     html += '</div>';
 
     // ── Chart card
@@ -261,8 +267,14 @@
       html += '</div>';
     }
     if (_headcount > 0) {
-      var botPct = Math.min(_headcount / maxVal * 100, 100);
-      html += '<div style="position:absolute;left:0;right:0;bottom:' + botPct + '%;border-top:2px dashed #dc2626;pointer-events:none" title="Headcount: ' + _headcount + '"></div>';
+      var hcPct = _headcount / maxVal * 100;
+      if (hcPct <= 100) {
+        // Headcount fits within chart — draw dashed line
+        html += '<div style="position:absolute;left:0;right:0;bottom:' + hcPct + '%;border-top:2px dashed #dc2626;pointer-events:none" title="Headcount: ' + _headcount + '"></div>';
+      } else {
+        // Headcount is above chart scale — annotate at top instead
+        html += '<div style="position:absolute;top:4px;right:0;font-size:10px;color:#dc2626;font-weight:600;pointer-events:none">↑ Headcount: ' + _headcount + '</div>';
+      }
     }
     html += '</div>';
 
@@ -280,7 +292,14 @@
       html += '<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:4px;vertical-align:middle"></span>' + _esc(lbl) + '</span>';
     });
     if (_headcount > 0) {
-      html += '<span style="white-space:nowrap;margin-left:4px"><span style="display:inline-block;width:16px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>Headcount (' + _headcount + ')</span>';
+      var hcFits = _headcount / maxVal * 100 <= 100;
+      html += '<span style="white-space:nowrap;margin-left:4px">';
+      if (hcFits) {
+        html += '<span style="display:inline-block;width:16px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>';
+      } else {
+        html += '<span style="color:#dc2626;margin-right:3px">↑</span>';
+      }
+      html += 'Headcount (' + _headcount + ')</span>';
     }
     if (hasGap) {
       html += '<span style="color:#dc2626;font-weight:600;white-space:nowrap;margin-left:4px">⚠ Exceeds headcount</span>';
