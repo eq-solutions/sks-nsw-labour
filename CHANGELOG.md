@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.20 — My Schedule: week nav active after early render
+
+**Date:** 2026-05-24
+**Scope:** Staff schedule week navigation.
+
+- **Week nav buttons no longer stuck disabled** — when a staff user tapped Schedule before `initApp()` finished building the `globalWeek` options list, `renderSchedule()` ran with an empty options array, computed `currIdx = -1`, and rendered both ‹ › buttons as `disabled`. They stayed disabled because `initApp()` never re-rendered the schedule page after the week selector was built. Fixed by calling `renderSchedule()` at the end of `initApp()` when the current page is 'schedule'.
+
+---
+
 # v3.10.19 — Fix: "Saving…" badge permanently stuck for staff
 
 **Date:** 2026-05-24

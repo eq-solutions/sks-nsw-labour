@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.19
+  EQ Solves — Field  v3.10.20
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3977,6 +3977,12 @@ async function initApp() {
         // Already on home — just re-render to pick up data loaded after
         // the early render (leave balance etc. if added later).
         if (typeof renderHomeScreen === 'function') renderHomeScreen();
+        // If the user tapped Schedule before the week selector was built,
+        // the nav buttons rendered as disabled. Re-render now that globalWeek
+        // has options so the buttons become active.
+        if (typeof currentPage !== 'undefined' && currentPage === 'schedule') {
+          if (typeof renderSchedule === 'function') renderSchedule();
+        }
       } else {
         mobileNav('home');
       }
