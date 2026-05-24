@@ -120,12 +120,19 @@
   }
 
   // ── Capacity planning chart ───────────────────────────────
+  var _CHART_PALETTE = [
+    '#3b82f6','#10b981','#f59e0b','#8b5cf6',
+    '#06b6d4','#f97316','#84cc16','#ec4899',
+    '#6366f1','#14b8a6'
+  ];
+
   function _buildWeeklyDemand() {
     var NOW    = new Date(); NOW.setHours(0,0,0,0);
     var WEEK   = 7 * 24 * 60 * 60 * 1000;
     var WEEKS  = 26;
-    var demand = new Array(WEEKS).fill(0);
     var labels = [];
+    var bands  = [];
+    var totals = new Array(WEEKS).fill(0);
 
     for (var w = 0; w < WEEKS; w++) {
       var d = new Date(NOW.getTime() + w * WEEK);
@@ -137,14 +144,19 @@
       if (!e || !e.start_date_estimated || !e.peak_workers || !e.duration_weeks) return;
       var start = new Date(e.start_date_estimated); start.setHours(0,0,0,0);
       var end   = new Date(start.getTime() + e.duration_weeks * WEEK);
+      var weeks = new Array(WEEKS).fill(0);
       for (var w = 0; w < WEEKS; w++) {
         var ws = new Date(NOW.getTime() + w * WEEK);
         var we = new Date(ws.getTime() + WEEK);
-        if (start < we && end > ws) demand[w] += e.peak_workers;
+        if (start < we && end > ws) {
+          weeks[w] = e.peak_workers;
+          totals[w] += e.peak_workers;
+        }
       }
+      bands.push({ name: t.job_name || ('Job ' + t.id), weeks: weeks });
     });
 
-    return { demand: demand, labels: labels };
+    return { bands: bands, totals: totals, labels: labels };
   }
 
   function _capacitySection() {
@@ -165,39 +177,59 @@
       return html;
     }
 
-    var data   = _buildWeeklyDemand();
-    var demand = data.demand;
-    var labels = data.labels;
-    var maxVal = Math.max(_headcount, Math.max.apply(null, demand), 1);
-    var hasGap = _headcount > 0 && demand.some(function (d) { return d > _headcount; });
+    var data    = _buildWeeklyDemand();
+    var bands   = data.bands;
+    var totals  = data.totals;
+    var labels  = data.labels;
+    var maxVal  = Math.max(_headcount, Math.max.apply(null, totals), 1);
+    var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
+    var CHART_H = 100;
 
-    html += '<div style="display:flex;align-items:flex-end;gap:1px;height:80px;position:relative;border-bottom:1px solid var(--border);margin-bottom:4px">';
-    demand.forEach(function (d, i) {
-      var pct   = d > 0 ? Math.max((d / maxVal) * 100, 3) : 0;
-      var isGap = _headcount > 0 && d > _headcount;
-      var bg    = d === 0 ? '#f1f5f9' : isGap ? '#fca5a5' : '#bfdbfe';
-      var tip   = _esc(labels[i] + ': ' + d + ' workers' + (isGap ? ' — EXCEEDS HEADCOUNT' : ''));
-      html += '<div title="' + tip + '" style="flex:1;background:' + bg + ';height:' + pct + '%;border-radius:1px 1px 0 0"></div>';
-    });
+    // Stacked bars — one column per week, segments per project
+    html += '<div style="display:flex;align-items:flex-end;gap:1px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid var(--border);margin-bottom:4px">';
+    for (var wi = 0; wi < totals.length; wi++) {
+      var tot   = totals[wi];
+      var barH  = tot > 0 ? Math.max(Math.round((tot / maxVal) * CHART_H), 2) : 0;
+      var isGap = _headcount > 0 && tot > _headcount;
+      // Tooltip: total + per-project breakdown
+      var tipParts = [labels[wi] + ': ' + tot + ' workers'];
+      bands.forEach(function (b) { if (b.weeks[wi]) tipParts.push(b.name.split(/\s+/).slice(0,3).join(' ') + ': ' + b.weeks[wi]); });
+      var tip = tipParts.join(' | ');
+      html += '<div title="' + _esc(tip) + '" style="flex:1;height:' + barH + 'px;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden' + (isGap ? ';outline:1px solid #dc262680' : '') + '">';
+      if (tot > 0) {
+        bands.forEach(function (b, ci) {
+          if (!b.weeks[wi]) return;
+          html += '<div style="flex:' + b.weeks[wi] + ';background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + '"></div>';
+        });
+      } else {
+        html += '<div style="flex:1;background:#f1f5f9"></div>';
+      }
+      html += '</div>';
+    }
     if (_headcount > 0) {
       var botPct = Math.min(_headcount / maxVal * 100, 100);
       html += '<div style="position:absolute;left:0;right:0;bottom:' + botPct + '%;border-top:2px dashed #dc2626;pointer-events:none" title="Headcount: ' + _headcount + '"></div>';
     }
     html += '</div>';
 
-    html += '<div style="display:flex;gap:1px;margin-bottom:12px">';
+    // X-axis labels
+    html += '<div style="display:flex;gap:1px;margin-bottom:10px">';
     labels.forEach(function (l, i) {
       html += '<div style="flex:1;font-size:8px;color:var(--ink-3);text-align:center;overflow:hidden">' + (i % 4 === 0 ? l : '') + '</div>';
     });
     html += '</div>';
 
-    html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)">';
-    html += '<span><span style="display:inline-block;width:10px;height:10px;background:#bfdbfe;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Workers needed</span>';
+    // Per-project legend
+    html += '<div style="display:flex;gap:10px 16px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)">';
+    bands.forEach(function (b, ci) {
+      var lbl = b.name.length > 22 ? b.name.slice(0, 20) + '…' : b.name;
+      html += '<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:4px;vertical-align:middle"></span>' + _esc(lbl) + '</span>';
+    });
     if (_headcount > 0) {
-      html += '<span><span style="display:inline-block;width:14px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>Headcount (' + _headcount + ')</span>';
+      html += '<span style="white-space:nowrap"><span style="display:inline-block;width:14px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>Headcount (' + _headcount + ')</span>';
     }
     if (hasGap) {
-      html += '<span style="color:#dc2626;font-weight:600"><span style="display:inline-block;width:10px;height:10px;background:#fca5a5;border-radius:2px;margin-right:4px;vertical-align:middle"></span>⚠ Gap weeks</span>';
+      html += '<span style="color:#dc2626;font-weight:600;white-space:nowrap">⚠ Exceeds headcount</span>';
     }
     html += '</div>';
     html += '</div>';
