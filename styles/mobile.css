@@ -230,6 +230,12 @@
   .drawer-item.active-page { color: var(--navy); font-weight: 700; }
   .drawer-item.edit-only   { display: none; }
   .manager-mode .drawer-item.edit-only { display: flex; }
+  .drawer-item.manager-only   { display: none; }
+  .drawer-divider.manager-only { display: none; }
+  .drawer-label.manager-only   { display: none; }
+  .manager-mode .drawer-item.manager-only   { display: flex; }
+  .manager-mode .drawer-divider.manager-only { display: block; }
+  .manager-mode .drawer-label.manager-only   { display: flex; }
   .drawer-item.locked   { color: var(--ink-3); }
   .drawer-item.unlocked { color: var(--green); }
   .d-icon { font-size: 20px; width: 26px; text-align: center; flex-shrink: 0; }

@@ -669,15 +669,19 @@ function applyManagerMode() {
       el.style.display = '';
       el.removeAttribute('data-staff-hidden');
     });
-    // Restore mnav-schedule from Home back to My Week
-    const mnavSched = document.getElementById('mnav-schedule');
-    if (mnavSched && mnavSched.getAttribute('data-staff-orig-html')) {
-      mnavSched.innerHTML = mnavSched.getAttribute('data-staff-orig-html');
-      mnavSched.setAttribute('onclick', mnavSched.getAttribute('data-staff-orig-onclick') || "mobileNav('schedule')");
-      mnavSched.setAttribute('aria-label', 'My Week');
-      mnavSched.removeAttribute('data-staff-orig-html');
-      mnavSched.removeAttribute('data-staff-orig-onclick');
-    }
+    // Restore all repurposed nav buttons back to supervisor defaults
+    const _origLabels    = { 'mnav-schedule': 'My Week', 'mnav-roster': 'Roster', 'mnav-dashboard': 'Dashboard' };
+    const _origFallbacks = { 'mnav-schedule': "mobileNav('schedule')", 'mnav-roster': "mobileNav('roster')", 'mnav-dashboard': "mobileNav('dashboard')" };
+    ['mnav-schedule', 'mnav-roster', 'mnav-dashboard'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || !el.getAttribute('data-staff-orig-html')) return;
+      el.innerHTML = el.getAttribute('data-staff-orig-html');
+      el.setAttribute('onclick', el.getAttribute('data-staff-orig-onclick') || _origFallbacks[id]);
+      el.setAttribute('aria-label', _origLabels[id]);
+      el.removeAttribute('data-staff-orig-html');
+      el.removeAttribute('data-staff-orig-onclick');
+      el.style.display = '';
+    });
   }
 
   if (isManager) {
@@ -737,22 +741,28 @@ function updateMobileLock() {
 // supervisor unlocks mid-session on the same device.
 function applyStaffMode() {
   if (isManager) return;
-  ['mnav-dashboard', 'mnav-roster', 'mnav-calendar'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && el.style.display !== 'none') {
-      el.setAttribute('data-staff-hidden', '1');
-      el.style.display = 'none';
-    }
-  });
-  // Repurpose the My Week nav button as a Home button for staff
-  const mnavSched = document.getElementById('mnav-schedule');
-  if (mnavSched && !mnavSched.getAttribute('data-staff-orig-html')) {
-    mnavSched.setAttribute('data-staff-orig-html', mnavSched.innerHTML);
-    mnavSched.setAttribute('data-staff-orig-onclick', mnavSched.getAttribute('onclick') || '');
-    mnavSched.setAttribute('onclick', "mobileNav('home')");
-    mnavSched.setAttribute('aria-label', 'Home');
-    mnavSched.innerHTML = '<span class="mnav-icon">⌂</span>Home';
+  // Calendar has no staff use-case — hide it
+  const mnav_cal = document.getElementById('mnav-calendar');
+  if (mnav_cal && mnav_cal.style.display !== 'none') {
+    mnav_cal.setAttribute('data-staff-hidden', '1');
+    mnav_cal.style.display = 'none';
   }
+  // Repurpose the three supervisor nav slots for staff: Home / Schedule / Leave
+  const staffNav = [
+    { id: 'mnav-schedule',  onclick: "mobileNav('home')",     label: 'Home',     html: '<span class="mnav-icon">⌂</span>Home' },
+    { id: 'mnav-roster',    onclick: "mobileNav('schedule')", label: 'Schedule', html: '<span class="mnav-icon">📅</span>Schedule' },
+    { id: 'mnav-dashboard', onclick: "mobileNav('leave')",    label: 'Leave',    html: '<span class="mnav-icon">✈</span>Leave' },
+  ];
+  staffNav.forEach(({ id, onclick, label, html }) => {
+    const el = document.getElementById(id);
+    if (!el || el.getAttribute('data-staff-orig-html')) return;
+    el.setAttribute('data-staff-orig-html', el.innerHTML);
+    el.setAttribute('data-staff-orig-onclick', el.getAttribute('onclick') || '');
+    el.setAttribute('onclick', onclick);
+    el.setAttribute('aria-label', label);
+    el.innerHTML = html;
+    el.style.display = '';
+  });
 }
 
 // ── Agency access ─────────────────────────────────────────────

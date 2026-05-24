@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.15
+  EQ Solves — Field  v3.10.16
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3189,27 +3189,27 @@
   <div id="mobile-drawer-panel">
     <div class="drawer-handle"></div>
     <div class="drawer-label">Operations</div>
-    <button class="drawer-item" onclick="mobileNav('dashboard');closeMobileDrawer()" id="ditem-dashboard"><span class="d-icon">◈</span> Dashboard</button>
-    <button class="drawer-item" onclick="mobileNav('calendar');closeMobileDrawer()" id="ditem-calendar"><span class="d-icon">📅</span> Calendar</button>
-    <button class="drawer-item" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
-    <button class="drawer-item" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('dashboard');closeMobileDrawer()" id="ditem-dashboard"><span class="d-icon">◈</span> Dashboard</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('calendar');closeMobileDrawer()" id="ditem-calendar"><span class="d-icon">📅</span> Calendar</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
     <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
-    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave</button>
-    <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets</button>
-    <div class="drawer-divider"></div>
-    <div class="drawer-label">Manage</div>
+    <button class="drawer-item manager-only" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets</button>
+    <div class="drawer-divider manager-only"></div>
+    <div class="drawer-label manager-only">Manage</div>
     <button class="drawer-item edit-only" onclick="mobileNav('editor');closeMobileDrawer()" id="ditem-editor"><span class="d-icon">✎</span> Edit Roster</button>
     <button class="drawer-item edit-only" onclick="openAddPerson();closeMobileDrawer()"><span class="d-icon">＋</span> Add Person</button>
-    <button class="drawer-item" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
-    <button class="drawer-item" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
+    <button class="drawer-item manager-only" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
     <button class="drawer-item edit-only" onclick="mobileNav('pipeline');closeMobileDrawer()" id="ditem-pipeline"><span class="d-icon">◈</span> Pipeline <span class="beta-tag" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0">NEW</span></button>
     <button class="drawer-item edit-only" onclick="mobileNav('pipeline-resource');closeMobileDrawer()" id="ditem-pipeline-resource"><span class="d-icon">⬦</span> Resources</button>
-    <div class="drawer-divider"></div>
-    <div class="drawer-label">Beta</div>
-    <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
-    <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices <span class="beta-tag">BETA</span></button>
-    <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
-    <div class="drawer-divider"></div>
+    <div class="drawer-divider manager-only"></div>
+    <div class="drawer-label manager-only">Beta</div>
+    <button class="drawer-item manager-only" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
+    <button class="drawer-item manager-only" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices <span class="beta-tag">BETA</span></button>
+    <button class="drawer-item manager-only" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
+    <div class="drawer-divider manager-only"></div>
     <button id="audit-drawer-btn" class="drawer-item edit-only" onclick="openAuditLog();closeMobileDrawer()"><span class="d-icon">📋</span> Audit Log</button>
     <div class="drawer-divider"></div>
     <button id="mobile-lock-btn" class="drawer-item locked" onclick="toggleManagerMode();closeMobileDrawer()">
@@ -3782,11 +3782,18 @@ const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts',
 
 function mobileNav(id) {
   showPage(id);
-  // 'home' maps to the schedule nav button (repurposed as Home for staff)
-  const activeNavId = (id === 'home') ? 'schedule' : id;
+  // Map page id → which nav button lights up (staff have repurposed buttons)
+  let activeNavId = id;
+  if (id === 'home')                          activeNavId = 'schedule';   // ⌂ Home   = mnav-schedule
+  else if (!isManager && id === 'schedule')   activeNavId = 'roster';     // 📅 Sched = mnav-roster
+  else if (!isManager && id === 'leave')      activeNavId = 'dashboard';  // ✈ Leave  = mnav-dashboard
   MOBILE_NAV_PAGES.forEach(p => { const el = document.getElementById('mnav-' + p); if (el) el.classList.toggle('active', p===activeNavId); });
   const moreBtn = document.getElementById('mnav-more');
-  if (moreBtn) moreBtn.classList.toggle('active', !MOBILE_NAV_PAGES.includes(id) && id !== 'home');
+  // More is active for any page outside the staff nav bar (home/schedule/leave)
+  const _staffBar = ['home', 'schedule', 'leave'];
+  if (moreBtn) moreBtn.classList.toggle('active',
+    !isManager ? !_staffBar.includes(id) : (!MOBILE_NAV_PAGES.includes(id) && id !== 'home')
+  );
   DRAWER_NAV_PAGES.forEach(p => {
     const el = document.getElementById('ditem-' + p);
     if (el) el.classList.toggle('active-page', p===id);

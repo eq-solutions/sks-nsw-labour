@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.16 — Staff mobile nav: 4-item bar + stripped More drawer
+
+**Date:** 2026-05-25
+**Scope:** Staff mobile navigation.
+
+- **Bottom nav** — staff now see 4 items instead of 2. The three previously-hidden supervisor slots are repurposed: `mnav-schedule` → ⌂ Home (unchanged), `mnav-roster` → 📅 Schedule, `mnav-dashboard` → ✈ Leave. Calendar stays hidden.
+- **Active state** — `mobileNav()` maps page ids to the correct repurposed button for staff: 'schedule' lights up the Schedule button (roster slot), 'leave' lights up the Leave button (dashboard slot). Manager mode uses original mapping.
+- **More drawer** — staff now see only: Contacts · supervisor lock button · Privacy Notice · Log out. Everything else (Dashboard, Calendar, Sites, Supervision, Leave, Timesheets, Import/Export, Help, Job Numbers, Apprentices, Trial Dashboard, section dividers and labels) is hidden via new `manager-only` CSS class, visible only when `body.manager-mode` is active.
+
+---
+
 # v3.10.15 — Home screen: show immediately for mobile staff
 
 **Date:** 2026-05-25
