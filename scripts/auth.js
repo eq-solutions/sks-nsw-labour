@@ -24,6 +24,17 @@ function _postHandoffStatus(msg) {
   } catch (e) { /* cross-origin postMessage can throw in restricted contexts */ }
 }
 
+// Send 'boot' as soon as auth.js is parsed — before window.onload and
+// before loadTenantConfig's two sequential Supabase round trips. This
+// stops the shell's overlay timeout (10–30s) from firing on mobile
+// cold-starts. A second 'boot' from _consumeShellToken is harmless.
+(function _earlyBootSignal() {
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  if (new URLSearchParams(hash).get('sh')) {
+    _postHandoffStatus({ kind: 'boot', hasHash: true });
+  }
+}());
+
 // Reads #sh=<token> from the URL hash, calls verify-pin with
 // action='verify-shell-token', and on success sets sessionStorage so
 // the rest of the app starts as if the user had entered their PIN.
