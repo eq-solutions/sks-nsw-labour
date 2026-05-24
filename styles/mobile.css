@@ -44,6 +44,9 @@
     padding: 4px 8px;
   }
   .topbar-week button { min-width: 32px; min-height: 32px; font-size: 18px; }
+  /* Verbose label ("Week Starting 25th May 2026") is redundant next to the
+     dropdown — hide on mobile, keep the select + arrows only. */
+  #week-label-text { display: none; }
 
   .page      { padding: 12px; }
 

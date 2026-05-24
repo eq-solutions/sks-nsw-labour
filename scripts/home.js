@@ -270,7 +270,7 @@
           '<div class="eqh-tile-icon">📅</div>' +
           '<div><div class="eqh-tile-title">My schedule</div><div class="eqh-tile-sub">' + esc(scheduleSub) + '</div></div>' +
         '</button>' +
-        '<button class="eqh-tile eqh-t-leave" onclick="eqhTileTap(\'leave\')">' +
+        '<button class="eqh-tile eqh-t-leave" onclick="eqhLeaveTap()">' +
           '<div class="eqh-tile-icon">✈</div>' +
           '<div><div class="eqh-tile-title">Leave</div><div class="eqh-tile-sub">Request time off</div></div>' +
         '</button>' +
@@ -358,6 +358,18 @@
     renderHomeScreen(true);
   }
 
+  // ── Leave tap — open request modal directly for staff ────────
+
+  function eqhLeaveTap() {
+    try {
+      if (window.EQ_ANALYTICS && EQ_ANALYTICS.capture) EQ_ANALYTICS.capture('home_tile_tapped', { tile: 'leave' });
+    } catch (e) {}
+    // Pre-navigate to leave page so modal backdrop + close work correctly
+    if (typeof window.mobileNav === 'function') window.mobileNav('leave');
+    // Then immediately open the new request modal
+    if (typeof window.openLeaveRequest === 'function') window.openLeaveRequest();
+  }
+
   // ── Tile tap router ──────────────────────────────────────────
 
   function eqhTileTap(target) {
@@ -443,6 +455,7 @@
   // ── Expose ───────────────────────────────────────────────────
   window.renderHomeScreen   = renderHomeScreen;
   window.eqhTileTap         = eqhTileTap;
+  window.eqhLeaveTap        = eqhLeaveTap;
   window.eqhSetWeek         = eqhSetWeek;
   window.eqhOpenDrawer      = eqhOpenDrawer;
   window.eqhCloseDrawer     = eqhCloseDrawer;

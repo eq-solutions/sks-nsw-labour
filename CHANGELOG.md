@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.13 — Mobile week picker tidy + Leave tile opens request modal
+
+**Date:** 2026-05-24
+**Scope:** Mobile polish + staff home screen UX.
+
+- **Week picker** — "Week Starting DD Month YYYY" label hidden on mobile; dropdown + ‹ › arrows remain, no wrapping
+- **Leave tile** — tapping Leave on the staff home screen now navigates to the leave page and immediately opens the new leave request modal, skipping the list view
+
+---
+
 # v3.10.12 — Home screen: fix shift lookup for partial gate names
 
 **Date:** 2026-05-24
