@@ -25,7 +25,7 @@
   function getLoggedInName() {
     try {
       const raw = sessionStorage.getItem('eq_logged_in_name') || '';
-      if (!raw || !window.STATE || !Array.isArray(STATE.people)) return raw;
+      if (!raw || typeof STATE === 'undefined' || !Array.isArray(STATE.people)) return raw;
       // Exact match — common case
       if (STATE.people.find(p => p.name === raw)) return raw;
       // Fuzzy match — mirrors refreshPersonSelects() so partial gate names
@@ -69,12 +69,12 @@
   }
 
   function isManagerSession() {
-    try { return typeof window.isManager !== 'undefined' && window.isManager === true; }
+    try { return typeof isManager !== 'undefined' && isManager === true; }
     catch (e) { return false; }
   }
 
   function currentWeekKey() {
-    if (window.STATE && STATE.currentWeek) return STATE.currentWeek;
+    if (typeof STATE !== 'undefined' && STATE.currentWeek) return STATE.currentWeek;
     const d = new Date(), mon = new Date(d);
     mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
@@ -99,7 +99,7 @@
   function getUserScheduleRow(week) {
     const name = getLoggedInName().trim();
     if (!name) return null;
-    const rows = (window.STATE && Array.isArray(STATE.schedule)) ? STATE.schedule : [];
+    const rows = (typeof STATE !== 'undefined' && Array.isArray(STATE.schedule)) ? STATE.schedule : [];
     return rows.find(r => r.name === name && r.week === week) || null;
   }
 
@@ -158,8 +158,8 @@
 
   function describeScheduleThisWeek() {
     try {
-      const wk   = (window.STATE && STATE.currentWeek) ? STATE.currentWeek : null;
-      const rows = (window.STATE && Array.isArray(STATE.schedule)) ? STATE.schedule : [];
+      const wk   = (typeof STATE !== 'undefined' && STATE.currentWeek) ? STATE.currentWeek : null;
+      const rows = (typeof STATE !== 'undefined' && Array.isArray(STATE.schedule)) ? STATE.schedule : [];
       const ppl = new Set(), sites = new Set();
       rows.forEach(r => {
         if (wk && r.week !== wk) return;
@@ -252,10 +252,7 @@
           '<span class="eqh-shift-chev">›</span>' +
         '</button>';
 
-    const _dbg = shiftCount === 0
-      ? 'Nothing rostered · ' + (name||'(no name)') + ' · ' + week + ' · ' + ((window.STATE&&STATE.schedule)?STATE.schedule.length:'?') + ' rows'
-      : '';
-    const scheduleSub = shiftCount === 0 ? _dbg
+    const scheduleSub = shiftCount === 0 ? 'Nothing rostered'
       : shiftCount === 1 ? '1 shift this week'
       : shiftCount + ' shifts this week';
 
