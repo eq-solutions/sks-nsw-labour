@@ -6,6 +6,16 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.2 — My Schedule: today highlight + past day fade
+
+**Date:** 2026-05-24
+**Scope:** My Schedule visual improvements — immediate day orientation for staff.
+
+- Today's row: navy left border, light navy tint on day column, "TODAY" badge in SKS purple, bold date
+- Past days: 50% opacity so staff focus lands on today and forward
+
+---
+
 # v3.10.1 — Resource Allocation: instant repeat-visit render
 
 **Date:** 2026-05-24

@@ -589,7 +589,16 @@ function renderSchedule() {
   const sched  = getPersonSchedule(name, week);
   const weekDates = getWeekDates(week);
 
+  // ── Today / past awareness ────────────────────────────────
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const [wd, wm, wy] = week.split('.').map(Number);
+  const weekStart = new Date(2000 + wy, wm - 1, wd); weekStart.setHours(0, 0, 0, 0);
+
   const dayRows = days.map((d, i) => {
+    const dayDate = new Date(weekStart.getTime() + i * 86400000);
+    const isToday = dayDate.getTime() === today.getTime();
+    const isPast  = dayDate < today;
+
     const s     = sched[d] || '';
     const col   = siteColor(s);
     const color = colorMap[col] || '#94A3B8';
@@ -598,10 +607,13 @@ function renderSchedule() {
     const isOff = !s || isLeave(s);
     const st    = STATE.sites.find(x => x.abbr === s);
 
-    return `<div style="display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)">
-      <div style="width:90px;flex-shrink:0;background:var(--surface-2);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 10px;gap:4px">
-        <div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.6px">${dayLabels[i]}</div>
-        <div style="font-size:10px;color:var(--ink-4)">${weekDates[i]}</div>
+    const wrapExtra = isToday ? 'border-left:3px solid #1F335C;' : isPast ? 'opacity:0.5;' : '';
+
+    return `<div style="display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);${wrapExtra}">
+      <div style="width:90px;flex-shrink:0;background:${isToday ? 'rgba(31,51,92,0.07)' : 'var(--surface-2)'};border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 10px;gap:4px">
+        <div style="font-size:10px;font-weight:700;color:${isToday ? '#1F335C' : 'var(--ink-3)'};text-transform:uppercase;letter-spacing:.6px">${dayLabels[i]}</div>
+        <div style="font-size:10px;color:${isToday ? '#1F335C' : 'var(--ink-4)'};font-weight:${isToday ? '700' : 'normal'}">${weekDates[i]}</div>
+        ${isToday ? '<div style="font-size:8px;font-weight:700;color:#7C77B9;letter-spacing:.05em;margin-top:1px">TODAY</div>' : ''}
         <div style="width:8px;height:8px;border-radius:50%;background:${isOff ? 'var(--ink-4)' : color}"></div>
       </div>
       <div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:3px">
