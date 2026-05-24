@@ -574,6 +574,20 @@ function renderEditor() {
 }
 
 // ── My Schedule ───────────────────────────────────────────────
+function slideScheduleWeek(dir) {
+  const sel     = document.getElementById('globalWeek');
+  const opts    = sel ? [...sel.options].map(o => o.value) : [];
+  const currIdx = opts.indexOf(STATE.currentWeek);
+  const nextIdx = currIdx + dir;
+  if (nextIdx < 0 || nextIdx >= opts.length) return;
+  STATE.currentWeek = opts[nextIdx];
+  sel.value = STATE.currentWeek;
+  saveCurrentWeek();
+  updateWeekLabel();
+  updateTopStats();
+  renderSchedule();
+}
+
 function renderSchedule() {
   const name = document.getElementById('schedule-person').value;
   const week = STATE.currentWeek;
@@ -591,10 +605,48 @@ function renderSchedule() {
   const sched  = getPersonSchedule(name, week);
   const weekDates = getWeekDates(week);
 
+  // ── Week navigation ───────────────────────────────────────
+  const sel      = document.getElementById('globalWeek');
+  const opts     = sel ? [...sel.options].map(o => o.value) : [];
+  const currIdx  = opts.indexOf(week);
+  const hasPrev  = currIdx > 0;
+  const hasNext  = currIdx < opts.length - 1;
+
+  const weekNav = `
+    <div style="display:flex;align-items:center;gap:8px;max-width:600px;margin-bottom:12px">
+      <button onclick="slideScheduleWeek(-1)" ${hasPrev ? '' : 'disabled'}
+        style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:${hasPrev ? 'var(--surface)' : 'var(--surface-2)'};color:${hasPrev ? 'var(--navy)' : 'var(--ink-4)'};font-family:inherit;font-size:13px;font-weight:600;cursor:${hasPrev ? 'pointer' : 'default'}">‹</button>
+      <div style="flex:1;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:var(--navy)">${formatWeekLabel(week)}</div>
+        <div style="font-size:10px;color:var(--ink-3);margin-top:1px">${week}</div>
+      </div>
+      <button onclick="slideScheduleWeek(1)" ${hasNext ? '' : 'disabled'}
+        style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:${hasNext ? 'var(--surface)' : 'var(--surface-2)'};color:${hasNext ? 'var(--navy)' : 'var(--ink-4)'};font-family:inherit;font-size:13px;font-weight:600;cursor:${hasNext ? 'pointer' : 'default'}">›</button>
+    </div>`;
+
   // ── Today / past awareness ────────────────────────────────
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const [wd, wm, wy] = week.split('.').map(Number);
   const weekStart = new Date(2000 + wy, wm - 1, wd); weekStart.setHours(0, 0, 0, 0);
+
+  // ── All-week banner ───────────────────────────────────────
+  // Show when Mon–Fri are all the same non-leave site
+  const workSites = days.map(d => sched[d] || '').filter(s => s && !isLeave(s));
+  const uniqueSites = [...new Set(workSites)];
+  const allSame = workSites.length === 5 && uniqueSites.length === 1;
+  const allSameAbbr = allSame ? uniqueSites[0] : null;
+  const allSameName = allSameAbbr ? getSiteName(allSameAbbr) : null;
+  const allSameAddr = allSameAbbr ? getSiteAddress(allSameAbbr) : null;
+  const allSameBanner = allSame ? `
+    <div style="max-width:600px;background:rgba(31,51,92,0.05);border:1px solid rgba(31,51,92,0.18);border-radius:var(--radius);padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="font-size:20px;flex-shrink:0">📍</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">All week</div>
+        <div style="font-size:14px;font-weight:700;color:var(--navy)">${esc(allSameName)}</div>
+        ${allSameAddr ? `<div style="font-size:11px;color:var(--ink-3);margin-top:1px">${esc(allSameAddr)}</div>` : ''}
+      </div>
+      ${allSameAddr ? `<a href="https://maps.google.com/?q=${encodeURIComponent(allSameAddr)}" target="_blank" style="flex-shrink:0;padding:7px 10px;background:var(--navy);color:#fff;border-radius:5px;text-decoration:none;font-size:12px;font-weight:700">Maps ↗</a>` : ''}
+    </div>` : '';
 
   const dayRows = days.map((d, i) => {
     const dayDate = new Date(weekStart.getTime() + i * 86400000);
@@ -636,10 +688,23 @@ function renderSchedule() {
   document.getElementById('schedule-content').innerHTML = `
     <div class="schedule-hero" style="max-width:600px">
       <div class="schedule-hero-name">${esc(name)}</div>
-      <div class="schedule-hero-meta">${person ? person.group : ''}${person && person.licence ? ' · ' + person.licence : ''}${person && person.agency ? ' · ' + person.agency : ''} &nbsp;·&nbsp; w/c ${week}</div>
+      <div class="schedule-hero-meta">${person ? person.group : ''}${person && person.licence ? ' · ' + person.licence : ''}${person && person.agency ? ' · ' + person.agency : ''}</div>
     </div>
-    <div style="max-width:600px;display:flex;flex-direction:column;gap:8px">${dayRows}</div>
+    ${weekNav}
+    ${allSameBanner}
+    <div id="schedule-day-cards" style="max-width:600px;display:flex;flex-direction:column;gap:8px">${dayRows}</div>
     ${person && person.phone ? `<div style="margin-top:14px;max-width:600px"><a class="contact-phone" href="tel:${person.phone}" style="display:inline-flex">📞 ${person.phone}</a></div>` : ''}`;
+
+  // ── Swipe to change week (mobile) ─────────────────────────
+  const cards = document.getElementById('schedule-day-cards');
+  if (cards) {
+    let _swipeX = 0;
+    cards.addEventListener('touchstart', e => { _swipeX = e.touches[0].clientX; }, { passive: true });
+    cards.addEventListener('touchend',   e => {
+      const dx = e.changedTouches[0].clientX - _swipeX;
+      if (Math.abs(dx) > 60) slideScheduleWeek(dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
 }
 
 // ── Staff jobs panel (for staff TS self-entry) ─────────────────

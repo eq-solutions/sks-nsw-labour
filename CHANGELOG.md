@@ -6,6 +6,18 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.5 — My Schedule: week navigation, all-week banner, swipe
+
+**Date:** 2026-05-24
+**Scope:** My Schedule UX improvements — the #1 most-visited page.
+
+- **Week navigation** — ‹ › arrows at top of schedule; same week state as global picker
+- **All-week banner** — navy "All week: Site Name + address + Maps button" banner when Mon–Fri all match one site
+- **Swipe to change week** — 60px horizontal swipe on day cards navigates prev/next week on mobile
+- Hero meta row cleaned up (removed redundant "w/c [week]" — now shown in the nav row)
+
+---
+
 # v3.10.4 — Push notifications: roster change alerts for staff
 
 **Date:** 2026-05-24
