@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.14 — Home screen: fix shift lookup on Sunday
+
+**Date:** 2026-05-25
+**Scope:** Staff home screen — next-shift pill on Sunday.
+
+- **Sunday edge case** — `findNextShiftInWeek` was returning null on Sundays because `todayIdx = 6 > 4` triggered an early exit. But `initApp()` already points `STATE.currentWeek` at next Monday on Sundays, so all five weekdays are upcoming. Fix: only advance the start index on weekdays (`todayIdx <= 4`); on weekends start from 0 so Monday's shift is correctly returned as the next shift.
+
+---
+
 # v3.10.13 — Mobile week picker tidy + Leave tile opens request modal
 
 **Date:** 2026-05-24

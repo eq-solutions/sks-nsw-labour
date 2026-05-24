@@ -126,8 +126,10 @@
       let start = 0;
       if (week === thisWk) {
         const todayIdx = (new Date().getDay() + 6) % 7;
-        if (todayIdx > 4) return null; // weekend — this week is done
-        start = todayIdx;
+        // On weekdays start from today; on weekends (Sat/Sun) initApp already
+        // points STATE.currentWeek at next Monday, so all 5 days are upcoming —
+        // start from 0 so Monday's shift is returned as the next shift.
+        if (todayIdx <= 4) start = todayIdx;
       }
       for (let i = start; i < 5; i++) {
         const d = dayOrder[i];
