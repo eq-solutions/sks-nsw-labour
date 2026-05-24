@@ -352,7 +352,7 @@
     var NOW  = new Date(); NOW.setHours(0, 0, 0, 0);
     var WEEK = 7 * 24 * 60 * 60 * 1000;
     var SEGS = 26;
-    var html = '<div style="display:flex;gap:2px;margin-top:12px">';
+    var html = '<div style="display:flex;gap:2px">';
     for (var w = 0; w < SEGS; w++) {
       var active = false;
       if (enr.start_date_estimated && enr.duration_weeks) {
@@ -372,7 +372,9 @@
   var _CHART_PALETTE = [
     '#3b82f6','#10b981','#f59e0b','#8b5cf6',
     '#06b6d4','#f97316','#84cc16','#ec4899',
-    '#6366f1','#14b8a6'
+    '#6366f1','#14b8a6','#ef4444','#0ea5e9',
+    '#d946ef','#22c55e','#a855f7','#f43f5e',
+    '#fb923c','#4ade80','#818cf8','#2dd4bf'
   ];
 
   function _buildWeeklyDemand() {
@@ -486,6 +488,8 @@
 
     // Bars + x-axis
     html += '<div style="flex:1;min-width:0">';
+    var useStacked = bands.length <= 6;
+
     html += '<div style="display:flex;align-items:flex-end;gap:2px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid rgba(255,255,255,0.15);margin-bottom:6px">';
     for (var gv = yInterval; gv < maxVal; gv += yInterval) {
       html += '<div style="position:absolute;left:0;right:0;bottom:' + (gv / maxVal * 100) + '%;border-top:1px solid rgba(255,255,255,0.07);pointer-events:none"></div>';
@@ -498,10 +502,17 @@
       bands.forEach(function (b) { if (b.weeks[wi]) tipParts.push(b.name.split(/\s+/).slice(0, 3).join(' ') + ': ' + b.weeks[wi]); });
       html += '<div title="' + _esc(tipParts.join(' | ')) + '" style="flex:1;height:' + barH + 'px;display:flex;flex-direction:column-reverse;border-radius:3px 3px 0 0;overflow:hidden' + (isGap ? ';outline:1px solid rgba(252,165,165,0.7)' : '') + '">';
       if (tot > 0) {
-        bands.forEach(function (b, ci) {
-          if (!b.weeks[wi]) return;
-          html += '<div style="flex:' + b.weeks[wi] + ';background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + '"></div>';
-        });
+        if (useStacked) {
+          bands.forEach(function (b, ci) {
+            if (!b.weeks[wi]) return;
+            html += '<div style="flex:' + b.weeks[wi] + ';background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + '"></div>';
+          });
+        } else {
+          // Utilisation colour — single bar, colour encodes load vs headcount
+          var util = _headcount > 0 ? tot / _headcount : 0.5;
+          var uColor = util > 1 ? '#ef4444' : util > 0.75 ? '#f97316' : util > 0.4 ? '#facc15' : '#4ade80';
+          html += '<div style="flex:1;background:' + uColor + '"></div>';
+        }
       }
       html += '</div>';
     }
@@ -523,12 +534,20 @@
 
     // Legend
     html += '<div style="display:flex;gap:6px 20px;flex-wrap:wrap;font-size:11px;color:rgba(255,255,255,0.45);margin-top:16px">';
-    bands.forEach(function (b, ci) {
-      var lbl = b.name.length > 26 ? b.name.slice(0, 24) + '…' : b.name;
-      html += '<span style="white-space:nowrap">' +
-        '<span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:5px;vertical-align:middle"></span>' +
-        _esc(lbl) + '</span>';
-    });
+    if (useStacked) {
+      bands.forEach(function (b, ci) {
+        var lbl = b.name.length > 26 ? b.name.slice(0, 24) + '…' : b.name;
+        html += '<span style="white-space:nowrap">' +
+          '<span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:5px;vertical-align:middle"></span>' +
+          _esc(lbl) + '</span>';
+      });
+    } else {
+      // Utilisation colour key
+      html += '<span style="color:rgba(255,255,255,0.6);font-size:11px">' + bands.length + ' jobs — bars show demand load: </span>';
+      [['#4ade80','&lt;40%'],['#facc15','40–75%'],['#f97316','75–100%'],['#ef4444','&gt;100%']].forEach(function(pair) {
+        html += '<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;background:' + pair[0] + ';border-radius:2px;margin-right:4px;vertical-align:middle"></span>' + pair[1] + '</span>';
+      });
+    }
     if (_headcount > 0) {
       html += '<span style="white-space:nowrap">' +
         '<span style="display:inline-block;width:16px;border-top:2px dashed rgba(252,165,165,0.75);margin-right:5px;vertical-align:middle"></span>' +
@@ -790,16 +809,32 @@
     if (!confirmed.length) return '';
 
     var html = '<div style="margin-bottom:28px">';
-    // Section header with ruled line
-    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">';
+
+    // Section header
+    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">';
     html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);white-space:nowrap">CONFIRMED JOBS (' + confirmed.length + ')</div>';
     html += '<div style="flex:1;height:1px;background:#e2e8f0"></div>';
     html += '</div>';
 
-    // Horizontal card grid
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:' + (_openConfirmedPanel ? '16px' : '0') + '">';
+    // Table
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
 
-    confirmed.forEach(function (t) {
+    // Header
+    html += '<thead><tr style="border-bottom:1px solid #f1f5f9">';
+    var thStyle = 'padding:10px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--ink-3);white-space:nowrap;background:#fafafa';
+    html += '<th style="' + thStyle + ';padding-left:18px">JOB</th>';
+    html += '<th style="' + thStyle + ';text-align:right">WORKERS</th>';
+    html += '<th style="' + thStyle + ';text-align:right">WEEKS</th>';
+    html += '<th style="' + thStyle + ';text-align:right">VALUE</th>';
+    html += '<th style="' + thStyle + '">SCHEDULE — 26 WKS</th>';
+    html += '<th style="' + thStyle + ';text-align:right">STATUS</th>';
+    html += '<th style="' + thStyle + ';width:20px"></th>';
+    html += '</tr></thead>';
+
+    // Rows
+    html += '<tbody>';
+    confirmed.forEach(function (t, ri) {
       var id       = String(t.id);
       var enr      = _enr[id] || {};
       var nom      = _noms[id] || { pm: null, supervisor: null };
@@ -813,63 +848,66 @@
 
       var badge = '';
       if (unpushed.length) {
-        badge = '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:600">' + unpushed.length + ' to assign</span>';
+        badge = '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap">' + unpushed.length + ' to assign</span>';
       } else if (hasPushed || (enr.peak_workers && enr.duration_weeks)) {
-        badge = '<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:20px;font-weight:600">✓ On roster</span>';
+        badge = '<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap">✓ On roster</span>';
       }
 
-      html += '<div id="ra-conf-row-' + id + '" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" ' +
-        'style="cursor:pointer;' +
-        'background:' + (isOpen ? accent + '10' : '#fff') + ';' +
-        'border:1px solid ' + (isOpen ? accent + '60' : '#e2e8f0') + ';' +
-        'border-top:4px solid ' + accent + ';' +
-        'border-radius:12px;padding:18px 20px 16px;' +
-        'user-select:none;-webkit-user-select:none;' +
-        (isOpen ? 'box-shadow:0 4px 20px ' + accent + '28' : '') + '">';
+      var rowBg = isOpen ? accent + '0d' : (ri % 2 === 0 ? '#fff' : '#fafafa');
+      var tdBase = 'padding:12px 14px;vertical-align:middle;border-bottom:1px solid #f1f5f9';
 
-      // Ref chip + badge
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
-      html += '<span style="font-size:10px;font-family:monospace;background:#f1f5f9;color:var(--ink-2);padding:2px 7px;border-radius:4px">' + _esc(t.external_ref || '—') + '</span>';
-      if (badge) html += badge;
-      html += '<div style="flex:1"></div>';
-      html += '<div style="font-size:11px;color:var(--ink-3)">' + (isOpen ? '▲' : '▼') + '</div>';
-      html += '</div>';
+      html += '<tr id="ra-conf-row-' + id + '" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" ' +
+        'style="cursor:pointer;background:' + rowBg + ';user-select:none;-webkit-user-select:none' + (isOpen ? ';outline:2px solid ' + accent + ';outline-offset:-2px' : '') + '">';
 
-      // Job name + client
-      html += '<div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.job_name || '—') + '</div>';
-      if (t.client) html += '<div style="font-size:11px;color:var(--ink-3);margin-bottom:14px">' + _esc(t.client) + (t.vertical ? ' · ' + _esc(t.vertical) : '') + '</div>';
+      // Job name cell — accent bar + ref + name + client
+      html += '<td style="' + tdBase + ';padding-left:0;min-width:200px;max-width:260px">';
+      html += '<div style="display:flex;align-items:center;gap:0">';
+      html += '<div style="width:4px;min-height:44px;background:' + accent + ';border-radius:0;flex-shrink:0;margin-right:14px"></div>';
+      html += '<div style="min-width:0">';
+      html += '<div style="font-size:10px;font-family:monospace;color:var(--ink-3);margin-bottom:1px">' + _esc(t.external_ref || '—') + '</div>';
+      html += '<div style="font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.job_name || '—') + '</div>';
+      if (t.client) html += '<div style="font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.client) + '</div>';
+      if (pmN || spN) {
+        var people = [];
+        if (pmN) people.push(pmN.split(' ')[0]);
+        if (spN) people.push(spN.split(' ')[0]);
+        html += '<div style="font-size:10px;color:var(--ink-3);margin-top:2px">' + _esc(people.join(' · ')) + '</div>';
+      }
+      html += '</div></div></td>';
 
       // Metrics
-      html += '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px">';
-      if (enr.peak_workers)   html += '<div><div style="font-size:22px;font-weight:700;color:var(--navy);line-height:1">' + enr.peak_workers   + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">workers</div></div>';
-      if (enr.duration_weeks) html += '<div><div style="font-size:22px;font-weight:700;color:var(--navy);line-height:1">' + enr.duration_weeks + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">weeks</div></div>';
-      if (t.quote_value)      html += '<div><div style="font-size:22px;font-weight:700;color:#16a34a;line-height:1">$' + _fmtK(t.quote_value) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">value</div></div>';
-      if (enr.hours_estimated) html += '<div><div style="font-size:22px;font-weight:700;color:var(--navy);line-height:1">' + _fmtK(enr.hours_estimated) + '</div><div style="font-size:10px;color:var(--ink-3);margin-top:2px">hours est.</div></div>';
-      html += '</div>';
+      html += '<td style="' + tdBase + ';text-align:right;white-space:nowrap">';
+      if (enr.peak_workers) html += '<div style="font-size:20px;font-weight:700;color:var(--navy);line-height:1">' + enr.peak_workers + '</div>';
+      html += '</td>';
 
-      // PM / Sup
-      var people = [];
-      if (pmN) people.push(pmN.split(' ')[0] + ' (PM)');
-      if (spN) people.push(spN.split(' ')[0] + ' (Sup)');
-      if (people.length) {
-        html += '<div style="font-size:11px;color:var(--ink-2);margin-bottom:10px">' + people.map(_esc).join(' · ') + '</div>';
-      }
+      html += '<td style="' + tdBase + ';text-align:right;white-space:nowrap">';
+      if (enr.duration_weeks) html += '<div style="font-size:20px;font-weight:700;color:var(--navy);line-height:1">' + enr.duration_weeks + '</div>';
+      html += '</td>';
 
-      // Mini 26-week timeline strip
-      html += _miniTimeline(enr, accent);
+      html += '<td style="' + tdBase + ';text-align:right;white-space:nowrap">';
+      if (t.quote_value) html += '<div style="font-size:13px;font-weight:700;color:#16a34a">$' + _fmtK(t.quote_value) + '</div>';
+      html += '</td>';
 
-      html += '</div>'; // card
+      // Mini timeline
+      html += '<td style="' + tdBase + ';min-width:140px">' + _miniTimeline(enr, accent) + '</td>';
+
+      // Status badge
+      html += '<td style="' + tdBase + ';text-align:right">' + badge + '</td>';
+
+      // Chevron
+      html += '<td style="' + tdBase + ';padding-right:16px;text-align:center;font-size:10px;color:var(--ink-3)">' + (isOpen ? '▲' : '▼') + '</td>';
+
+      html += '</tr>';
     });
+    html += '</tbody></table></div>'; // table + card
 
-    html += '</div>'; // grid
-
-    // Full-width expansion panel below the grid
+    // Full-width expansion panel below the table
     if (_openConfirmedPanel) {
-      var ot   = confirmed.find(function (t) { return String(t.id) === _openConfirmedPanel; });
+      var ot    = confirmed.find(function (t) { return String(t.id) === _openConfirmedPanel; });
       var oRows = _pending[_openConfirmedPanel] || [];
       if (ot && oRows.length) {
         var oacc = _tenderColor(_openConfirmedPanel);
-        html += '<div style="border:1px solid #e2e8f0;border-top:3px solid ' + oacc + ';border-radius:10px;overflow:hidden;background:#fff">';
+        html += '<div style="margin-top:8px;border:1px solid #e2e8f0;border-top:3px solid ' + oacc + ';border-radius:12px;overflow:hidden;background:#fff">';
         html += _labourCurvePanel(ot, oRows);
         html += '</div>';
       }
