@@ -618,8 +618,15 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.0
+  EQ Solves — Field  v3.10.1
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
+  ────────────────────────────────────────────────────────────
+   • renderPipelineResource() no longer wipes and re-fetches on repeat visits.
+     If data was previously loaded (_lastLoaded set), paints cached data
+     immediately then silently background-refreshes. Eliminates the loading
+     flash when navigating away and back to Resource Allocation.
 
   CHANGES IN v3.10.0  (Resource Allocation — polish pass)
   ────────────────────────────────────────────────────────────

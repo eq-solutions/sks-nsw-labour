@@ -6,6 +6,17 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.1 — Resource Allocation: instant repeat-visit render
+
+**Date:** 2026-05-24
+**Scope:** Eliminate loading flash when navigating back to Resource Allocation.
+
+- `renderPipelineResource()` now checks `_lastLoaded` before fetching
+- If data exists: paints immediately with cached state, then background-refreshes silently
+- First visit still waits for data (unavoidable), all subsequent visits are instant
+
+---
+
 # v3.10.0 — Resource Allocation: polish pass
 
 **Date:** 2026-05-24
