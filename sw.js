@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.10.3
-const CACHE = 'eq-field-v3.10.3';
+// EQ Solves — Field  ·  Service Worker  v3.10.4
+const CACHE = 'eq-field-v3.10.4';
 
 const PRECACHE = [
   '/',
@@ -106,6 +106,35 @@ self.addEventListener('fetch', event => {
         return res;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+// ── Push Notifications ───────────────────────────────────────
+// v3.10.4: show roster change alerts on staff devices.
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.json() : {};
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'EQ Solves — Field', {
+      body:      data.body || 'Your roster has been updated for tomorrow',
+      icon:      '/icons/icon-192.png',
+      badge:     '/icons/icon-72.png',
+      data:      { url: data.url || '/' },
+      tag:       'roster-update',
+      renotify:  true
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clients => {
+        const open = clients.find(c => c.url.includes(self.location.origin));
+        if (open) return open.focus();
+        return self.clients.openWindow(url);
+      })
   );
 });
 

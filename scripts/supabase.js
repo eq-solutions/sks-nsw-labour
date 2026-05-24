@@ -995,6 +995,56 @@ async function importScheduleToSB(schedule, weeks) {
   }
 }
 
+// ── Push Notifications ────────────────────────────────────────
+// v3.10.4: Web Push subscription storage + roster-change trigger.
+const _VAPID_PUBLIC_KEY = 'BKipGPqhaxtQN2pPQo7NonlBk3n6AQB6pxK-fWhTH5B8YYhqcEck6BAQ9ZdQIrhZl40TVklw2X3uoUxdg9h-DWM';
+
+function _urlBase64ToUint8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const b = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...b].map(c => c.charCodeAt(0)));
+}
+
+function _isTomorrowCell(week, day) {
+  const IDX = { mon:0, tue:1, wed:2, thu:3, fri:4, sat:5, sun:6 };
+  const idx = IDX[day];
+  if (idx === undefined) return false;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  const [wd, wm, wy] = week.split('.').map(Number);
+  const weekStart = new Date(2000 + wy, wm - 1, wd);
+  weekStart.setHours(0, 0, 0, 0);
+  return new Date(weekStart.getTime() + idx * 86400000).getTime() === tomorrow.getTime();
+}
+
+async function sbSavePushSubscription(personName, subscription) {
+  const s = subscription.toJSON();
+  try {
+    await sbFetch('push_subscriptions', 'POST', {
+      org_id:      TENANT.ORG_UUID,
+      person_name: personName,
+      endpoint:    s.endpoint,
+      p256dh:      s.keys.p256dh,
+      auth_key:    s.keys.auth
+    });
+  } catch (e) { /* non-blocking — failure here doesn't block anything */ }
+}
+
+async function triggerRosterPush(name, week, day, siteAbbr) {
+  if (!_isTomorrowCell(week, day)) return;
+  if (!siteAbbr) return; // clearing a cell = no notification
+  const siteName = (typeof getSiteName === 'function' && getSiteName(siteAbbr)) || siteAbbr;
+  const DAY_LABEL = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' };
+  try {
+    fetch(`${SB_URL}/functions/v1/send-roster-push`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
+      body:    JSON.stringify({ person_name: name, org_id: TENANT.ORG_UUID, site_name: siteName, day_label: DAY_LABEL[day] || day })
+    }).catch(() => {}); // fire-and-forget — notification failure never blocks the save
+  } catch (e) { /* non-blocking */ }
+}
+
 async function importManagersToSB(managers) {
   try { await _purgeTenantRows('managers'); } catch (e) { return; }
   if (!managers.length) return;

@@ -6,6 +6,21 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.4 — Push notifications: roster change alerts for staff
+
+**Date:** 2026-05-24
+**Scope:** Web Push notifications when a supervisor changes tomorrow's roster.
+
+- New Supabase table `push_subscriptions` stores per-device browser push subscriptions
+- New Supabase Edge Function `send-roster-push` sends Web Push via VAPID (npm:web-push)
+- Staff see a friendly opt-in banner 3 s after login — "Get notified when your roster changes"
+- Supervisor saves a roster cell for tomorrow → edge function fires → staff phone gets a push
+- Push shows: "Tomorrow (Day): Site Name" — tapping opens the app
+- Expired subscriptions (410/404) auto-pruned from DB
+- `sw.js` push + notificationclick handlers added
+
+---
+
 # v3.10.3 — Sidebar restructure: Job Numbers live, Pipeline section, Testing removed
 
 **Date:** 2026-05-24

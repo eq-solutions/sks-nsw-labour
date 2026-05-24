@@ -463,7 +463,9 @@ function updateCell(el) {
       navTarget: { week }
     });
   }
-  saveCellToSB(name, week, day, val).catch(() => showToast('Save failed — check connection'));
+  saveCellToSB(name, week, day, val)
+    .then(() => { if (typeof triggerRosterPush === 'function') triggerRosterPush(name, week, day, val); })
+    .catch(() => showToast('Save failed — check connection'));
 }
 
 function toggleEditorSort() {

@@ -329,6 +329,7 @@ async function checkPin() {
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
+      initPushOptIn(name);
     } else {
       document.getElementById('gate-err').textContent = 'Incorrect code. Please try again.';
       document.getElementById('gate-pin').value = '';
@@ -355,6 +356,7 @@ async function checkPin() {
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
+      initPushOptIn(name);
     } else {
       document.getElementById('gate-err').textContent = 'Incorrect code. Use the demo codes shown above.';
       document.getElementById('gate-pin').value = '';
@@ -400,6 +402,7 @@ async function checkPin() {
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
+      initPushOptIn(name);
     } else {
       document.getElementById('gate-err').textContent = 'Incorrect code. Please try again.';
       document.getElementById('gate-pin').value = '';
@@ -909,4 +912,77 @@ async function initStaffTsApp() {
   if (jobsPanel) {
     jobsPanel.style.display = window.innerWidth > 768 ? '' : 'none';
   }
+}
+
+// ── Push notification opt-in ─────────────────────────────────
+// v3.10.4: shown 3 s after login for staff who haven't been asked.
+// Supervisors get the same prompt (they're staff too when on mobile).
+
+function initPushOptIn(personName) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (localStorage.getItem('eq_push_declined') === '1') return;
+  if (Notification.permission === 'granted') {
+    _ensurePushSubscribed(personName); // already allowed — refresh subscription
+    return;
+  }
+  if (Notification.permission === 'denied') return;
+  // 'default' — show friendly banner (don't cold-call the browser permission dialog)
+  setTimeout(() => _showPushBanner(personName), 3000);
+}
+
+function _showPushBanner(personName) {
+  if (document.getElementById('eq-push-banner')) return;
+  const el = document.createElement('div');
+  el.id = 'eq-push-banner';
+  el.style.cssText = [
+    'position:fixed','bottom:80px','left:50%','transform:translateX(-50%)',
+    'background:#1F335C','color:#fff','padding:12px 14px','border-radius:8px',
+    'font-size:13px','font-family:inherit','z-index:9999',
+    'display:flex','align-items:center','gap:10px',
+    'box-shadow:0 4px 20px rgba(0,0,0,.35)',
+    'max-width:calc(100vw - 32px)','white-space:nowrap'
+  ].join(';');
+  el.innerHTML = [
+    '<span style="font-size:16px">🔔</span>',
+    '<span>Get notified when your roster changes</span>',
+    '<button id="eq-push-yes" style="background:#7C77B9;border:none;color:#fff;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700;flex-shrink:0">Turn on</button>',
+    '<button id="eq-push-no"  style="background:none;border:none;color:rgba(255,255,255,.5);padding:4px 6px;cursor:pointer;font-size:20px;line-height:1;flex-shrink:0">&times;</button>'
+  ].join('');
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 12000);
+  document.getElementById('eq-push-yes').addEventListener('click', async () => {
+    el.remove();
+    await _requestAndSubscribe(personName);
+  });
+  document.getElementById('eq-push-no').addEventListener('click', () => {
+    el.remove();
+    localStorage.setItem('eq_push_declined', '1');
+  });
+}
+
+async function _requestAndSubscribe(personName) {
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+    await _ensurePushSubscribed(personName);
+    if (typeof showToast === 'function') showToast('🔔 Roster notifications on');
+  } catch (e) { /* non-blocking */ }
+}
+
+async function _ensurePushSubscribed(personName) {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: (typeof _urlBase64ToUint8 === 'function')
+          ? _urlBase64ToUint8(typeof _VAPID_PUBLIC_KEY !== 'undefined' ? _VAPID_PUBLIC_KEY : '')
+          : null
+      });
+    }
+    if (sub && typeof sbSavePushSubscription === 'function') {
+      await sbSavePushSubscription(personName, sub);
+    }
+  } catch (e) { /* non-blocking */ }
 }
