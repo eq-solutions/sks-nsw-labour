@@ -669,6 +669,15 @@ function applyManagerMode() {
       el.style.display = '';
       el.removeAttribute('data-staff-hidden');
     });
+    // Restore mnav-schedule from Home back to My Week
+    const mnavSched = document.getElementById('mnav-schedule');
+    if (mnavSched && mnavSched.getAttribute('data-staff-orig-html')) {
+      mnavSched.innerHTML = mnavSched.getAttribute('data-staff-orig-html');
+      mnavSched.setAttribute('onclick', mnavSched.getAttribute('data-staff-orig-onclick') || "mobileNav('schedule')");
+      mnavSched.setAttribute('aria-label', 'My Week');
+      mnavSched.removeAttribute('data-staff-orig-html');
+      mnavSched.removeAttribute('data-staff-orig-onclick');
+    }
   }
 
   if (isManager) {
@@ -735,6 +744,15 @@ function applyStaffMode() {
       el.style.display = 'none';
     }
   });
+  // Repurpose the My Week nav button as a Home button for staff
+  const mnavSched = document.getElementById('mnav-schedule');
+  if (mnavSched && !mnavSched.getAttribute('data-staff-orig-html')) {
+    mnavSched.setAttribute('data-staff-orig-html', mnavSched.innerHTML);
+    mnavSched.setAttribute('data-staff-orig-onclick', mnavSched.getAttribute('onclick') || '');
+    mnavSched.setAttribute('onclick', "mobileNav('home')");
+    mnavSched.setAttribute('aria-label', 'Home');
+    mnavSched.innerHTML = '<span class="mnav-icon">⌂</span>Home';
+  }
 }
 
 // ── Agency access ─────────────────────────────────────────────

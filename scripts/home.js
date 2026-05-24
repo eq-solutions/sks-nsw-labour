@@ -1,19 +1,14 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/home.js  —  EQ Solves Field (SKS deploy)
-// Ported from eq-solves-field v3.5.1.
-// Staff variant:     greeting + next-shift pill + 3 tiles (Schedule / Timesheets / Leave)
+// Ported from eq-solves-field v3.5.1, updated v3.10.11.
+// Staff variant:     greeting + week nav + shift pill + 2 tiles
 // Supervisor variant: greeting + action strip + 5 tiles
-//
-// SKS schedule format: STATE.schedule rows are {name, week, mon, tue, wed, thu, fri}
-// (not the eq-field {person_id, day, site} shape — all lookups rewritten accordingly).
-//
-// No feature flag needed — SKS ships it on for all mobile staff by default.
-// Viewport gate still applies: desktop (≥768px) never sees this page.
 //
 // Public API:
 //   window.renderHomeScreen()    — branches by isManager
-//   window.eqhTileTap(target)    — tile tap → mobileNav/showPage + analytics
+//   window.eqhTileTap(target)    — tile tap → mobileNav/showPage
+//   window.eqhSetWeek(dir)       — week navigation (-1 / +1)
 //   window.eqhOpenDrawer()       — slide-up cog drawer
 //   window.eqhCloseDrawer()      — close drawer
 //   window.eqhsActionStripTap()  — supervisor action strip tap
@@ -21,6 +16,9 @@
 
 (function () {
   'use strict';
+
+  // ── Module state ─────────────────────────────────────────────
+  let _eqhWeek = null; // null = current week; set by eqhSetWeek()
 
   // ── Shared helpers ───────────────────────────────────────────
 
@@ -50,7 +48,7 @@
     return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()];
   }
 
-  function escapeHtml(s) {
+  function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -68,8 +66,21 @@
     return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
   }
 
-  // ── SKS schedule helpers ────────────────────────────────────
-  // SKS stores schedule as {name, week, mon, tue, wed, thu, fri}.
+  function _weekOffset(week, n) {
+    const [d, m, y] = week.split('.').map(Number);
+    const date = new Date(2000 + y, m - 1, d);
+    date.setDate(date.getDate() + n * 7);
+    return String(date.getDate()).padStart(2,'0') + '.' +
+           String(date.getMonth()+1).padStart(2,'0') + '.' +
+           String(date.getFullYear()).slice(-2);
+  }
+
+  function _fmtWeek(week) {
+    try { if (typeof formatWeekLabel === 'function') return formatWeekLabel(week); } catch (e) {}
+    return week;
+  }
+
+  // ── SKS schedule helpers ─────────────────────────────────────
 
   function getUserScheduleRow(week) {
     const name = getLoggedInName().trim();
@@ -85,25 +96,30 @@
     return true;
   }
 
-  function countShiftsThisWeek() {
-    const row = getUserScheduleRow(currentWeekKey());
+  function countShiftsInWeek(week) {
+    const row = getUserScheduleRow(week);
     if (!row) return 0;
     return ['mon','tue','wed','thu','fri'].filter(d => isSiteCode(row[d])).length;
   }
 
-  function findNextShift() {
+  function findNextShiftInWeek(week) {
     try {
-      const wk       = currentWeekKey();
-      const row      = getUserScheduleRow(wk);
+      const row = getUserScheduleRow(week);
       if (!row) return null;
       const dayOrder = ['mon','tue','wed','thu','fri'];
-      const todayIdx = ((new Date().getDay() + 6) % 7); // 0=Mon … 4=Fri
-      if (todayIdx > 4) return null; // weekend
-      for (let i = todayIdx; i < 5; i++) {
+      const thisWk   = currentWeekKey();
+      // For the current week start from today; for other weeks start Monday
+      let start = 0;
+      if (week === thisWk) {
+        const todayIdx = (new Date().getDay() + 6) % 7;
+        if (todayIdx > 4) return null; // weekend — this week is done
+        start = todayIdx;
+      }
+      for (let i = start; i < 5; i++) {
         const d = dayOrder[i];
         if (isSiteCode(row[d])) {
-          const siteName = (typeof getSiteName === 'function') ? getSiteName(row[d]) : row[d];
-          return { day: d, site: siteName, week: wk };
+          const site = typeof getSiteName === 'function' ? getSiteName(row[d]) : row[d];
+          return { day: d, site, week };
         }
       }
     } catch (e) {}
@@ -114,11 +130,6 @@
     if (!shift) return '';
     const dayMap = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday' };
     return (dayMap[shift.day] || shift.day) + ' · ' + (shift.site || '');
-  }
-
-  function isTimesheetDueSoon() {
-    const d = new Date().getDay();
-    return d >= 3 && d <= 5; // Wed–Fri
   }
 
   // ── Supervisor-only helpers ──────────────────────────────────
@@ -175,42 +186,59 @@
   // ── Render: staff ────────────────────────────────────────────
 
   function renderStaffHomeScreen(mount) {
-    const name       = getLoggedInName();
-    const firstName  = (name || 'mate').split(/\s+/)[0];
-    const greeting   = isFirstSessionOfDay() ? "G'day, " + escapeHtml(firstName) : escapeHtml(formatToday());
-    const offline    = typeof navigator !== 'undefined' && navigator.onLine === false;
-    const shiftCount = countShiftsThisWeek();
-    const nextShift  = findNextShift();
-    const tsDueSoon  = isTimesheetDueSoon();
+    const week       = _eqhWeek || currentWeekKey();
+    const thisWeek   = currentWeekKey();
+    const isThisWeek = week === thisWeek;
+
+    const name      = getLoggedInName();
+    const firstName = (name || 'mate').split(/\s+/)[0];
+    const greeting  = isFirstSessionOfDay() ? "G'day, " + esc(firstName) : esc(formatToday());
+    const offline   = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const shiftCount = countShiftsInWeek(week);
+    const nextShift  = findNextShiftInWeek(week);
     const version    = typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?';
 
     const offlineBanner = offline
       ? '<div class="eqh-offline"><span>⚠</span><span>You\'re offline — showing last synced data.</span></div>'
       : '';
 
+    // Week navigator
+    const btnStyle = 'width:34px;height:34px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--ink-2);font-family:inherit;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    const thisWeekBadge = isThisWeek
+      ? '<span style="font-size:9px;font-weight:700;color:var(--blue);background:var(--blue-lt);padding:2px 6px;border-radius:4px;letter-spacing:.4px">THIS WEEK</span>'
+      : '';
+    const weekNav =
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+        '<button onclick="eqhSetWeek(-1)" style="' + btnStyle + '">‹</button>' +
+        '<div style="flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px">' +
+          '<span style="font-size:12px;font-weight:600;color:var(--ink-3)">' + esc(_fmtWeek(week)) + '</span>' +
+          thisWeekBadge +
+        '</div>' +
+        '<button onclick="eqhSetWeek(1)" style="' + btnStyle + '">›</button>' +
+      '</div>';
+
+    // Shift pill
     const shiftPill = nextShift
       ? '<button class="eqh-shift" onclick="eqhTileTap(\'schedule\')">' +
           '<span class="eqh-shift-icon">📍</span>' +
           '<div style="flex:1;text-align:left">' +
-            '<div class="eqh-shift-label">Next shift</div>' +
-            '<div class="eqh-shift-value">' + escapeHtml(formatShiftDay(nextShift)) + '</div>' +
+            '<div class="eqh-shift-label">' + (isThisWeek ? 'Next shift' : 'First shift') + '</div>' +
+            '<div class="eqh-shift-value">' + esc(formatShiftDay(nextShift)) + '</div>' +
           '</div>' +
           '<span class="eqh-shift-chev">›</span>' +
         '</button>'
       : '<button class="eqh-shift" onclick="eqhTileTap(\'schedule\')">' +
           '<span class="eqh-shift-icon">📅</span>' +
           '<div style="flex:1;text-align:left">' +
-            '<div class="eqh-shift-label">No upcoming shifts found</div>' +
-            '<div class="eqh-shift-value">Tap to view your schedule</div>' +
+            '<div class="eqh-shift-label">No shifts this week</div>' +
+            '<div class="eqh-shift-value">Tap to view schedule</div>' +
           '</div>' +
           '<span class="eqh-shift-chev">›</span>' +
         '</button>';
 
-    const scheduleSub = shiftCount === 0 ? 'Nothing rostered this week'
+    const scheduleSub = shiftCount === 0 ? 'Nothing rostered'
       : shiftCount === 1 ? '1 shift this week'
       : shiftCount + ' shifts this week';
-
-    const tsBadge = tsDueSoon ? '<span class="eqh-badge eqh-badge-warn">Due Fri</span>' : '';
 
     mount.innerHTML =
       '<div class="eqh-header">' +
@@ -221,23 +249,19 @@
         '<button class="eqh-cog" onclick="eqhOpenDrawer()" aria-label="More options"><span>⚙</span></button>' +
       '</div>' +
       offlineBanner +
+      weekNav +
       shiftPill +
       '<div class="eqh-tiles">' +
         '<button class="eqh-tile eqh-t-schedule" onclick="eqhTileTap(\'schedule\')">' +
           '<div class="eqh-tile-icon">📅</div>' +
-          '<div><div class="eqh-tile-title">My schedule</div><div class="eqh-tile-sub">' + escapeHtml(scheduleSub) + '</div></div>' +
-        '</button>' +
-        '<button class="eqh-tile eqh-t-time" onclick="eqhTileTap(\'staff-ts-gate\')">' +
-          tsBadge +
-          '<div class="eqh-tile-icon">⏱</div>' +
-          '<div><div class="eqh-tile-title">Timesheets</div><div class="eqh-tile-sub">Submit this week</div></div>' +
+          '<div><div class="eqh-tile-title">My schedule</div><div class="eqh-tile-sub">' + esc(scheduleSub) + '</div></div>' +
         '</button>' +
         '<button class="eqh-tile eqh-t-leave" onclick="eqhTileTap(\'leave\')">' +
           '<div class="eqh-tile-icon">✈</div>' +
           '<div><div class="eqh-tile-title">Leave</div><div class="eqh-tile-sub">Request time off</div></div>' +
         '</button>' +
       '</div>' +
-      '<div class="eqh-footer">EQ Field · v' + escapeHtml(version) + '</div>';
+      '<div class="eqh-footer">EQ Field · v' + esc(version) + '</div>';
 
     try {
       if (window.EQ_ANALYTICS && EQ_ANALYTICS.events && EQ_ANALYTICS.events.pageViewed) {
@@ -251,7 +275,7 @@
   function renderSupervisorHomeScreen(mount) {
     const name      = getLoggedInName();
     const firstName = (name || 'boss').split(/\s+/)[0];
-    const greeting  = isFirstSessionOfDay() ? "G'day, " + escapeHtml(firstName) : escapeHtml(formatToday());
+    const greeting  = isFirstSessionOfDay() ? "G'day, " + esc(firstName) : esc(formatToday());
     const offline   = typeof navigator !== 'undefined' && navigator.onLine === false;
     const schedSub  = describeScheduleThisWeek();
     const version   = typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?';
@@ -273,7 +297,7 @@
       '<div class="eqh-tiles">' +
         '<button class="eqh-tile eqh-t-schedule" onclick="eqhTileTap(\'roster\')">' +
           '<div class="eqh-tile-icon">📅</div>' +
-          '<div><div class="eqh-tile-title">Schedule</div><div class="eqh-tile-sub">' + escapeHtml(schedSub) + '</div></div>' +
+          '<div><div class="eqh-tile-title">Schedule</div><div class="eqh-tile-sub">' + esc(schedSub) + '</div></div>' +
         '</button>' +
         '<button class="eqh-tile eqh-t-time" onclick="eqhTileTap(\'timesheets\')">' +
           '<div class="eqh-tile-icon">⏱</div>' +
@@ -292,7 +316,7 @@
           '<div><div class="eqh-tile-title">Reports</div><div class="eqh-tile-sub">Weekly hours &amp; sites</div></div>' +
         '</button>' +
       '</div>' +
-      '<div class="eqh-footer">EQ Field · v' + escapeHtml(version) + ' · Supervisor</div>';
+      '<div class="eqh-footer">EQ Field · v' + esc(version) + ' · Supervisor</div>';
 
     try {
       if (window.EQ_ANALYTICS && EQ_ANALYTICS.events && EQ_ANALYTICS.events.pageViewed) {
@@ -303,11 +327,21 @@
 
   // ── Top-level render ─────────────────────────────────────────
 
-  function renderHomeScreen() {
+  function renderHomeScreen(keepWeek) {
+    // Reset to current week on fresh navigation; keep position during week nav
+    if (!keepWeek) _eqhWeek = null;
     const mount = document.getElementById('page-home');
     if (!mount) return;
     if (isManagerSession()) return renderSupervisorHomeScreen(mount);
     return renderStaffHomeScreen(mount);
+  }
+
+  // ── Week navigation ──────────────────────────────────────────
+
+  function eqhSetWeek(dir) {
+    const base = _eqhWeek || currentWeekKey();
+    _eqhWeek   = _weekOffset(base, dir);
+    renderHomeScreen(true);
   }
 
   // ── Tile tap router ──────────────────────────────────────────
@@ -318,12 +352,6 @@
         EQ_ANALYTICS.capture(isManagerSession() ? 'home_supervisor_tile_tapped' : 'home_tile_tapped', { tile: target });
       }
     } catch (e) {}
-    // staff-ts-gate opens the PIN modal rather than navigating to a page
-    if (target === 'staff-ts-gate') {
-      if (typeof openStaffTsGate === 'function') openStaffTsGate();
-      return;
-    }
-    // mobileNav handles both showPage + active-state on bottom bar
     if (typeof window.mobileNav === 'function') window.mobileNav(target);
     else if (typeof window.showPage === 'function') window.showPage(target);
   }
@@ -395,12 +423,13 @@
   }
 
   // Re-render on connectivity change
-  window.addEventListener('online',  function () { if (typeof currentPage !== 'undefined' && currentPage === 'home') renderHomeScreen(); });
-  window.addEventListener('offline', function () { if (typeof currentPage !== 'undefined' && currentPage === 'home') renderHomeScreen(); });
+  window.addEventListener('online',  function () { if (typeof currentPage !== 'undefined' && currentPage === 'home') renderHomeScreen(true); });
+  window.addEventListener('offline', function () { if (typeof currentPage !== 'undefined' && currentPage === 'home') renderHomeScreen(true); });
 
   // ── Expose ───────────────────────────────────────────────────
   window.renderHomeScreen   = renderHomeScreen;
   window.eqhTileTap         = eqhTileTap;
+  window.eqhSetWeek         = eqhSetWeek;
   window.eqhOpenDrawer      = eqhOpenDrawer;
   window.eqhCloseDrawer     = eqhCloseDrawer;
   window.eqhsActionStripTap = eqhsActionStripTap;

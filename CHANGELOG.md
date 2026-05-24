@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.11 — Home screen: navigation fix, week nav, tidy-up
+
+**Date:** 2026-05-24
+**Scope:** Staff mobile home screen polish.
+
+- **Navigation fixed** — ⌂ Home button in bottom nav for staff; navigating away and back no longer loses the home screen
+- **Week navigation** — ‹ › buttons on home screen to browse any week; shift pill and shift count update per week; "THIS WEEK" badge shows when on current week
+- **Timesheets tile removed** — staff don't self-enter; tile was misleading
+- **Site lead removed from day cards** — removed the static supervisor name from My Schedule day cards (not reliable for who's physically on site); co-worker 🤝 line has room to breathe
+- **nav repurpose** — `mnav-schedule` repurposed as Home for staff; restored to My Week when supervisor unlocks
+
+---
+
 # v3.10.10 — My Schedule: show co-workers at same site
 
 **Date:** 2026-05-24

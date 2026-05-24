@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.10
+  EQ Solves — Field  v3.10.11
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -3574,13 +3574,10 @@ function showPage(id) {
   const lb = document.getElementById('legend-bar');
   if (lb) lb.style.display = (id === 'roster') ? '' : 'none';
 
-  // On the home page hide the whole topbar + mobile nav bar so the tile
-  // screen fills edge-to-edge. Restore both when navigating away.
+  // Hide the topbar on the home page on mobile — nav bar stays visible for navigation.
   const _isMobile = window.innerWidth <= 768;
   const topbar    = document.querySelector('.topbar');
-  const mobileNav = document.getElementById('mobile-nav');
-  if (topbar)    topbar.style.display    = (id === 'home' && _isMobile) ? 'none' : '';
-  if (mobileNav) mobileNav.style.display = (id === 'home' && _isMobile) ? 'none' : '';
+  if (topbar) topbar.style.display = (id === 'home' && _isMobile) ? 'none' : '';
 
   // On the schedule page for non-managers the in-content week nav (v3.10.5)
   // is sufficient — the topbar week picker is redundant and makes the bar
@@ -3785,9 +3782,11 @@ const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts',
 
 function mobileNav(id) {
   showPage(id);
-  MOBILE_NAV_PAGES.forEach(p => { const el = document.getElementById('mnav-' + p); if (el) el.classList.toggle('active', p===id); });
+  // 'home' maps to the schedule nav button (repurposed as Home for staff)
+  const activeNavId = (id === 'home') ? 'schedule' : id;
+  MOBILE_NAV_PAGES.forEach(p => { const el = document.getElementById('mnav-' + p); if (el) el.classList.toggle('active', p===activeNavId); });
   const moreBtn = document.getElementById('mnav-more');
-  if (moreBtn) moreBtn.classList.toggle('active', !MOBILE_NAV_PAGES.includes(id));
+  if (moreBtn) moreBtn.classList.toggle('active', !MOBILE_NAV_PAGES.includes(id) && id !== 'home');
   DRAWER_NAV_PAGES.forEach(p => {
     const el = document.getElementById('ditem-' + p);
     if (el) el.classList.toggle('active-page', p===id);
@@ -3942,7 +3941,7 @@ async function initApp() {
   } else if (!isManager) {
     if (typeof applyStaffMode === 'function') applyStaffMode();
     if (window.innerWidth <= 768) {
-      showPage('home');
+      mobileNav('home');
     } else {
       showPage('schedule');
       mobileNav('schedule');
