@@ -149,9 +149,14 @@
 
     el.innerHTML = html;
 
-    if (!_floatChart) _initSplitter();
-    if (_floatChart)  _renderFloat();
-    if (_openPanel)   suggestWorkers(_openPanel);
+    if (_floatChart) {
+      _renderFloat();
+    } else {
+      var stalePanel = document.getElementById('ra-float-panel');
+      if (stalePanel) stalePanel.remove();
+      _initSplitter();
+    }
+    if (_openPanel) suggestWorkers(_openPanel);
   }
 
   // ── Resizable splitter ───────────────────────────────────
@@ -434,14 +439,21 @@
     var totals  = data.totals;
     var labels  = data.labels;
     var peakDem = Math.max.apply(null, totals);
-    // Scale: use demand-relative scale when headcount far exceeds demand,
-    // so bars aren't crushed at the bottom. Show headcount as annotation if off-chart.
-    var scaleMax = (_headcount > 0 && _headcount <= peakDem * 2)
-      ? _headcount
+    // Scale: headcount is always the ceiling so the dashed line is always visible.
+    // Fall back to demand-relative only when no headcount data.
+    var scaleMax = _headcount > 0
+      ? Math.max(_headcount, peakDem)
       : Math.max(peakDem > 0 ? Math.ceil(peakDem * 1.5) : 10, 10);
     var maxVal  = Math.max(scaleMax, 1);
     var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
     var CHART_H = 260;
+
+    // Y-axis: pick a clean interval (target 5-6 labels)
+    var yIntervals = [1,2,5,10,20,25,50,100,200,500];
+    var yInterval  = yIntervals[yIntervals.length - 1];
+    for (var ii = 0; ii < yIntervals.length; ii++) {
+      if (maxVal / yIntervals[ii] <= 6) { yInterval = yIntervals[ii]; break; }
+    }
 
     // ── Stat pills
     var bench = _headcount > 0 ? _headcount - peakDem : null;
@@ -457,12 +469,30 @@
     // ── Chart card — flex:1 so it fills the remaining left-column height
     html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px;flex:1">';
 
+    // Y-axis + bars row
+    html += '<div style="display:flex;gap:6px;align-items:flex-end">';
+
+    // ── Y-axis labels (right-aligned, stacked against the bars)
+    html += '<div style="position:relative;width:22px;flex-shrink:0;height:' + CHART_H + 'px;margin-bottom:' + (4 + 18) + 'px">';
+    for (var yv = 0; yv <= maxVal; yv += yInterval) {
+      var yPct = yv / maxVal * 100;
+      html += '<div style="position:absolute;bottom:' + yPct + '%;right:0;font-size:8px;color:var(--ink-3);line-height:1;transform:translateY(50%)">' + yv + '</div>';
+    }
+    // Always label the top value if it's not already hit by the interval
+    if (maxVal % yInterval !== 0) {
+      html += '<div style="position:absolute;bottom:100%;right:0;font-size:8px;color:var(--ink-3);line-height:1;transform:translateY(50%)">' + maxVal + '</div>';
+    }
+    html += '</div>';
+
+    // ── Bars + x-axis column
+    html += '<div style="flex:1;min-width:0">';
+
     // Stacked bars
     html += '<div style="display:flex;align-items:flex-end;gap:1px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid #e2e8f0;margin-bottom:4px">';
-    // Grid lines
-    [0.25, 0.5, 0.75].forEach(function (pct) {
-      html += '<div style="position:absolute;left:0;right:0;bottom:' + (pct * 100) + '%;border-top:1px solid #f1f5f9;pointer-events:none"></div>';
-    });
+    // Grid lines (aligned with Y-axis labels)
+    for (var gv = yInterval; gv < maxVal; gv += yInterval) {
+      html += '<div style="position:absolute;left:0;right:0;bottom:' + (gv / maxVal * 100) + '%;border-top:1px solid #f1f5f9;pointer-events:none"></div>';
+    }
     for (var wi = 0; wi < totals.length; wi++) {
       var tot   = totals[wi];
       var barH  = tot > 0 ? Math.max(Math.round((tot / maxVal) * CHART_H), 2) : 0;
@@ -478,15 +508,12 @@
       }
       html += '</div>';
     }
+    // Headcount dashed line — always drawn since scale includes headcount
     if (_headcount > 0) {
       var hcPct = _headcount / maxVal * 100;
-      if (hcPct <= 100) {
-        // Headcount fits within chart — draw dashed line
-        html += '<div style="position:absolute;left:0;right:0;bottom:' + hcPct + '%;border-top:2px dashed #dc2626;pointer-events:none" title="Headcount: ' + _headcount + '"></div>';
-      } else {
-        // Headcount is above chart scale — annotate at top instead
-        html += '<div style="position:absolute;top:4px;right:0;font-size:10px;color:#dc2626;font-weight:600;pointer-events:none">↑ Headcount: ' + _headcount + '</div>';
-      }
+      html += '<div style="position:absolute;left:0;right:0;bottom:' + hcPct + '%;border-top:2px dashed #dc2626;pointer-events:none" title="Headcount: ' + _headcount + '">' +
+        '<span style="position:absolute;right:0;top:-16px;font-size:9px;color:#dc2626;font-weight:600;background:#fff;padding:0 2px">' + _headcount + '</span>' +
+      '</div>';
     }
     html += '</div>';
 
@@ -497,6 +524,9 @@
     });
     html += '</div>';
 
+    html += '</div>'; // bars + x-axis column
+    html += '</div>'; // Y-axis + bars row
+
     // Legend
     html += '<div style="display:flex;gap:8px 16px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)">';
     bands.forEach(function (b, ci) {
@@ -504,14 +534,9 @@
       html += '<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:4px;vertical-align:middle"></span>' + _esc(lbl) + '</span>';
     });
     if (_headcount > 0) {
-      var hcFits = _headcount / maxVal * 100 <= 100;
-      html += '<span style="white-space:nowrap;margin-left:4px">';
-      if (hcFits) {
-        html += '<span style="display:inline-block;width:16px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>';
-      } else {
-        html += '<span style="color:#dc2626;margin-right:3px">↑</span>';
-      }
-      html += 'Headcount (' + _headcount + ')</span>';
+      html += '<span style="white-space:nowrap;margin-left:4px">' +
+        '<span style="display:inline-block;width:16px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>' +
+        'Headcount (' + _headcount + ')</span>';
     }
     if (hasGap) {
       html += '<span style="color:#dc2626;font-weight:600;white-space:nowrap;margin-left:4px">⚠ Exceeds headcount</span>';
