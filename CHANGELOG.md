@@ -6,6 +6,30 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.92 — Pipeline: final polish sprint
+
+**Date:** 2026-05-24
+**Scope:** All remaining items from 10/10 review — one P0 bug fix, three UX improvements, one architecture cleanup.
+
+### Bug fix (P0)
+- **Confirmed stage protection on re-import** (`pipeline-import.js`) — importing from Smartsheet now preserves the `confirmed` stage for jobs locked in via Resource Allocation. Previously, a Confirmed job at 90% probability would be reset to `likely` on the next import. The upsert now checks `_existingByRef` and forces `stage = 'confirmed'` for any tender that was already confirmed before the import ran.
+
+### Missing import count (`pipeline-import.js`)
+- Tenders in the DB but absent from an import now have `missing_import_count` incremented. At **2 consecutive missed imports** the tender is automatically archived (`archived_at` set, `stage = 'archived'`). Confirmed tenders are excluded from this logic — they don't appear in open-tenders exports and should not be auto-archived.
+
+### UX
+- **Last import timestamp** — shown on both the Kanban header bar ("Last import: 3h ago") and the Import page header. Pulled from `tender_import_runs`. Filename is shown as a tooltip on Kanban, inline on Import page.
+- **Confirmed tile clickable** (`pipeline.js`) — Confirmed count tile on the Kanban now navigates to Resource Allocation on click. Label updated to "→ Resources".
+- **Single Save button in enrichment panel** (`pipeline.js`) — "Save estimates" and "Save nominations" consolidated into one "Save" button (`savePanel`). Saves enrichment and nominations in parallel. Cleaner panel, one fewer tap.
+
+### Architecture
+- **`updated_at` double-write removed** (`pipeline-resource.js`) — `saveAlloc` now sends `updated_at` only on INSERT. PATCH omits it; the `trg_tender_enrichment_updated_at` trigger handles it on UPDATE.
+- **ORG_TABLES guard comment** (`app-state.js`) — explicit warning not to add `tender_enrichment` or `nominations` to `ORG_TABLES`. They have no `org_id` column; sbFetch would append `?org_id=eq.UUID` to GETs causing a 400.
+
+Version stamps: `APP_VERSION = '3.4.92'`, SW cache `eq-field-v3.4.92`.
+
+---
+
 # v3.4.91 — Pipeline: Won column "· all shown" label when value filter is active
 
 **Date:** 2026-05-24
