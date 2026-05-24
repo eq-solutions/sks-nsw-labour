@@ -36,8 +36,22 @@
     try { return parseFloat(localStorage.getItem('ra_split_pct')) || 70; } catch (x) { return 70; }
   }());
 
+  // Floating chart panel — persisted across sessions
+  var _floatChart = (function () {
+    try { return localStorage.getItem('ra_float') === '1'; } catch (x) { return false; }
+  }());
+  var _floatPos = (function () {
+    try {
+      var s = JSON.parse(localStorage.getItem('ra_float_pos') || 'null');
+      if (s && s.x !== undefined) return s;
+    } catch (x) {}
+    return { x: 240, y: 90, w: 540, h: 440 };
+  }());
+
   // ── Entry point ───────────────────────────────────────────
   async function renderPipelineResource() {
+    var old = document.getElementById('ra-float-panel');
+    if (old) old.remove();
     var el = document.getElementById('page-pipeline-resource');
     if (!el) return;
     el.innerHTML = _shell();
@@ -116,19 +130,28 @@
     var html = '';
     if (_addingJob) html += _addJobPanel();
 
-    // Resizable two-column split
-    html += '<div id="ra-split" style="display:flex">';
-    html += '<div id="ra-left" style="flex:0 0 ' + _splitPct + '%;min-width:200px;overflow:hidden;display:flex;flex-direction:column">' + _capacitySection() + '</div>';
-    html += '<div id="ra-divider" title="Drag to resize" style="flex-shrink:0;width:16px;align-self:stretch;cursor:col-resize;display:flex;align-items:center;justify-content:center">' +
-      '<div id="ra-divider-bar" style="width:3px;height:36px;background:#e2e8f0;border-radius:2px;pointer-events:none"></div>' +
-    '</div>';
-    html += '<div id="ra-right" style="flex:1;min-width:180px;overflow:hidden">' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
-    html += '</div>';
+    if (_floatChart) {
+      // Chart is floating — jobs go full-width, small dock button at top
+      html += '<div style="margin-bottom:12px">' +
+        '<button class="btn btn-secondary btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()">⊞ Dock chart</button>' +
+      '</div>';
+      html += _needsAllocSection(won) + _confirmedSection(confirmed);
+    } else {
+      // Resizable two-column split
+      html += '<div id="ra-split" style="display:flex">';
+      html += '<div id="ra-left" style="flex:0 0 ' + _splitPct + '%;min-width:200px;overflow:hidden;display:flex;flex-direction:column">' + _capacitySection() + '</div>';
+      html += '<div id="ra-divider" title="Drag to resize" style="flex-shrink:0;width:16px;align-self:stretch;cursor:col-resize;display:flex;align-items:center;justify-content:center">' +
+        '<div id="ra-divider-bar" style="width:3px;height:36px;background:#e2e8f0;border-radius:2px;pointer-events:none"></div>' +
+      '</div>';
+      html += '<div id="ra-right" style="flex:1;min-width:180px;overflow:hidden">' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
+      html += '</div>';
+    }
 
     el.innerHTML = html;
 
-    _initSplitter();
-    if (_openPanel) suggestWorkers(_openPanel);
+    if (!_floatChart) _initSplitter();
+    if (_floatChart)  _renderFloat();
+    if (_openPanel)   suggestWorkers(_openPanel);
   }
 
   // ── Resizable splitter ───────────────────────────────────
@@ -179,6 +202,129 @@
     }
     handle.addEventListener('pointerup',     _endDrag);
     handle.addEventListener('pointercancel', _endDrag);
+  }
+
+  // ── Floating chart panel ──────────────────────────────────
+  function _saveFloat() {
+    try {
+      localStorage.setItem('ra_float',     _floatChart ? '1' : '0');
+      localStorage.setItem('ra_float_pos', JSON.stringify(_floatPos));
+    } catch (x) {}
+  }
+
+  function toggleFloat() {
+    _floatChart = !_floatChart;
+    _saveFloat();
+    _render();
+  }
+
+  function _resizeHandle(dir, css) {
+    return '<div data-rdir="' + dir + '" style="position:absolute;' + css + ';z-index:2"></div>';
+  }
+
+  function _renderFloat() {
+    var old = document.getElementById('ra-float-panel');
+    if (old) old.remove();
+    if (!_floatChart) return;
+
+    var p   = _floatPos;
+    var panel = document.createElement('div');
+    panel.id  = 'ra-float-panel';
+    panel.style.cssText =
+      'position:fixed;left:' + p.x + 'px;top:' + p.y + 'px;' +
+      'width:' + p.w + 'px;height:' + p.h + 'px;' +
+      'z-index:600;background:#fff;border:1px solid #e2e8f0;' +
+      'border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.18);' +
+      'display:flex;flex-direction:column;overflow:hidden;' +
+      'min-width:280px;min-height:200px';
+
+    panel.innerHTML =
+      // ── title bar
+      '<div id="ra-float-bar" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;' +
+        'padding:9px 14px;cursor:move;display:flex;align-items:center;gap:8px;' +
+        'flex-shrink:0;user-select:none;-webkit-user-select:none">' +
+        '<div style="display:flex;gap:5px">' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:#fca5a5"></div>' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:#fde68a"></div>' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:#bbf7d0"></div>' +
+        '</div>' +
+        '<span style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2)">CAPACITY PLANNING — 26 WEEKS</span>' +
+        '<div style="flex:1"></div>' +
+        '<button onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" style="background:none;border:none;cursor:pointer;' +
+          'font-size:13px;color:var(--ink-3);padding:0 4px;line-height:1" title="Dock chart back">⊞ Dock</button>' +
+      '</div>' +
+      // ── content
+      '<div style="flex:1;overflow:auto;padding:16px 16px 12px">' + _capacitySection() + '</div>' +
+      // ── resize handles (edges)
+      _resizeHandle('n',  'top:0;left:10px;right:10px;height:5px;cursor:n-resize') +
+      _resizeHandle('s',  'bottom:0;left:10px;right:10px;height:5px;cursor:s-resize') +
+      _resizeHandle('e',  'right:0;top:10px;bottom:10px;width:5px;cursor:e-resize') +
+      _resizeHandle('w',  'left:0;top:10px;bottom:10px;width:5px;cursor:w-resize') +
+      // ── resize handles (corners)
+      _resizeHandle('nw', 'top:0;left:0;width:12px;height:12px;cursor:nw-resize') +
+      _resizeHandle('ne', 'top:0;right:0;width:12px;height:12px;cursor:ne-resize') +
+      _resizeHandle('sw', 'bottom:0;left:0;width:12px;height:12px;cursor:sw-resize') +
+      _resizeHandle('se', 'bottom:0;right:0;width:12px;height:12px;cursor:se-resize');
+
+    document.body.appendChild(panel);
+    _initFloat(panel);
+  }
+
+  function _initFloat(panel) {
+    var bar    = document.getElementById('ra-float-bar');
+    var mode   = null; // 'drag' | 'resize'
+    var dir    = '';
+    var startX, startY, startL, startT, startW, startH;
+    var MIN_W  = 280, MIN_H = 200;
+
+    panel.addEventListener('pointerdown', function (e) {
+      var tgt    = e.target;
+      if (tgt.tagName === 'BUTTON' || tgt.tagName === 'INPUT' || tgt.tagName === 'SELECT') return;
+      var handle = tgt.closest ? tgt.closest('[data-rdir]') : null;
+      var inBar  = tgt === bar || (bar && bar.contains && bar.contains(tgt));
+      if (handle)     { mode = 'resize'; dir = handle.getAttribute('data-rdir'); }
+      else if (inBar) { mode = 'drag'; }
+      else            { return; }
+
+      startX = e.clientX; startY = e.clientY;
+      startL = _floatPos.x; startT = _floatPos.y;
+      startW = _floatPos.w; startH = _floatPos.h;
+      panel.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    panel.addEventListener('pointermove', function (e) {
+      if (!mode) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      var nx = startL, ny = startT, nw = startW, nh = startH;
+
+      if (mode === 'drag') {
+        nx = Math.max(0, startL + dx);
+        ny = Math.max(0, startT + dy);
+      } else {
+        if (dir.indexOf('e') !== -1) nw = Math.max(MIN_W, startW + dx);
+        if (dir.indexOf('s') !== -1) nh = Math.max(MIN_H, startH + dy);
+        if (dir.indexOf('w') !== -1) { var ww = Math.max(MIN_W, startW - dx); nx = startL + startW - ww; nw = ww; }
+        if (dir.indexOf('n') !== -1) { var hh = Math.max(MIN_H, startH - dy); ny = startT + startH - hh; nh = hh; }
+      }
+
+      _floatPos = { x: nx, y: ny, w: nw, h: nh };
+      panel.style.left   = nx + 'px';
+      panel.style.top    = ny + 'px';
+      panel.style.width  = nw + 'px';
+      panel.style.height = nh + 'px';
+    });
+
+    function _endMove() {
+      if (!mode) return;
+      mode = null;
+      document.body.style.userSelect = '';
+      _saveFloat();
+    }
+    panel.addEventListener('pointerup',     _endMove);
+    panel.addEventListener('pointercancel', _endMove);
   }
 
   // ── Design helpers ────────────────────────────────────────
@@ -271,7 +417,11 @@
     });
 
     var html = '<div style="flex:1;display:flex;flex-direction:column">';
-    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);margin-bottom:16px">CAPACITY PLANNING — NEXT 26 WEEKS</div>';
+    html += '<div style="display:flex;align-items:center;margin-bottom:16px">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2)">CAPACITY PLANNING — NEXT 26 WEEKS</div>' +
+      '<div style="flex:1"></div>' +
+      '<button class="btn btn-secondary btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" title="Pop chart out into a floating window" style="font-size:11px;padding:2px 8px">⤢ Float</button>' +
+    '</div>';
 
     if (!allocated.length) {
       html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--ink-3);font-size:13px">Set start dates and worker counts on Won jobs below to see the demand forecast.</div>';
@@ -1234,6 +1384,7 @@
     pushOverwrite:          pushOverwrite,
     pushSkipConflicts:      pushSkipConflicts,
     openAddJob:             openAddJob,
-    submitAddJob:           submitAddJob
+    submitAddJob:           submitAddJob,
+    toggleFloat:            toggleFloat
   };
 })();
