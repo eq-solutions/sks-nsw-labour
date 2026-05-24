@@ -1,5 +1,40 @@
 # EQ Solves Field — Changelog
 
+# v3.10.24 — Safety module: Prestarts + Toolbox Talks
+
+**Date:** 2026-05-25
+**Scope:** New feature — Safety section for SKS.
+
+- **New page: Safety** — tab-based UI with Prestart Briefings and Toolbox Talks. Accessible to all staff (no supervisor unlock required to create or submit).
+- **Prestart form** — site, date/time, rep/supervisor, scope of works, previous day issues, 19-item HRCW category checklist (NSW WHS Regulation Schedule 3), SWMS references, hazards, permits, crew sign-off with optional signature pad, optional photos (max 8, resized to 1600px, base64 inline).
+- **Toolbox Talks form** — site, date/time, facilitator, topic, safety message, items reviewed, open actions, hazards, SWMS references, next meeting date, attendance sign-off with optional signature pad, optional photos.
+- **Draft / Submit workflow** — records start as drafts, submitted flag locks the form. Two-tap arming for delete (no `confirm()` dialogs).
+- **Offline support** — writes queue to localStorage when offline or on network error, auto-replay on reconnect.
+- **Navigation** — "Safety" added to sidebar Operations section and mobile More drawer (all-staff visible).
+- **Database** — `prestarts` and `toolbox_talks` tables were already applied to SKS Supabase. Both added to `ORG_TABLES` for auto org_id filtering.
+- **New file:** `scripts/safety.js` (self-contained — photo, signature pad, offline queue all inlined).
+
+---
+
+# v3.10.23 — Home screen: fix schedule always blank for staff
+
+**Date:** 2026-05-24
+**Scope:** Staff home screen schedule — critical bug fix.
+
+- **Root cause** — `home.js` checked `window.STATE` and `window.isManager` in 5 places. Both are always `undefined` because `STATE` and `isManager` are declared with `const`/`let` (not `var`) and only `var` globals attach to the `window` object. Result: `getUserScheduleRow()` always returned `[]`, `currentWeekKey()` always fell back to the date formula (wrong week on Sundays), and `isManagerSession()` always returned `false`. Staff saw "Nothing rostered" regardless of what data was in the DB.
+- Fixed all 5 occurrences to use direct variable references (`typeof STATE !== 'undefined'`, `typeof isManager !== 'undefined'`).
+
+---
+
+# v3.10.22 — Temp diagnostic build (internal)
+
+**Date:** 2026-05-24
+**Scope:** Debugging — not visible to end users.
+
+- Added name/week/row-count diagnostic to "Nothing rostered" tile to identify root cause. Removed in v3.10.23.
+
+---
+
 # v3.10.21 — Auto-reload on SW update + version chip
 
 **Date:** 2026-05-24
@@ -39,7 +74,7 @@
 
 # v3.10.17 — My Schedule: never blank for staff
 
-**Date:** 2026-05-25
+**Date:** 2026-05-24
 **Scope:** Staff schedule reliability — the core app use-case.
 
 - **`renderSchedule()` now self-sufficient for staff** — instead of relying on the `schedule-person` dropdown being pre-populated by `refreshPersonSelects()`, non-manager renders always derive the name directly from `sessionStorage.eq_logged_in_name` + fuzzy match against `STATE.people`. This eliminates the timing race between the early home render and the sequential data loads — staff always see their schedule regardless of when they navigate there.
@@ -50,7 +85,7 @@
 
 # v3.10.16 — Staff mobile nav: 4-item bar + stripped More drawer
 
-**Date:** 2026-05-25
+**Date:** 2026-05-24
 **Scope:** Staff mobile navigation.
 
 - **Bottom nav** — staff now see 4 items instead of 2. The three previously-hidden supervisor slots are repurposed: `mnav-schedule` → ⌂ Home (unchanged), `mnav-roster` → 📅 Schedule, `mnav-dashboard` → ✈ Leave. Calendar stays hidden.
@@ -61,7 +96,7 @@
 
 # v3.10.15 — Home screen: show immediately for mobile staff
 
-**Date:** 2026-05-25
+**Date:** 2026-05-24
 **Scope:** Staff mobile experience — load time.
 
 - **Early render** — staff on mobile now see the home screen as soon as schedule data is ready, without waiting for supervisor-only sequential loads (leave request queue, leave CC list, job numbers, apprentice data). Each of those is a separate Supabase round-trip that staff don't need on the home screen. `mobileNav('home')` is called right after `loadFromSupabase()` completes; the background loads continue and a silent re-render runs when they finish.
@@ -71,7 +106,7 @@
 
 # v3.10.14 — Home screen: fix shift lookup on Sunday
 
-**Date:** 2026-05-25
+**Date:** 2026-05-24
 **Scope:** Staff home screen — next-shift pill on Sunday.
 
 - **Sunday edge case** — `findNextShiftInWeek` was returning null on Sundays because `todayIdx = 6 > 4` triggered an early exit. But `initApp()` already points `STATE.currentWeek` at next Monday on Sundays, so all five weekdays are upcoming. Fix: only advance the start index on weekdays (`todayIdx <= 4`); on weekends start from 0 so Monday's shift is correctly returned as the next shift.

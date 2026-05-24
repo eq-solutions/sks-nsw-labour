@@ -86,6 +86,7 @@
 <script src="scripts/pipeline.js"></script>
 <script src="scripts/pipeline-resource.js"></script>
 <script src="scripts/home.js"></script>
+<script src="scripts/safety.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -620,7 +621,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.23
+  EQ Solves — Field  v3.10.24
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -2739,6 +2740,7 @@
       <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets</button>
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers</button>
+      <button class="nav-item" onclick="showPage('safety')" id="nav-safety"><span class="nav-icon">🛡</span> Safety</button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Pipeline</div>
@@ -3168,6 +3170,18 @@
   <div class="page hidden" id="page-pipeline-import">
     <!-- rendered by scripts/pipeline-import.js SKS_PIPELINE_IMPORT.renderPipelineImport() -->
   </div>
+  <!-- Safety page (v3.10.24) — Prestarts + Toolbox Talks -->
+  <div class="page hidden" id="page-safety">
+    <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface)">
+      <button id="safety-tab-btn-prestart" onclick="showSafetyTab('prestart')" style="flex:1;padding:11px 16px;border:none;background:none;font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid var(--blue);color:var(--blue);font-family:inherit">Prestart</button>
+      <button id="safety-tab-btn-toolbox"  onclick="showSafetyTab('toolbox')"  style="flex:1;padding:11px 16px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit">Toolbox</button>
+    </div>
+    <div id="prestart-offline-pill" style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
+    <div id="toolbox-offline-pill"  style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
+    <div id="safety-tab-content-prestart"><div id="page-prestart-list"></div></div>
+    <div id="safety-tab-content-toolbox"  style="display:none"><div id="page-toolbox-list"></div></div>
+  </div>
+
   <div class="page hidden" id="page-pipeline-resource">
     <!-- rendered by scripts/pipeline-resource.js SKS_PIPELINE_RESOURCE.renderPipelineResource() -->
   </div>
@@ -3195,6 +3209,7 @@
     <button class="drawer-item manager-only" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
     <button class="drawer-item manager-only" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
     <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
+    <button class="drawer-item" onclick="mobileNav('safety');closeMobileDrawer()" id="ditem-safety"><span class="d-icon">🛡</span> Safety</button>
     <button class="drawer-item manager-only" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave</button>
     <button class="drawer-item manager-only" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets</button>
     <div class="drawer-divider manager-only"></div>
@@ -3224,6 +3239,29 @@
 </div>
 
 </div><!-- /shell -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     SAFETY MODALS (v3.10.24)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="modal-prestart">
+  <div class="modal" style="max-width:580px;width:92vw;max-height:92vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <h3 id="prestart-modal-title">New Prestart</h3>
+      <button class="modal-close" onclick="closeModal('modal-prestart')">✕</button>
+    </div>
+    <div id="prestart-form-body" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-toolbox">
+  <div class="modal" style="max-width:580px;width:92vw;max-height:92vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <h3 id="toolbox-modal-title">New Toolbox Talk</h3>
+      <button class="modal-close" onclick="closeModal('modal-toolbox')">✕</button>
+    </div>
+    <div id="toolbox-form-body" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════
      PRIVACY NOTICE MODAL
@@ -3557,7 +3595,7 @@ const PAGE_TITLES = {
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
   pipeline:'Pipeline', 'pipeline-import':'Import Smartsheet', 'pipeline-resource':'Resource Allocation',
-  home:'Home'
+  home:'Home', safety:'Safety'
 };
 
 function showPage(id) {
@@ -3626,6 +3664,7 @@ function renderCurrentPage() {
   else if (currentPage === 'pipeline-import')   { if (typeof SKS_PIPELINE_IMPORT   !== 'undefined') SKS_PIPELINE_IMPORT.renderPipelineImport(); }
   else if (currentPage === 'pipeline-resource') { if (typeof SKS_PIPELINE_RESOURCE !== 'undefined') SKS_PIPELINE_RESOURCE.renderPipelineResource(); }
   else if (currentPage === 'home')              { if (typeof renderHomeScreen === 'function') renderHomeScreen(); }
+  else if (currentPage === 'safety')            { if (typeof loadSafety === 'function') loadSafety(); }
 }
 
 // ── Week controls ─────────────────────────────────────────────
