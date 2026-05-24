@@ -112,7 +112,7 @@
     if (_addingJob) html += _addJobPanel();
 
     // Two-column: chart hero left, jobs list right
-    html += '<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px;align-items:start">';
+    html += '<div style="display:grid;grid-template-columns:minmax(0,5fr) minmax(0,2fr);gap:24px;align-items:start">';
     html += '<div>' + _capacitySection() + '</div>';
     html += '<div>' + _needsAllocSection(won) + _confirmedSection(confirmed) + '</div>';
     html += '</div>';
@@ -232,7 +232,7 @@
       : Math.max(peakDem > 0 ? Math.ceil(peakDem * 1.5) : 10, 10);
     var maxVal  = Math.max(scaleMax, 1);
     var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
-    var CHART_H = 160;
+    var CHART_H = 260;
 
     // ── Stat pills
     var bench = _headcount > 0 ? _headcount - peakDem : null;
