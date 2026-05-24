@@ -594,7 +594,7 @@ function renderSchedule() {
   // and means staff never see an empty "select your name" prompt.
   // Managers use the dropdown as before.
   let name;
-  if (typeof window.isManager !== 'undefined' && !window.isManager) {
+  if (!isManager) {
     const raw = sessionStorage.getItem('eq_logged_in_name') || '';
     if (raw && window.STATE && Array.isArray(STATE.people) && STATE.people.length) {
       const m = STATE.people.find(p => p.name === raw)

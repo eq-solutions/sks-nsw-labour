@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.18 — My Schedule: fix schedule always blank for staff
+
+**Date:** 2026-05-24
+**Scope:** Staff schedule — critical bug fix.
+
+- **Root cause fixed** — `renderSchedule()` checked `window.isManager` to detect staff mode, but `isManager` is declared with `let` (not `var`) so it is never on the `window` object. `window.isManager` was always `undefined`, the condition always evaluated to `false`, and staff fell through to the dropdown path — reading an empty hidden picker and rendering "Select your name above" with no way to select. Changed to `!isManager` (direct reference).
+
+---
+
 # v3.10.17 — My Schedule: never blank for staff
 
 **Date:** 2026-05-25
