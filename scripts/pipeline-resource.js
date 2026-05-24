@@ -117,8 +117,8 @@
     if (_addingJob) html += _addJobPanel();
 
     // Resizable two-column split
-    html += '<div id="ra-split" style="display:flex;align-items:start">';
-    html += '<div id="ra-left" style="flex:0 0 ' + _splitPct + '%;min-width:200px;overflow:hidden">' + _capacitySection() + '</div>';
+    html += '<div id="ra-split" style="display:flex">';
+    html += '<div id="ra-left" style="flex:0 0 ' + _splitPct + '%;min-width:200px;overflow:hidden;display:flex;flex-direction:column">' + _capacitySection() + '</div>';
     html += '<div id="ra-divider" title="Drag to resize" style="flex-shrink:0;width:16px;align-self:stretch;cursor:col-resize;display:flex;align-items:center;justify-content:center">' +
       '<div id="ra-divider-bar" style="width:3px;height:36px;background:#e2e8f0;border-radius:2px;pointer-events:none"></div>' +
     '</div>';
@@ -270,7 +270,7 @@
       return e && e.start_date_estimated && e.peak_workers && e.duration_weeks;
     });
 
-    var html = '<div style="margin-bottom:28px">';
+    var html = '<div style="flex:1;display:flex;flex-direction:column">';
     html += '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2);margin-bottom:16px">CAPACITY PLANNING — NEXT 26 WEEKS</div>';
 
     if (!allocated.length) {
@@ -304,8 +304,8 @@
     if (lockedVal) html += _statPill('Locked in', '$' + _fmtK(lockedVal), 'contracted', '#166534');
     html += '</div>';
 
-    // ── Chart card
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px">';
+    // ── Chart card — flex:1 so it fills the remaining left-column height
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px;flex:1">';
 
     // Stacked bars
     html += '<div style="display:flex;align-items:flex-end;gap:1px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid #e2e8f0;margin-bottom:4px">';
@@ -369,7 +369,7 @@
     html += '</div>';
 
     html += '</div>'; // chart card
-    html += '</div>'; // section
+    html += '</div>'; // section (flex:1 — fills column height)
     return html;
   }
 
