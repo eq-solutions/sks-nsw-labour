@@ -38,8 +38,11 @@
   [headers.values]
     # Force HTTPS for 1 year (includeSubDomains for Netlify subdomains)
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
-    # Prevent clickjacking — disallow embedding in iframes
-    X-Frame-Options = "DENY"
+    # Framing: allowed only from EQ Shell (core.eq.solutions + its Netlify URL).
+    # X-Frame-Options is legacy — CSP frame-ancestors below supersedes it in
+    # all modern browsers. Omitting here rather than setting ALLOW-FROM (which
+    # is deprecated and ignored by Chrome/Firefox).
+    # X-Frame-Options intentionally removed — see frame-ancestors in CSP.
     # Prevent MIME-type sniffing
     X-Content-Type-Options = "nosniff"
     # Limit referrer info sent to third parties
@@ -58,4 +61,4 @@
     # - frame-ancestors: none (consistent with X-Frame-Options)
     # NOTE: CSP wildcards match ONE subdomain level, so both `*.posthog.com`
     # AND `*.i.posthog.com` are needed to cover `eu-assets.i.posthog.com`.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://*.posthog.com https://*.i.posthog.com https://www.clarity.ms https://*.clarity.ms; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://*.posthog.com https://*.i.posthog.com https://*.clarity.ms https://c.bing.com; img-src 'self' data: https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev https://*.posthog.com https://*.i.posthog.com https://*.clarity.ms; worker-src 'self' blob:; frame-ancestors 'none';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://*.posthog.com https://*.i.posthog.com https://www.clarity.ms https://*.clarity.ms; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://*.posthog.com https://*.i.posthog.com https://*.clarity.ms https://c.bing.com; img-src 'self' data: https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev https://*.posthog.com https://*.i.posthog.com https://*.clarity.ms; worker-src 'self' blob:; frame-ancestors https://core.eq.solutions https://main--eq-shell.netlify.app;"
