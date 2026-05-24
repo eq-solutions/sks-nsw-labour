@@ -620,7 +620,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.20
+  EQ Solves — Field  v3.10.21
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
@@ -2817,6 +2817,7 @@
     <span id="last-updated" style="font-size:13px;font-weight:600;color:var(--navy)">—</span>
     <span id="last-updated-manager" style="font-size:12px;color:var(--ink-3)"></span>
     <span id="sync-status" style="display:none;background:var(--amber-lt);color:var(--amber);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto"></span>
+    <span id="app-version-chip" style="font-size:10px;color:var(--ink-4);margin-left:auto"></span>
   </div>
 
   <!-- v3.4.78: Teams filter pill row. Sits between status bar and the
@@ -3679,6 +3680,8 @@ function updateLastUpdated(when) {
   const prefix = when ? 'Cached '       : 'Updated ';
   el.textContent  = `${prefix}${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   if (mgr) mgr.textContent = currentManagerName ? `by ${currentManagerName}` : '';
+  const vc = document.getElementById('app-version-chip');
+  if (vc && typeof APP_VERSION !== 'undefined') vc.textContent = `v${APP_VERSION}`;
 }
 
 // ── Refresh ───────────────────────────────────────────────────
@@ -4086,6 +4089,11 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', e => {
     if (e.data && e.data.type === 'FLUSH_WRITE_QUEUE' && typeof flushWriteQueue === 'function') {
       flushWriteQueue();
+    }
+    // New SW activated — reload immediately so updated JS runs rather than
+    // the old scripts that skipWaiting left in memory.
+    if (e.data && e.data.type === 'SW_ACTIVATED') {
+      window.location.reload();
     }
   });
 }

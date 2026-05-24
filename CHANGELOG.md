@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.21 — Auto-reload on SW update + version chip
+
+**Date:** 2026-05-24
+**Scope:** Update delivery + diagnostics.
+
+- **SW-triggered page reload** — when the new service worker activates it now broadcasts `SW_ACTIVATED` to all open pages, which immediately call `location.reload()`. Previously `skipWaiting` took over the network layer but old JS kept running in memory until the user manually closed and reopened the app — meaning every fix shipped since v3.10.18 never landed for active sessions.
+- **Version chip** — `v3.10.x` now appears in the status bar (right side of the Updated row) so it's easy to confirm which build is actually running on device.
+
+---
+
 # v3.10.20 — My Schedule: week nav active after early render
 
 **Date:** 2026-05-24

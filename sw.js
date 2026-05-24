@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.10.20
-const CACHE = 'eq-field-v3.10.20';
+// EQ Solves — Field  ·  Service Worker  v3.10.21
+const CACHE = 'eq-field-v3.10.21';
 
 const PRECACHE = [
   '/',
@@ -63,6 +63,13 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
+    .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+    .then(clients => {
+      // Tell every open page to reload so it picks up the new JS immediately.
+      // Without this, skipWaiting takes over the network but the old scripts
+      // keep running in memory until the user manually closes and reopens the app.
+      clients.forEach(c => c.postMessage({ type: 'SW_ACTIVATED', cache: CACHE }));
+    })
   );
 });
 
