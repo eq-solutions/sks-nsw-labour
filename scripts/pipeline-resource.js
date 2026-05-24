@@ -44,7 +44,7 @@
         sbFetch('tenders?stage=in.(won,confirmed)&archived_at=is.null&order=quote_value.desc.nullslast&limit=500'),
         sbFetch('tender_enrichment?select=*&limit=1000'),
         sbFetch('nominations?select=*&limit=2000'),
-        sbFetch('people?select=id&archived_at=is.null&limit=1000')
+        sbFetch('people?select=id&archived=eq.false&limit=1000')
       ]);
 
       _tenders = Array.isArray(results[0]) ? results[0] : [];

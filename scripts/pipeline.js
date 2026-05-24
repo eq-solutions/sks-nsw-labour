@@ -101,7 +101,7 @@
       if (t.stage === 'confirmed') return false; // handled separately below
       if (_filterDept && t.department !== _filterDept) return false;
       if (_filterVert && t.vertical  !== _filterVert)  return false;
-      if (_filterValue && t.stage !== 'won' && (t.quote_value || 0) < _filterValue) return false;
+      if (_filterValue && (t.quote_value || 0) < _filterValue) return false;
       return true;
     });
 
@@ -192,7 +192,6 @@
       html +=   '<div>';
       html +=     '<span style="font-weight:700;color:' + s.color + ';font-size:14px">' + s.label + '</span>';
       html +=     '<span style="font-size:11px;color:var(--ink-3);margin-left:5px">' + s.desc + '</span>';
-      if (s.key === 'won' && _filterValue > 0) html += '<span style="font-size:10px;color:var(--ink-3);margin-left:6px" title="Won tenders always shown regardless of value filter">· all shown</span>';
       html +=   '</div>';
       html +=   '<span style="background:' + s.bg + ';color:' + s.color + ';font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px">' + cards.length + '</span>';
       html += '</div>';
