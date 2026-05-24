@@ -6,6 +6,19 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.10.7 — Apprentice timesheets: TAFE counts toward 40h + approval indicator
+
+**Date:** 2026-05-24
+**Scope:** Apprentice timesheet accuracy + supervisor approval workflow.
+
+- **TAFE = 40h total** — rostered TAFE days count as 8h each toward the weekly total for apprentices. A 32h work week with one TAFE day now shows 40h (green) instead of 32h (red). Completion check only tests workable days for the ≥8h/day rule.
+- **Approval chip** — subtle `✓` (green) next to the APP badge once a supervisor marks a row approved; faint `○` shown to managers for rows not yet approved. Tap to toggle. Saves `approved`, `approved_by`, `approved_at` to the timesheets row.
+- **DB migration** — `2026-05-24_ts_apprentice_approval.sql` adds `approved`, `approved_by`, `approved_at` columns to `timesheets` table.
+
+**Requires:** run `2026-05-24_ts_apprentice_approval.sql` on SKS Supabase before deploying.
+
+---
+
 # v3.10.6 — Employee mobile: clean topbar, no irrelevant nav
 
 **Date:** 2026-05-24

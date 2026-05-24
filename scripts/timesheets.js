@@ -183,11 +183,26 @@ function tsTotalHrs(entry) {
   }, 0);
 }
 
+// Adds rostered TAFE days (8h each) to the work total for apprentices.
+// TAFE days are muted in the timesheet and not entered as hours — but
+// they count toward the 40h weekly target on the employer portal.
+function _tsApprenticeTotal(personName, week, entry) {
+  const workHrs = tsTotalHrs(entry);
+  let tafeHrs   = 0;
+  ['mon','tue','wed','thu','fri'].forEach(d => {
+    if (_tsDayStatus(personName, week, d).tafeLabel) tafeHrs += 8;
+  });
+  return workHrs + tafeHrs;
+}
+
 function updateTsRowTotal(name, week) {
-  const entry = getTsEntry(name, week);
-  const total = tsTotalHrs(entry);
-  const id    = 'tst-' + name.replace(/\W/g, '_');
-  const el    = document.getElementById(id);
+  const entry  = getTsEntry(name, week);
+  const person = (STATE.people || []).find(p => p.name === name);
+  const total  = (person && person.group === 'Apprentice')
+    ? _tsApprenticeTotal(name, week, entry)
+    : tsTotalHrs(entry);
+  const id = 'tst-' + name.replace(/\W/g, '_');
+  const el = document.getElementById(id);
   if (!el) return;
   el.textContent = total > 0 ? total + 'h' : '—';
   // v3.4.26: red if any hours but week incomplete, else green/empty.
@@ -899,6 +914,48 @@ function _tsDayStatus(name, week, day) {
   return { workable: true };
 }
 
+// ── Apprentice approval ───────────────────────────────────────
+// Subtle chip shown in the APP badge cell. Managers can tap to
+// toggle — approved/unapproved state saves to the timesheets row.
+function _tsApprovalChip(name, week, entry) {
+  const approved = entry && entry.approved;
+  const safeName = esc(name);
+  if (approved) {
+    const who   = (entry.approved_by || '').trim();
+    const title = who ? `Approved by ${who}` : 'Approved';
+    const cursor = isManager ? 'pointer' : 'default';
+    return `<span style="margin-left:5px;font-size:10px;font-weight:700;color:#16A34A;cursor:${cursor}" title="${esc(title)}" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">✓</span>`;
+  }
+  if (!isManager) return '';
+  return `<span style="margin-left:5px;font-size:11px;color:var(--ink-4);cursor:pointer;opacity:.45" title="Mark as approved" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">○</span>`;
+}
+
+async function toggleTsApproval(name, week) {
+  if (!isManager) return;
+  const entry = getTsEntry(name, week);
+  if (!entry) { showToast('No timesheet entry to approve yet'); return; }
+  const nowApproved = !entry.approved;
+  const who         = sessionStorage.getItem('eq_logged_in_name') || currentManagerName || '';
+  entry.approved    = nowApproved;
+  entry.approved_by = nowApproved ? who : null;
+  entry.approved_at = nowApproved ? new Date().toISOString() : null;
+  try {
+    await sbFetch(
+      `timesheets?name=eq.${encodeURIComponent(name)}&week=eq.${encodeURIComponent(week)}`,
+      'PATCH',
+      { approved: nowApproved, approved_by: entry.approved_by, approved_at: entry.approved_at },
+      'return=minimal'
+    );
+    showToast(nowApproved ? `✓ ${name} approved` : `${name} approval removed`);
+  } catch (e) {
+    showToast('⚠ Approval save failed — check connection');
+    entry.approved = !nowApproved;
+    entry.approved_by = null;
+    entry.approved_at = null;
+  }
+  renderTimesheets();
+}
+
 // v3.4.79 — Row status pill state. Returns an object describing what
 // pill to render in the name column. Driven by the ROSTER (expected
 // work days) compared against the TIMESHEET (filled hours), not just
@@ -1132,16 +1189,20 @@ function renderTimesheets() {
     }
 
     const entry      = getTsEntry(p.name, week);
-    const total      = tsTotalHrs(entry);
-    // v3.4.26: completion rule — every Mon–Fri ≥ 8 hrs AND total ≥ 40 hrs.
-    // Anything less colours the row red; amber state retired. Hours are
-    // the source of truth, not job-cell presence, so a row with job
-    // numbers but no hrs reads incomplete until hrs are filled in.
-    const _hrs            = ['mon','tue','wed','thu','fri'].map(d => Number((entry && entry[d + '_hrs']) || 0));
-    const _weekTotal      = _hrs.reduce((a, b) => a + b, 0);
-    const _allDaysAt8Plus = _hrs.every(h => h >= 8);
-    const _hasAnyHrs      = _hrs.some(h => h > 0);
-    const _isComplete     = _hasAnyHrs && _allDaysAt8Plus && _weekTotal >= 40;
+    // Completion rule: every workable day ≥ 8h AND total ≥ 40h.
+    // For apprentices, rostered TAFE days count as 8h each toward the
+    // total (they're logged on the employer portal, not in this timesheet).
+    const _workDays        = ['mon','tue','wed','thu','fri'];
+    const _dayStats        = _workDays.map(d => _tsDayStatus(p.name, week, d));
+    const _workableDays    = _workDays.filter((_, i) => _dayStats[i].workable);
+    const _workableHrs     = _workableDays.map(d => Number((entry && entry[d + '_hrs']) || 0));
+    const _tafeHrs         = p.group === 'Apprentice'
+      ? _dayStats.filter(st => st.tafeLabel).length * 8
+      : 0;
+    const total            = tsTotalHrs(entry) + _tafeHrs;
+    const _hasAnyHrs       = _workableHrs.some(h => h > 0);
+    const _allDaysAt8Plus  = _workableHrs.every(h => h >= 8);
+    const _isComplete      = _hasAnyHrs && _allDaysAt8Plus && total >= 40;
     // v3.4.79: roster-aware row status (drives the pill in the name col).
     const rowStatus       = _tsRowStatus(p, week, entry);
     const totalClass      = _isComplete ? 'ts-total-green' : (_hasAnyHrs ? 'ts-total-red' : 'ts-total-empty');
@@ -1164,6 +1225,9 @@ function renderTimesheets() {
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
       : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
+    const approvalChip = p.group === 'Apprentice'
+      ? _tsApprovalChip(p.name, week, entry)
+      : '';
     // v3.4.80: status pill dropped — the 4px row left-stripe is the
     // signal. rowStatus.kind is still used above to pick stripe colour;
     // _tsRowStatus is otherwise unread now (kept as a public hook for
@@ -1191,7 +1255,7 @@ function renderTimesheets() {
           ${copyLastWkLink}
         </div>
       </td>
-      <td>${grpBadge}</td>
+      <td style="white-space:nowrap">${grpBadge}${approvalChip}</td>
       ${days.map(d => {
         // v3.4.79: mute the cell if the roster says the person is on
         // leave or at TAFE this day. Reads the existing schedule data
@@ -2024,8 +2088,10 @@ function _renderTimesheetsMobile(opts) {
 
     const pid    = p.name.replace(/\W/g, '_');
     const entry  = getTsEntry(p.name, week);
-    const total  = tsTotalHrs(entry);
-    const _hrs   = ['mon','tue','wed','thu','fri'].map(d => Number((entry && entry[d + '_hrs']) || 0));
+    const _mTafeHrs = p.group === 'Apprentice'
+      ? ['mon','tue','wed','thu','fri'].filter(d => _tsDayStatus(p.name, week, d).tafeLabel).length * 8
+      : 0;
+    const total  = tsTotalHrs(entry) + _mTafeHrs;
     const rowStatus = _tsRowStatus(p, week, entry);
 
     let statusIcon, statusCls, totalCls;
@@ -2076,6 +2142,7 @@ function _renderTimesheetsMobile(opts) {
         <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
         <span class="ts-mcard-name">${esc(p.name)}${varianceChip}</span>
         <span class="ts-mcard-badge ${grpBadgeCls}">${grpBadge}</span>
+        ${p.group === 'Apprentice' ? _tsApprovalChip(p.name, week, entry) : ''}
         <span class="ts-mcard-statusicon ${statusCls}">${statusIcon}</span>
         <span class="ts-mcard-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
       </div>
