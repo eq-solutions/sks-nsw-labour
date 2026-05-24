@@ -414,15 +414,20 @@
       return e && e.start_date_estimated && e.peak_workers && e.duration_weeks;
     });
 
-    var html = '<div style="margin-bottom:24px">';
-    html += '<div style="display:flex;align-items:center;margin-bottom:16px">' +
-      '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--ink-2)">CAPACITY PLANNING — NEXT 26 WEEKS</div>' +
+    // ── Dark hero container
+    var html = '<div style="background:#1F335C;border-radius:16px;padding:28px 32px 24px;margin-bottom:28px">';
+
+    // Header
+    html += '<div style="display:flex;align-items:center;margin-bottom:20px">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,0.45);text-transform:uppercase">Capacity Planning — 26 Weeks</div>' +
       '<div style="flex:1"></div>' +
-      '<button class="btn btn-secondary btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" title="Pop chart out into a floating window" style="font-size:11px;padding:2px 8px">⤢ Float</button>' +
+      '<button onpointerdown="SKS_PIPELINE_RESOURCE.toggleFloat()" ' +
+        'style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.65);' +
+        'font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer">⤢ Float</button>' +
     '</div>';
 
     if (!allocated.length) {
-      html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--ink-3);font-size:13px">Set start dates and worker counts on Won jobs below to see the demand forecast.</div>';
+      html += '<div style="text-align:center;color:rgba(255,255,255,0.35);font-size:13px;padding:40px 0">Set start dates and worker counts on Won jobs to see the demand forecast.</div>';
       html += '</div>';
       return html;
     }
@@ -432,67 +437,66 @@
     var totals  = data.totals;
     var labels  = data.labels;
     var peakDem = Math.max.apply(null, totals);
-    // Scale: headcount is always the ceiling so the dashed line is always visible.
-    // Fall back to demand-relative only when no headcount data.
     var scaleMax = _headcount > 0
       ? Math.max(_headcount, peakDem)
       : Math.max(peakDem > 0 ? Math.ceil(peakDem * 1.5) : 10, 10);
     var maxVal  = Math.max(scaleMax, 1);
     var hasGap  = _headcount > 0 && totals.some(function (d) { return d > _headcount; });
-    var CHART_H = 220;
+    var CHART_H = 200;
 
-    // Y-axis: pick a clean interval (target 5-6 labels)
     var yIntervals = [1,2,5,10,20,25,50,100,200,500];
     var yInterval  = yIntervals[yIntervals.length - 1];
     for (var ii = 0; ii < yIntervals.length; ii++) {
       if (maxVal / yIntervals[ii] <= 6) { yInterval = yIntervals[ii]; break; }
     }
 
-    // ── Stat pills
-    var bench = _headcount > 0 ? _headcount - peakDem : null;
+    // ── Large stat row
+    var bench     = _headcount > 0 ? _headcount - peakDem : null;
     var lockedVal = _tenders.filter(function (t) { return t.stage === 'confirmed'; })
       .reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
-    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
-    html += _statPill('Peak demand', peakDem, peakDem === 1 ? 'worker' : 'workers', peakDem > 0 && peakDem > _headcount ? '#dc2626' : '#1d4ed8');
-    html += _statPill('Active jobs', allocated.length, allocated.length === 1 ? 'job' : 'jobs', '#166534');
-    if (bench !== null) html += _statPill('Bench', Math.max(0, bench), 'available', bench > 0 ? '#374151' : '#dc2626');
-    if (lockedVal) html += _statPill('Locked in', '$' + _fmtK(lockedVal), 'contracted', '#166534');
+
+    var stats = [];
+    stats.push({ label: 'PEAK DEMAND', val: peakDem,           unit: 'workers',    color: peakDem > 0 && peakDem > _headcount ? '#fca5a5' : '#93c5fd' });
+    stats.push({ label: 'ACTIVE JOBS', val: allocated.length,  unit: allocated.length === 1 ? 'job' : 'jobs', color: '#86efac' });
+    if (bench !== null) stats.push({ label: 'BENCH', val: Math.max(0, bench), unit: 'available', color: bench > 0 ? '#e2e8f0' : '#fca5a5' });
+    if (lockedVal)      stats.push({ label: 'LOCKED IN', val: '$' + _fmtK(lockedVal), unit: 'contracted', color: '#86efac' });
+
+    html += '<div style="display:flex;gap:0;margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.1)">';
+    stats.forEach(function (s, i) {
+      html += '<div style="flex:1;' + (i > 0 ? 'border-left:1px solid rgba(255,255,255,0.1);padding-left:28px;' : '') + 'padding-right:28px">';
+      html += '<div style="font-size:10px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,0.4);margin-bottom:10px">' + s.label + '</div>';
+      html += '<div style="font-size:42px;font-weight:700;color:' + s.color + ';line-height:1;letter-spacing:-.02em">' + _esc(String(s.val)) + '</div>';
+      html += '<div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:6px">' + _esc(s.unit) + '</div>';
+      html += '</div>';
+    });
     html += '</div>';
 
-    // ── Chart card
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 18px 12px">';
+    // ── Chart directly on dark background
+    html += '<div style="display:flex;gap:8px;align-items:flex-end">';
 
-    // Y-axis + bars row
-    html += '<div style="display:flex;gap:6px;align-items:flex-end">';
-
-    // ── Y-axis labels (right-aligned, stacked against the bars)
-    html += '<div style="position:relative;width:22px;flex-shrink:0;height:' + CHART_H + 'px;margin-bottom:' + (4 + 18) + 'px">';
+    // Y-axis
+    html += '<div style="position:relative;width:24px;flex-shrink:0;height:' + CHART_H + 'px;margin-bottom:22px">';
     for (var yv = 0; yv <= maxVal; yv += yInterval) {
-      var yPct = yv / maxVal * 100;
-      html += '<div style="position:absolute;bottom:' + yPct + '%;right:0;font-size:8px;color:var(--ink-3);line-height:1;transform:translateY(50%)">' + yv + '</div>';
+      html += '<div style="position:absolute;bottom:' + (yv / maxVal * 100) + '%;right:0;font-size:9px;color:rgba(255,255,255,0.3);line-height:1;transform:translateY(50%)">' + yv + '</div>';
     }
-    // Always label the top value if it's not already hit by the interval
     if (maxVal % yInterval !== 0) {
-      html += '<div style="position:absolute;bottom:100%;right:0;font-size:8px;color:var(--ink-3);line-height:1;transform:translateY(50%)">' + maxVal + '</div>';
+      html += '<div style="position:absolute;bottom:100%;right:0;font-size:9px;color:rgba(255,255,255,0.3);line-height:1;transform:translateY(50%)">' + maxVal + '</div>';
     }
     html += '</div>';
 
-    // ── Bars + x-axis column
+    // Bars + x-axis
     html += '<div style="flex:1;min-width:0">';
-
-    // Stacked bars
-    html += '<div style="display:flex;align-items:flex-end;gap:1px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid #e2e8f0;margin-bottom:4px">';
-    // Grid lines (aligned with Y-axis labels)
+    html += '<div style="display:flex;align-items:flex-end;gap:2px;height:' + CHART_H + 'px;position:relative;border-bottom:1px solid rgba(255,255,255,0.15);margin-bottom:6px">';
     for (var gv = yInterval; gv < maxVal; gv += yInterval) {
-      html += '<div style="position:absolute;left:0;right:0;bottom:' + (gv / maxVal * 100) + '%;border-top:1px solid #f1f5f9;pointer-events:none"></div>';
+      html += '<div style="position:absolute;left:0;right:0;bottom:' + (gv / maxVal * 100) + '%;border-top:1px solid rgba(255,255,255,0.07);pointer-events:none"></div>';
     }
     for (var wi = 0; wi < totals.length; wi++) {
-      var tot   = totals[wi];
-      var barH  = tot > 0 ? Math.max(Math.round((tot / maxVal) * CHART_H), 2) : 0;
+      var tot  = totals[wi];
+      var barH = tot > 0 ? Math.max(Math.round((tot / maxVal) * CHART_H), 2) : 0;
       var isGap = _headcount > 0 && tot > _headcount;
       var tipParts = [labels[wi] + ': ' + tot + ' workers'];
       bands.forEach(function (b) { if (b.weeks[wi]) tipParts.push(b.name.split(/\s+/).slice(0, 3).join(' ') + ': ' + b.weeks[wi]); });
-      html += '<div title="' + _esc(tipParts.join(' | ')) + '" style="flex:1;height:' + barH + 'px;display:flex;flex-direction:column-reverse;border-radius:2px 2px 0 0;overflow:hidden' + (isGap ? ';box-shadow:0 0 0 1px #fca5a5' : '') + '">';
+      html += '<div title="' + _esc(tipParts.join(' | ')) + '" style="flex:1;height:' + barH + 'px;display:flex;flex-direction:column-reverse;border-radius:3px 3px 0 0;overflow:hidden' + (isGap ? ';outline:1px solid rgba(252,165,165,0.7)' : '') + '">';
       if (tot > 0) {
         bands.forEach(function (b, ci) {
           if (!b.weeks[wi]) return;
@@ -501,43 +505,39 @@
       }
       html += '</div>';
     }
-    // Headcount dashed line — always drawn since scale includes headcount
     if (_headcount > 0) {
       var hcPct = _headcount / maxVal * 100;
-      html += '<div style="position:absolute;left:0;right:0;bottom:' + hcPct + '%;border-top:2px dashed #dc2626;pointer-events:none" title="Headcount: ' + _headcount + '">' +
-        '<span style="position:absolute;right:0;top:-16px;font-size:9px;color:#dc2626;font-weight:600;background:#fff;padding:0 2px">' + _headcount + '</span>' +
+      html += '<div style="position:absolute;left:0;right:0;bottom:' + hcPct + '%;border-top:2px dashed rgba(252,165,165,0.75);pointer-events:none">' +
+        '<span style="position:absolute;right:0;top:-16px;font-size:9px;color:rgba(252,165,165,0.9);font-weight:700;letter-spacing:.02em">' + _headcount + '</span>' +
       '</div>';
     }
-    html += '</div>';
+    html += '</div>'; // bars
 
-    // X-axis
-    html += '<div style="display:flex;gap:1px;margin-bottom:14px">';
+    html += '<div style="display:flex;gap:2px">';
     labels.forEach(function (l, i) {
-      html += '<div style="flex:1;font-size:8px;color:var(--ink-3);text-align:center;overflow:hidden">' + (i % 4 === 0 ? l : '') + '</div>';
+      html += '<div style="flex:1;font-size:8px;color:rgba(255,255,255,0.25);text-align:center;overflow:hidden">' + (i % 4 === 0 ? l : '') + '</div>';
     });
     html += '</div>';
-
-    html += '</div>'; // bars + x-axis column
-    html += '</div>'; // Y-axis + bars row
+    html += '</div>'; // bars + x-axis
+    html += '</div>'; // y + bars row
 
     // Legend
-    html += '<div style="display:flex;gap:8px 16px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)">';
+    html += '<div style="display:flex;gap:6px 20px;flex-wrap:wrap;font-size:11px;color:rgba(255,255,255,0.45);margin-top:16px">';
     bands.forEach(function (b, ci) {
-      var lbl = b.name.length > 24 ? b.name.slice(0, 22) + '…' : b.name;
-      html += '<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:4px;vertical-align:middle"></span>' + _esc(lbl) + '</span>';
+      var lbl = b.name.length > 26 ? b.name.slice(0, 24) + '…' : b.name;
+      html += '<span style="white-space:nowrap">' +
+        '<span style="display:inline-block;width:10px;height:10px;background:' + _CHART_PALETTE[ci % _CHART_PALETTE.length] + ';border-radius:2px;margin-right:5px;vertical-align:middle"></span>' +
+        _esc(lbl) + '</span>';
     });
     if (_headcount > 0) {
-      html += '<span style="white-space:nowrap;margin-left:4px">' +
-        '<span style="display:inline-block;width:16px;border-top:2px dashed #dc2626;margin-right:4px;vertical-align:middle"></span>' +
+      html += '<span style="white-space:nowrap">' +
+        '<span style="display:inline-block;width:16px;border-top:2px dashed rgba(252,165,165,0.75);margin-right:5px;vertical-align:middle"></span>' +
         'Headcount (' + _headcount + ')</span>';
     }
-    if (hasGap) {
-      html += '<span style="color:#dc2626;font-weight:600;white-space:nowrap;margin-left:4px">⚠ Exceeds headcount</span>';
-    }
+    if (hasGap) html += '<span style="color:#fca5a5;font-weight:700;white-space:nowrap">⚠ Exceeds headcount</span>';
     html += '</div>';
 
-    html += '</div>'; // chart card
-    html += '</div>'; // section (flex:1 — fills column height)
+    html += '</div>'; // dark hero
     return html;
   }
 
@@ -819,12 +819,13 @@
       }
 
       html += '<div id="ra-conf-row-' + id + '" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(\'' + id + '\')" ' +
-        'style="cursor:pointer;background:#fff;' +
-        'border:1px solid ' + (isOpen ? accent : '#e2e8f0') + ';' +
+        'style="cursor:pointer;' +
+        'background:' + (isOpen ? accent + '10' : '#fff') + ';' +
+        'border:1px solid ' + (isOpen ? accent + '60' : '#e2e8f0') + ';' +
         'border-top:4px solid ' + accent + ';' +
-        'border-radius:10px;padding:16px 18px 14px;' +
+        'border-radius:12px;padding:18px 20px 16px;' +
         'user-select:none;-webkit-user-select:none;' +
-        (isOpen ? 'box-shadow:0 0 0 3px ' + accent + '28' : 'transition:box-shadow .15s') + '">';
+        (isOpen ? 'box-shadow:0 4px 20px ' + accent + '28' : '') + '">';
 
       // Ref chip + badge
       html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
