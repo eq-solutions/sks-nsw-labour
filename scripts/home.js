@@ -276,6 +276,14 @@
           '<div class="eqh-tile-icon">✈</div>' +
           '<div><div class="eqh-tile-title">Leave</div><div class="eqh-tile-sub">Request time off</div></div>' +
         '</button>' +
+        '<button class="eqh-tile eqh-t-prestart" onclick="eqhSafetyTap(\'prestart\')">' +
+          '<div class="eqh-tile-icon">🛡</div>' +
+          '<div><div class="eqh-tile-title">Prestart</div><div class="eqh-tile-sub">Today\'s briefing</div></div>' +
+        '</button>' +
+        '<button class="eqh-tile eqh-t-toolbox" onclick="eqhSafetyTap(\'toolbox\')">' +
+          '<div class="eqh-tile-icon">📋</div>' +
+          '<div><div class="eqh-tile-title">Toolbox Talk</div><div class="eqh-tile-sub">Log a talk</div></div>' +
+        '</button>' +
       '</div>' +
       '<div class="eqh-footer">EQ Field · v' + esc(version) + '</div>';
 
@@ -358,6 +366,20 @@
     const base = _eqhWeek || currentWeekKey();
     _eqhWeek   = _weekOffset(base, dir);
     renderHomeScreen(true);
+  }
+
+  // ── Safety tile tap — navigate and switch to correct tab ─────
+
+  function eqhSafetyTap(tab) {
+    try {
+      if (window.EQ_ANALYTICS && EQ_ANALYTICS.capture) EQ_ANALYTICS.capture('home_tile_tapped', { tile: 'safety-' + tab });
+    } catch (e) {}
+    if (typeof window.mobileNav === 'function') window.mobileNav('safety');
+    else if (typeof window.showPage === 'function') window.showPage('safety');
+    // Switch tab after the safety page renders (loadSafety may be async)
+    setTimeout(function () {
+      if (typeof window.showSafetyTab === 'function') window.showSafetyTab(tab);
+    }, 0);
   }
 
   // ── Leave tap — open request modal directly for staff ────────
@@ -457,6 +479,7 @@
   // ── Expose ───────────────────────────────────────────────────
   window.renderHomeScreen   = renderHomeScreen;
   window.eqhTileTap         = eqhTileTap;
+  window.eqhSafetyTap       = eqhSafetyTap;
   window.eqhLeaveTap        = eqhLeaveTap;
   window.eqhSetWeek         = eqhSetWeek;
   window.eqhOpenDrawer      = eqhOpenDrawer;

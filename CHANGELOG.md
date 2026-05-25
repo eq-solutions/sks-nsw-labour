@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.28 — Home: Prestart + Toolbox tiles for staff
+
+**Date:** 2026-05-26
+**Scope:** Mobile home screen — staff tile grid.
+
+- **Prestart tile** (🛡) and **Toolbox Talk tile** (📋) added to the staff mobile home screen. Tiles deep-link directly to the Safety page with the correct tab pre-selected.
+- Staff home is now a 2×2 grid: My Schedule, Leave, Prestart, Toolbox Talk.
+
+---
+
 # v3.10.27 — Safety: form improvements + voice input
 
 **Date:** 2026-05-25

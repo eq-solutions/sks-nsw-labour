@@ -155,11 +155,13 @@
 }
 
 /* Tile colour variants */
-.eqh-tile.eqh-t-schedule .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
-.eqh-tile.eqh-t-time     .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
-.eqh-tile.eqh-t-leave    .eqh-tile-icon { background: var(--amber-lt);  color: var(--amber); }
-.eqh-tile.eqh-t-team     .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
-.eqh-tile.eqh-t-reports  .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
+.eqh-tile.eqh-t-schedule  .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
+.eqh-tile.eqh-t-time      .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
+.eqh-tile.eqh-t-leave     .eqh-tile-icon { background: var(--amber-lt);  color: var(--amber); }
+.eqh-tile.eqh-t-team      .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
+.eqh-tile.eqh-t-reports   .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
+.eqh-tile.eqh-t-prestart  .eqh-tile-icon { background: var(--red-lt);    color: var(--red); }
+.eqh-tile.eqh-t-toolbox   .eqh-tile-icon { background: var(--purple-lt); color: var(--purple); }
 
 /* ── Badges ─────────────────────────────────────────────────── */
 .eqh-badge {
