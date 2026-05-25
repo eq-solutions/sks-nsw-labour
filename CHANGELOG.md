@@ -1,5 +1,19 @@
 # EQ Solves Field — Changelog
 
+# v3.10.29 — Safety dashboard
+
+**Date:** 2026-05-26
+**Scope:** New manager-only Safety Report page.
+
+- **Safety Report page** — new `page-safety-dashboard` showing prestart + toolbox compliance data fetched independently (up to 500 records, configurable range).
+- **By-person tables** — prestarts (by `sks_rep`) and toolbox talks (by `facilitator`) with count, crew/attendance sign-off rate bar, sites covered, and last date.
+- **Site coverage chart** — horizontal bar chart with PS (blue) / TB (green) split per site.
+- **Range filter** — 7d / 30d / 90d / All time pills, persists within session.
+- **Supervisor home tile** — 🛡 Safety tile added to supervisor mobile home screen.
+- **Nav item** — "Safety Report" added under Operations, manager-only (`edit-only`).
+
+---
+
 # v3.10.28 — Home: Prestart + Toolbox tiles for staff
 
 **Date:** 2026-05-26

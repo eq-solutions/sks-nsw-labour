@@ -339,6 +339,10 @@
           '<div class="eqh-tile-icon">📊</div>' +
           '<div><div class="eqh-tile-title">Reports</div><div class="eqh-tile-sub">Weekly hours &amp; sites</div></div>' +
         '</button>' +
+        '<button class="eqh-tile eqh-t-safety-report" onclick="eqhTileTap(\'safety-dashboard\')">' +
+          '<div class="eqh-tile-icon">🛡</div>' +
+          '<div><div class="eqh-tile-title">Safety</div><div class="eqh-tile-sub">Prestarts &amp; toolboxes</div></div>' +
+        '</button>' +
       '</div>' +
       '<div class="eqh-footer">EQ Field · v' + esc(version) + ' · Supervisor</div>';
 

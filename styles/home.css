@@ -161,7 +161,8 @@
 .eqh-tile.eqh-t-team      .eqh-tile-icon { background: var(--blue-lt);   color: var(--blue); }
 .eqh-tile.eqh-t-reports   .eqh-tile-icon { background: var(--green-lt);  color: var(--green); }
 .eqh-tile.eqh-t-prestart  .eqh-tile-icon { background: var(--red-lt);    color: var(--red); }
-.eqh-tile.eqh-t-toolbox   .eqh-tile-icon { background: var(--purple-lt); color: var(--purple); }
+.eqh-tile.eqh-t-toolbox        .eqh-tile-icon { background: var(--purple-lt); color: var(--purple); }
+.eqh-tile.eqh-t-safety-report .eqh-tile-icon { background: var(--amber-lt);  color: var(--amber); }
 
 /* ── Badges ─────────────────────────────────────────────────── */
 .eqh-badge {
