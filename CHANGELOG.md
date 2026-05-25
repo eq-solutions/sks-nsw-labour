@@ -1,5 +1,17 @@
 # EQ Solves Field — Changelog
 
+# v3.10.27 — Safety: form improvements + voice input
+
+**Date:** 2026-05-25
+**Scope:** Safety module — Prestart + Toolbox Talk form UX improvements.
+
+- **Site field** — changed from `<select>` to `<input>` + `<datalist>`. Known sites autocomplete from the roster list; anything else can be typed freely (e.g. a new site not yet in the system).
+- **"Subcontractor" renamed** to **"Principal Contractor / Customer"** on both Prestart and Toolbox Talk forms. DB column (`subcontractor`) unchanged — label only.
+- **Pull from roster** — "Pull from roster" button on Crew sign-off (Prestart) and Attendance (Toolbox). Tapping it finds all staff rostered to the selected site on today's date and adds any not already listed. Only visible when a site is set.
+- **Voice input (mic buttons)** — 🎤 button added next to all major text areas: Scope of works, Previous day issues, Hazards, Permits (Prestart); Key safety message, Items reviewed, Open actions, Hazards (Toolbox). Uses Web Speech API (en-AU). Tap to start, tap again to stop. Button turns blue while active. Transcribed text appends to existing field content. Falls back silently if browser doesn't support it (button not shown).
+
+---
+
 # v3.10.24 — Safety module: Prestarts + Toolbox Talks
 
 **Date:** 2026-05-25
