@@ -56,6 +56,16 @@ function _nowTime() {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
+function _todayWeekKey() {
+  const d = new Date(), mon = new Date(d);
+  mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
+}
+
+function _todayDayKey() {
+  return ['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()];
+}
+
 function _fmtDate(iso) {
   if (!iso) return '';
   const p = iso.split('-');
@@ -69,11 +79,11 @@ function _currentUser() {
 
 function _isLocalId(id) { return id && String(id).startsWith('local_'); }
 
-function _siteOptions(selected) {
+function _siteDatalist(dlId) {
   const sites = (typeof STATE !== 'undefined' && STATE.sites) || [];
-  return sites.map(function(s) {
-    return '<option value="' + esc(s.abbr) + '"' + (s.abbr === selected ? ' selected' : '') + '>' + esc(s.name || s.abbr) + '</option>';
-  }).join('');
+  return '<datalist id="' + dlId + '">' + sites.map(function(s) {
+    return '<option value="' + esc(s.abbr) + '">' + esc(s.name || s.abbr) + '</option>';
+  }).join('') + '</datalist>';
 }
 
 function _peopleDatalist(id) {
@@ -300,6 +310,100 @@ async function _qReplay(qKey, pillId, onComplete) {
   }
 }
 
+// ── Speech-to-text input ───────────────────────────────────────
+let _speechRec   = null;
+let _speechField = null;
+
+function _micBtn(prefix, fkey) {
+  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) return '';
+  const fieldId = prefix + '_' + fkey;
+  const active  = _speechField === fieldId;
+  return '<button type="button" onclick="_speechToggle(\'' + prefix + '\',\'' + fkey + '\')" title="Voice input" '
+    + 'style="flex-shrink:0;width:34px;height:34px;border:1px solid ' + (active ? 'var(--blue)' : 'var(--border)') + ';border-radius:7px;'
+    + 'background:' + (active ? 'var(--blue)' : 'var(--surface)') + ';cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0">🎤</button>';
+}
+
+function _speechToggle(prefix, fkey) {
+  const fieldId = prefix + '_' + fkey;
+  if (_speechRec) {
+    _speechRec.stop(); _speechRec = null; _speechField = null;
+    try { renderPrestartForm(); } catch(e) {}
+    try { renderToolboxForm();  } catch(e) {}
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice input not supported'); return; }
+  const draft    = prefix === 'ps' ? _prestartDraft    : _toolboxDraft;
+  const setter   = prefix === 'ps' ? _psField           : _tbField;
+  const rerender = prefix === 'ps' ? renderPrestartForm : renderToolboxForm;
+  const rec = new SR();
+  rec.lang = 'en-AU'; rec.continuous = true; rec.interimResults = false;
+  _speechRec = rec; _speechField = fieldId;
+  rec.onresult = function(e) {
+    const t = Array.from(e.results).slice(e.resultIndex)
+      .filter(function(r) { return r.isFinal; })
+      .map(function(r) { return r[0].transcript; }).join(' ').trim();
+    if (!t || !draft) return;
+    setter(fkey, (draft[fkey] || '') + ((draft[fkey] || '') ? ' ' : '') + t);
+    rerender();
+  };
+  rec.onerror = function(ev) {
+    _speechRec = null; _speechField = null; rerender();
+    if (ev.error !== 'aborted') showToast('Mic error — check browser permissions');
+  };
+  rec.onend = function() {
+    if (_speechRec === rec) { _speechRec = null; _speechField = null; rerender(); }
+  };
+  rec.start();
+  rerender();
+}
+
+function _taWithMic(prefix, fkey, value, placeholder) {
+  return '<div style="display:flex;gap:6px;align-items:flex-start">'
+    + '<textarea oninput="_' + prefix + 'Field(\'' + fkey + '\',this.value)" '
+    + 'placeholder="' + esc(placeholder) + '" style="' + _TA + ';flex:1;min-width:0">' + esc(value || '') + '</textarea>'
+    + _micBtn(prefix, fkey)
+    + '</div>';
+}
+
+// ── Roster pull ────────────────────────────────────────────────
+function _rosterPullNames(siteAbbr) {
+  const schedule = (typeof STATE !== 'undefined' && STATE.schedule) || [];
+  const people   = (typeof STATE !== 'undefined' && STATE.people)   || [];
+  const weekKey  = _todayWeekKey();
+  const dayKey   = _todayDayKey();
+  const results  = [];
+  schedule.forEach(function(entry) {
+    if (entry.week !== weekKey) return;
+    if ((entry[dayKey] || '').trim().toUpperCase() !== siteAbbr.trim().toUpperCase()) return;
+    const person = people.find(function(p) { return p.name === entry.name; });
+    results.push({ name: entry.name, person_id: person ? (person.id || null) : null, signed_at: null, signed_by: null, signature_image: null });
+  });
+  return results;
+}
+
+function _psRosterPull() {
+  if (!_prestartDraft || !_prestartDraft.site_abbr) { showToast('Select a site first'); return; }
+  const existing = new Set((_prestartDraft.crew || []).map(function(c) { return c.name; }));
+  const toAdd    = _rosterPullNames(_prestartDraft.site_abbr).filter(function(r) { return !existing.has(r.name); });
+  if (!toAdd.length) { showToast('No new names on roster for this site today'); return; }
+  if (!Array.isArray(_prestartDraft.crew)) _prestartDraft.crew = [];
+  toAdd.forEach(function(r) { _prestartDraft.crew.push(r); });
+  showToast('Added ' + toAdd.length + ' from roster');
+  renderPrestartForm();
+}
+
+function _tbRosterPull() {
+  if (!_toolboxDraft || !_toolboxDraft.site_abbr) { showToast('Select a site first'); return; }
+  const existing = new Set((_toolboxDraft.attendance || []).map(function(a) { return a.name; }));
+  const toAdd    = _rosterPullNames(_toolboxDraft.site_abbr).filter(function(r) { return !existing.has(r.name); });
+  if (!toAdd.length) { showToast('No new names on roster for this site today'); return; }
+  if (!Array.isArray(_toolboxDraft.attendance)) _toolboxDraft.attendance = [];
+  toAdd.forEach(function(r) { _toolboxDraft.attendance.push(r); });
+  showToast('Added ' + toAdd.length + ' from roster');
+  renderToolboxForm();
+}
+
 // ── Inject responsive styles once ─────────────────────────────
 function _injectSafetyStyle() {
   if (document.getElementById('safety-responsive-style')) return;
@@ -428,7 +532,7 @@ function renderPrestartForm() {
   let h = '<div style="padding:14px 16px">';
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Site', '<select onchange="_psField(\'site_abbr\',this.value)" style="' + _I + '"><option value="">— select —</option>' + _siteOptions(d.site_abbr) + '</select>');
+  h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('ps-site-dl'));
   h += _fld('Date', '<input type="date" value="' + esc(d.briefing_date || '') + '" onchange="_psField(\'briefing_date\',this.value)" style="' + _I + '">');
   h += '</div>';
 
@@ -437,9 +541,9 @@ function renderPrestartForm() {
   h += _fld('Rep / Supervisor', '<input type="text" value="' + esc(d.sks_rep || '') + '" oninput="_psField(\'sks_rep\',this.value)" placeholder="Name" style="' + _I + '">');
   h += '</div>';
 
-  h += _fld('Subcontractor', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_psField(\'subcontractor\',this.value)" placeholder="Company or team (if applicable)" style="' + _I + '">');
-  h += _fld('Scope of works', '<textarea oninput="_psField(\'works_scope\',this.value)" placeholder="What work is being done today?" style="' + _TA + '">' + esc(d.works_scope || '') + '</textarea>');
-  h += _fld('Previous day issues', '<textarea oninput="_psField(\'prev_day_issues\',this.value)" placeholder="Issues, incidents or carry-over actions from yesterday" style="' + _TA + '">' + esc(d.prev_day_issues || '') + '</textarea>');
+  h += _fld('Principal Contractor / Customer', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_psField(\'subcontractor\',this.value)" placeholder="Company or site controller" style="' + _I + '">');
+  h += _fld('Scope of works', _taWithMic('ps', 'works_scope', d.works_scope, 'What work is being done today?'));
+  h += _fld('Previous day issues', _taWithMic('ps', 'prev_day_issues', d.prev_day_issues, 'Issues, incidents or carry-over actions from yesterday'));
 
   h += _lbl('High Risk Construction Work (NSW WHS Reg Schedule 3)');
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">';
@@ -451,10 +555,13 @@ function renderPrestartForm() {
   h += '</div>';
 
   h += _fld('SWMS references', '<input type="text" value="' + esc(d.swms_refs || '') + '" oninput="_psField(\'swms_refs\',this.value)" placeholder="e.g. SWMS-003, SWMS-007" style="' + _I + '">');
-  h += _fld('Hazards identified', '<textarea oninput="_psField(\'hazards\',this.value)" placeholder="Site-specific hazards discussed at this briefing" style="' + _TA + '">' + esc(d.hazards || '') + '</textarea>');
-  h += _fld('Permits required', '<textarea oninput="_psField(\'permits\',this.value)" placeholder="Permits to work — hot work, confined space, access" style="' + _TA + '">' + esc(d.permits || '') + '</textarea>');
+  h += _fld('Hazards identified', _taWithMic('ps', 'hazards', d.hazards, 'Site-specific hazards discussed at this briefing'));
+  h += _fld('Permits required', _taWithMic('ps', 'permits', d.permits, 'Permits to work — hot work, confined space, access'));
 
-  h += _lbl('Crew sign-off');
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3)">Crew sign-off</div>'
+    + (d.site_abbr ? '<button class="btn btn-secondary btn-sm" onclick="_psRosterPull()">Pull from roster</button>' : '')
+    + '</div>';
   (d.crew || []).forEach(function(m, i) {
     const sigStatus = m.signed_at
       ? '<span style="color:#15803d;font-size:11px;font-weight:600">✓ Signed</span>'
@@ -696,7 +803,7 @@ function renderToolboxForm() {
   let h = '<div style="padding:14px 16px">';
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Site', '<select onchange="_tbField(\'site_abbr\',this.value)" style="' + _I + '"><option value="">— select —</option>' + _siteOptions(d.site_abbr) + '</select>');
+  h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_tbField(\'site_abbr\',this.value)" list="tb-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('tb-site-dl'));
   h += _fld('Date', '<input type="date" value="' + esc(d.meeting_date || '') + '" onchange="_tbField(\'meeting_date\',this.value)" style="' + _I + '">');
   h += '</div>';
 
@@ -705,19 +812,22 @@ function renderToolboxForm() {
   h += _fld('Facilitator', '<input type="text" value="' + esc(d.facilitator || '') + '" oninput="_tbField(\'facilitator\',this.value)" placeholder="Name" style="' + _I + '">');
   h += '</div>';
 
-  h += _fld('Subcontractor', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_tbField(\'subcontractor\',this.value)" placeholder="Company or team (if applicable)" style="' + _I + '">');
+  h += _fld('Principal Contractor / Customer', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_tbField(\'subcontractor\',this.value)" placeholder="Company or site controller" style="' + _I + '">');
   h += _fld('Topic', '<input type="text" value="' + esc(d.topic || '') + '" oninput="_tbField(\'topic\',this.value)" placeholder="Main topic of the talk" style="' + _I + '">');
-  h += _fld('Key safety message', '<textarea oninput="_tbField(\'safety_message\',this.value)" placeholder="The single most important takeaway" style="' + _TA + '">' + esc(d.safety_message || '') + '</textarea>');
-  h += _fld('Items reviewed', '<textarea oninput="_tbField(\'items_reviewed\',this.value)" placeholder="What was covered at the meeting?" style="' + _TA + '">' + esc(d.items_reviewed || '') + '</textarea>');
-  h += _fld('Open actions from last talk', '<textarea oninput="_tbField(\'open_actions\',this.value)" placeholder="Carry-over items that haven\'t been resolved yet" style="' + _TA + '">' + esc(d.open_actions || '') + '</textarea>');
-  h += _fld('Hazards discussed', '<textarea oninput="_tbField(\'hazards\',this.value)" placeholder="Site-specific hazards raised" style="' + _TA + '">' + esc(d.hazards || '') + '</textarea>');
+  h += _fld('Key safety message', _taWithMic('tb', 'safety_message', d.safety_message, 'The single most important takeaway'));
+  h += _fld('Items reviewed', _taWithMic('tb', 'items_reviewed', d.items_reviewed, 'What was covered at the meeting?'));
+  h += _fld('Open actions from last talk', _taWithMic('tb', 'open_actions', d.open_actions, "Carry-over items that haven't been resolved yet"));
+  h += _fld('Hazards discussed', _taWithMic('tb', 'hazards', d.hazards, 'Site-specific hazards raised'));
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   h += _fld('SWMS references', '<input type="text" value="' + esc(d.swms_refs || '') + '" oninput="_tbField(\'swms_refs\',this.value)" placeholder="SWMS-001, SWMS-004" style="' + _I + '">');
   h += _fld('Next meeting', '<input type="date" value="' + esc(d.next_meeting || '') + '" onchange="_tbField(\'next_meeting\',this.value)" style="' + _I + '">');
   h += '</div>';
 
-  h += _lbl('Attendance');
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3)">Attendance</div>'
+    + (d.site_abbr ? '<button class="btn btn-secondary btn-sm" onclick="_tbRosterPull()">Pull from roster</button>' : '')
+    + '</div>';
   (d.attendance || []).forEach(function(m, i) {
     const sigStatus = m.signed_at
       ? '<span style="color:#15803d;font-size:11px;font-weight:600">✓ Signed</span>'
