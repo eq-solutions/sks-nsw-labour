@@ -914,17 +914,21 @@ function _tsDayStatus(name, week, day) {
   return { workable: true };
 }
 
-// ── Apprentice approval ───────────────────────────────────────
-// Subtle chip shown in the APP badge cell. Managers can tap to
-// toggle — approved/unapproved state saves to the timesheets row.
+// ── Timesheet approval ───────────────────────────────────────
+// Subtle chip shown in the badge cell for Apprentices and Labour Hire.
+// Approved: shows initials of the approver (e.g. "RM"). Unapproved:
+// shows a faint ○ for managers to tap. Saves to the timesheets row.
 function _tsApprovalChip(name, week, entry) {
   const approved = entry && entry.approved;
   const safeName = esc(name);
   if (approved) {
-    const who   = (entry.approved_by || '').trim();
-    const title = who ? `Approved by ${who}` : 'Approved';
-    const cursor = isManager ? 'pointer' : 'default';
-    return `<span style="margin-left:5px;font-size:10px;font-weight:700;color:#16A34A;cursor:${cursor}" title="${esc(title)}" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">✓</span>`;
+    const who     = (entry.approved_by || '').trim();
+    const initials = who
+      ? who.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 3)
+      : '✓';
+    const title   = who ? `Approved by ${who}` : 'Approved';
+    const cursor  = isManager ? 'pointer' : 'default';
+    return `<span style="margin-left:5px;font-size:9px;font-weight:700;color:#16A34A;background:#F0FDF4;border:1px solid #86EFAC;padding:1px 4px;border-radius:3px;cursor:${cursor}" title="${esc(title)}" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">${initials}</span>`;
   }
   if (!isManager) return '';
   return `<span style="margin-left:5px;font-size:11px;color:var(--ink-4);cursor:pointer;opacity:.45" title="Mark as approved" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">○</span>`;
@@ -1225,9 +1229,7 @@ function renderTimesheets() {
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
       : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
-    const approvalChip = p.group === 'Apprentice'
-      ? _tsApprovalChip(p.name, week, entry)
-      : '';
+    const approvalChip = _tsApprovalChip(p.name, week, entry);
     // v3.4.80: status pill dropped — the 4px row left-stripe is the
     // signal. rowStatus.kind is still used above to pick stripe colour;
     // _tsRowStatus is otherwise unread now (kept as a public hook for
@@ -1442,12 +1444,20 @@ function updateTsStats() {
   const pending = []; // v3.4.17: names of staff whose timesheets aren't complete for this week
 
   allTs.forEach(p => {
-    const entry   = getTsEntry(p.name, week);
-    const hasAny  = entry && TS_DAYS.some(d => entry[d + '_job']);
-    const hasFull = entry && ['mon','tue','wed','thu','fri'].every(d => entry[d + '_job']);
-    if (!hasAny)        { empty++;   pending.push({ name: p.name, status: 'empty'   }); }
-    else if (hasFull)   { complete++; }
-    else                { partial++; pending.push({ name: p.name, status: 'partial' }); }
+    const entry     = getTsEntry(p.name, week);
+    const rowStatus = _tsRowStatus(p, week, entry);
+    // 'complete', 'on-leave', 'tafe' → nothing left to fill → counts as complete.
+    // 'empty'   → no data at all → counts as empty + pending.
+    // 'partial' → some filled, some not → counts as partial + pending.
+    if (rowStatus.kind === 'complete' || rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') {
+      complete++;
+    } else if (rowStatus.kind === 'empty') {
+      empty++;
+      pending.push({ name: p.name, status: 'empty' });
+    } else {
+      partial++;
+      pending.push({ name: p.name, status: 'partial' });
+    }
   });
 
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -2142,7 +2152,7 @@ function _renderTimesheetsMobile(opts) {
         <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
         <span class="ts-mcard-name">${esc(p.name)}${varianceChip}</span>
         <span class="ts-mcard-badge ${grpBadgeCls}">${grpBadge}</span>
-        ${p.group === 'Apprentice' ? _tsApprovalChip(p.name, week, entry) : ''}
+        ${_tsApprovalChip(p.name, week, entry)}
         <span class="ts-mcard-statusicon ${statusCls}">${statusIcon}</span>
         <span class="ts-mcard-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
       </div>

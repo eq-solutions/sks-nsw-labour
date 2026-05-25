@@ -621,8 +621,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.24
+  EQ Solves — Field  v3.10.25
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.25  (Timesheets — completion count fix, approval chips, UI tidy)
+  ────────────────────────────────────────────────────────────
+   • Completion count now roster-aware: uses _tsRowStatus() instead of naive
+     "all 5 days have a job" check — TAFE days and leave days no longer
+     artificially deflate the complete count.
+   • Approval chip extended to Labour Hire rows (was Apprentice-only).
+   • Approval chip now shows approver initials (e.g. "RM") instead of ✓ —
+     visible on both desktop and mobile card views.
+   • Removed top-right CSV button (exportCSV) — not relevant on Timesheets.
 
   CHANGES IN v3.10.1  (Resource Allocation — instant repeat-visit render)
   ────────────────────────────────────────────────────────────
@@ -2808,7 +2818,6 @@
       <button class="btn btn-secondary btn-sm" id="topbar-redo-btn" onclick="performRedo()" disabled title="Nothing to redo" style="display:none"><span class="hide-mobile">↷ Redo</span><span class="show-mobile">↷</span></button>
       <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshData()" title="Refresh data"><span class="hide-mobile">↻ Sync</span><span class="show-mobile">↻</span></button>
       <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print</button>
-      <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ CSV</button>
     </div>
   </div>
 
