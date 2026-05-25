@@ -1529,9 +1529,9 @@ function updateTsStats() {
   trackWeeks.forEach(w => {
     let wComplete = 0;
     allTs.forEach(p => {
-      const entry   = (STATE.timesheets || []).find(r => r.name === p.name && r.week === w);
-      const hasFull = entry && ['mon','tue','wed','thu','fri'].every(d => entry[d + '_job']);
-      if (hasFull) wComplete++;
+      const entry     = (STATE.timesheets || []).find(r => r.name === p.name && r.week === w);
+      const rowStatus = _tsRowStatus(p, w, entry);
+      if (rowStatus.kind === 'complete' || rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') wComplete++;
     });
     const total = allTs.length;
     const pct   = total ? Math.round((wComplete / total) * 100) : 0;

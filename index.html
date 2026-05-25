@@ -621,8 +621,14 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.25
+  EQ Solves — Field  v3.10.26
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.26  (Timesheets — fix weekly tracker completion count)
+  ────────────────────────────────────────────────────────────
+   • Weekly completion tracker (bottom panel) now uses _tsRowStatus() —
+     same fix as v3.10.25 for the main stat boxes. Was still using the
+     naive "all 5 days have a job" hasFull check independently.
 
   CHANGES IN v3.10.25  (Timesheets — completion count fix, approval chips, UI tidy)
   ────────────────────────────────────────────────────────────
