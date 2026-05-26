@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.32 — Timesheets: fix SKS Direct group matching
+
+**Date:** 2026-05-26
+**Scope:** Timesheets — group filter
+
+- **Fix:** `'SKS Direct'` group (35 direct employees) was not appearing in timesheets — code was checking for `'Direct Employee'` which didn't match the DB value. All string references updated to `'SKS Direct'`.
+
+---
+
 # v3.10.31 — Timesheets: collapsed groups, teams filter, Direct Employee
 
 **Date:** 2026-05-26
