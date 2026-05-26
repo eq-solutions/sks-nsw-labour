@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.30 — Pipeline: fix value totals
+
+**Date:** 2026-05-26
+**Scope:** Pipeline board summary strip.
+
+- **Fix: value totals inconsistent with card counts** — when "All values" is selected, below-threshold cards were included in the count but excluded from dollar totals via a separate `!below_threshold` guard. Removed the redundant guard so the value sum uses the same card set as the count. Below-threshold items with no `quote_value` contribute $0 regardless.
+- **Fix: misleading tooltip** on the value filter dropdown — was incorrectly claiming "Won tenders always shown."
+
+---
+
 # v3.10.29 — Safety dashboard
 
 **Date:** 2026-05-26

@@ -136,7 +136,7 @@
       { label: '≥$500k',      val: 500000  },
       { label: '≥$1M',        val: 1000000 }
     ];
-    html +=     '<select class="form-input" title="Applies to Watch and Likely only — Won tenders always shown" style="height:32px;font-size:12px;padding:0 8px;width:auto" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
+    html +=     '<select class="form-input" title="Filters cards shown in the board by minimum quote value" style="height:32px;font-size:12px;padding:0 8px;width:auto" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
     valueOpts.forEach(function (o) {
       html += '<option value="' + o.val + '"' + (o.val === _filterValue ? ' selected' : '') + '>' + _esc(o.label) + '</option>';
     });
@@ -153,8 +153,7 @@
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px">';
     STAGES.forEach(function (s) {
       var cards = filtered.filter(function (t) { return t.stage === s.key; });
-      var val   = cards.filter(function (t) { return !t.below_threshold; })
-                       .reduce(function (sum, t) { return sum + (t.quote_value || 0); }, 0);
+      var val   = cards.reduce(function (sum, t) { return sum + (t.quote_value || 0); }, 0);
       pipelineValue += val;
       html += '<div style="background:' + s.bg + ';border-radius:10px;padding:10px 16px;min-width:100px">';
       html +=   '<div style="font-size:10px;font-weight:700;color:' + s.color + ';letter-spacing:.06em">' + s.label.toUpperCase() + '</div>';
