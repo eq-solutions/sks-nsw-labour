@@ -936,28 +936,58 @@ function _tsDayStatus(name, week, day) {
 }
 
 // ── Timesheet approval ───────────────────────────────────────
-// Subtle chip shown in the badge cell for Apprentices and Labour Hire.
-// Approved: shows initials of the approver (e.g. "RM"). Unapproved:
-// shows a faint ○ for managers to tap. Saves to the timesheets row.
-function _tsApprovalChip(name, week, entry) {
+// Chip shown in the badge cell. Approved → green initials of approver.
+// Unapproved + manager → faint ○ to tap.
+// isLeaveRow = true: shown even when no timesheet entry exists yet
+// (leave weeks have no hours to enter so no row is auto-created; we
+// create a stub on first approval tap so approved: true can be stored).
+function _tsApprovalChip(name, week, entry, isLeaveRow) {
   const approved = entry && entry.approved;
   const safeName = esc(name);
+  const leaveAttr = isLeaveRow && !entry ? ' data-leave="1"' : '';
   if (approved) {
-    const who     = (entry.approved_by || '').trim();
+    const who      = (entry.approved_by || '').trim();
     const initials = who
       ? who.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 3)
       : '✓';
-    const title   = who ? `Approved by ${who}` : 'Approved';
-    const cursor  = isManager ? 'pointer' : 'default';
+    const title    = who ? `Approved by ${who}` : 'Approved';
+    const cursor   = isManager ? 'pointer' : 'default';
     return `<span style="margin-left:5px;font-size:9px;font-weight:700;color:#16A34A;background:#F0FDF4;border:1px solid #86EFAC;padding:1px 4px;border-radius:3px;cursor:${cursor}" title="${esc(title)}" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">${initials}</span>`;
   }
   if (!isManager) return '';
-  return `<span style="margin-left:5px;font-size:11px;color:var(--ink-4);cursor:pointer;opacity:.45" title="Mark as approved" onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}')">○</span>`;
+  // Show ○ for leave rows even with no entry yet
+  if (!entry && !isLeaveRow) return '';
+  const leaveHint = isLeaveRow && !entry ? ' title="Pre-approve leave week"' : ' title="Mark as approved"';
+  return `<span style="margin-left:5px;font-size:11px;color:var(--ink-4);cursor:pointer;opacity:.45"${leaveHint}${leaveAttr} onclick="event.stopPropagation();toggleTsApproval('${safeName}','${week}',${!entry && isLeaveRow})">○</span>`;
 }
 
-async function toggleTsApproval(name, week) {
+async function toggleTsApproval(name, week, createStub) {
   if (!isManager) return;
-  const entry = getTsEntry(name, week);
+  let entry = getTsEntry(name, week);
+
+  // Leave row with no entry yet — create a stub so approved can be stored
+  if (!entry && createStub) {
+    const person = (STATE.people || []).find(p => p.name === name);
+    const grp    = person ? person.group : '';
+    const stub   = {
+      name, group: grp, week,
+      mon_job: null, mon_hrs: null, tue_job: null, tue_hrs: null,
+      wed_job: null, wed_hrs: null, thu_job: null, thu_hrs: null,
+      fri_job: null, fri_hrs: null, sat_job: null, sat_hrs: null,
+      sun_job: null, sun_hrs: null,
+      approved: false, approved_by: null, approved_at: null
+    };
+    try {
+      await sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', stub, 'resolution=merge-duplicates,return=minimal');
+      if (!STATE.timesheets) STATE.timesheets = [];
+      STATE.timesheets.push(stub);
+      entry = stub;
+    } catch (e) {
+      showToast('⚠ Could not create leave entry — check connection');
+      return;
+    }
+  }
+
   if (!entry) { showToast('No timesheet entry to approve yet'); return; }
   const nowApproved = !entry.approved;
   const who         = sessionStorage.getItem('eq_logged_in_name') || currentManagerName || '';
@@ -972,9 +1002,10 @@ async function toggleTsApproval(name, week) {
       'return=minimal'
     );
     showToast(nowApproved ? `✓ ${name} approved` : `${name} approval removed`);
+    auditLog(`Approved: ${nowApproved ? 'yes' : 'removed'}`, 'Timesheet', name, week);
   } catch (e) {
     showToast('⚠ Approval save failed — check connection');
-    entry.approved = !nowApproved;
+    entry.approved    = !nowApproved;
     entry.approved_by = null;
     entry.approved_at = null;
   }
@@ -1255,7 +1286,7 @@ function renderTimesheets() {
       : p.group === 'Direct'
       ? '<span style="font-size:9px;font-weight:700;color:var(--blue);background:#EAF5FB;padding:1px 5px;border-radius:3px">DE</span>'
       : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
-    const approvalChip = _tsApprovalChip(p.name, week, entry);
+    const approvalChip = _tsApprovalChip(p.name, week, entry, rowStatus.kind === 'on-leave');
     // v3.4.80: status pill dropped — the 4px row left-stripe is the
     // signal. rowStatus.kind is still used above to pick stripe colour;
     // _tsRowStatus is otherwise unread now (kept as a public hook for
@@ -2185,7 +2216,7 @@ function _renderTimesheetsMobile(opts) {
         <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : p.group === 'Direct' ? '👷' : '🔧'}</span>
         <span class="ts-mcard-name">${esc(p.name)}${varianceChip}</span>
         <span class="ts-mcard-badge ${grpBadgeCls}">${grpBadge}</span>
-        ${_tsApprovalChip(p.name, week, entry)}
+        ${_tsApprovalChip(p.name, week, entry, rowStatus.kind === 'on-leave')}
         <span class="ts-mcard-statusicon ${statusCls}">${statusIcon}</span>
         <span class="ts-mcard-total ${totalCls}">${total > 0 ? total + 'h' : '—'}</span>
       </div>

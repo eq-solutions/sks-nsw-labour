@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.35 — Timesheets: pre-approve leave weeks
+
+**Date:** 2026-05-26
+**Scope:** Timesheet approval chip
+
+- **Pre-approve leave rows** — rows where a person is fully on leave (A/L, sick, PH) now show the `○` approval circle for supervisors, even though no timesheet hours exist. Tapping it creates a minimal stub entry and immediately marks it approved.
+- Leave is already approved through the leave system, so this is a formality — supervisors can tick off leave rows any day of the week rather than waiting until Monday.
+- Un-approve works the same way (tap the green initials chip to remove approval).
+- Partial-leave rows (some worked days, some leave) are unchanged — they still require hours to be entered before approval.
+- Audit log entry written on every approval toggle.
+
+---
+
 # v3.10.34 — Teams: multi-select filter
 
 **Date:** 2026-05-26
