@@ -73,6 +73,10 @@ function startRealtime() {
   _rtConnect();
 }
 
+function isRealtimeConnected() {
+  return !!(_rtSocket && _rtSocket.readyState === WebSocket.OPEN);
+}
+
 function stopRealtime() {
   _rtEnabled = false;
   clearTimeout(_rtReconnectT); _rtReconnectT = null;

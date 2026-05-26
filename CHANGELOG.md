@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.37 — Realtime: suppress 30s poll flicker
+
+**Date:** 2026-05-27
+**Scope:** Background sync / polling
+
+- **Skip poll when realtime is live** — the 30s background poll now returns early if the Supabase realtime WebSocket is open. Eliminates the periodic full re-render of Timesheets (and other pages) that users saw as a constant flicker when leaving the page idle.
+- **`isRealtimeConnected()`** — new helper exported from `realtime.js`; poll falls back automatically if the WS drops.
+- **Timesheets signature fix** — `_computeStateSignature` now hashes all cell values (job + hrs × 7 days, approved, approved_by) so actual multi-user changes are correctly detected when the poll does fire.
+
+---
+
 # v3.10.36 — Timesheets: 5-day default view, weekend toggle
 
 **Date:** 2026-05-26

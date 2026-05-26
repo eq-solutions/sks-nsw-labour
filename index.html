@@ -632,8 +632,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.36
+  EQ Solves — Field  v3.10.37
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.37  (Realtime: suppress 30s poll flicker)
+  ────────────────────────────────────────────────────
+   • 30s background poll now skips refreshData while the realtime WebSocket
+     is connected — eliminates the periodic table rebuild on Timesheets and
+     other non-editor pages.
+   • isRealtimeConnected() exported from realtime.js; poll falls back
+     automatically if the WS drops.
+   • _computeStateSignature now hashes all timesheet cell values (job + hrs ×
+     7 days, approved, approved_by) so real multi-user changes are detected
+     correctly.
 
   CHANGES IN v3.10.36  (Timesheets: 5-day default view, weekend toggle)
   ────────────────────────────────────────────────────────
@@ -3800,7 +3811,11 @@ function _computeStateSignature() {
     sig(STATE.managers,  m => m.id + '|' + (m.name||'') + '|' + (m.phone||'') + '|' + (m.email||'') + '|' + (m.archived?1:0) + '|' + (m.dob_day||'') + '|' + (m.dob_month||'') + '|' + (m.start_date||''));
     sig(STATE.sites,     s => s.id + '|' + (s.name||''));
     sig(STATE.schedule,  r => r.id + '|' + (r.updated_at||'') + '|' + (r.mon||'') + (r.tue||'') + (r.wed||'') + (r.thu||'') + (r.fri||'') + (r.sat||'') + (r.sun||''));
-    sig(STATE.timesheets, t => t.id + '|' + (t.name||'') + '|' + (t.week||''));
+    sig(STATE.timesheets, t => t.id + '|' + (t.name||'') + '|' + (t.week||'') + '|' +
+      (t.mon_job||'') + '|' + (t.mon_hrs||'') + '|' + (t.tue_job||'') + '|' + (t.tue_hrs||'') + '|' +
+      (t.wed_job||'') + '|' + (t.wed_hrs||'') + '|' + (t.thu_job||'') + '|' + (t.thu_hrs||'') + '|' +
+      (t.fri_job||'') + '|' + (t.fri_hrs||'') + '|' + (t.sat_job||'') + '|' + (t.sat_hrs||'') + '|' +
+      (t.sun_job||'') + '|' + (t.sun_hrs||'') + '|' + (t.approved?1:0) + '|' + (t.approved_by||''));
     if (typeof leaveRequests !== 'undefined' && leaveRequests) {
       sig(leaveRequests, l => l.id + '|' + (l.status||'') + '|' + (l.updated_at||''));
     }
@@ -4152,6 +4167,10 @@ function startPolling() {
     // belt-and-braces fallback in the meantime.
     if (TENANT.ORG_SLUG === 'demo') return;
     if (currentPage === 'editor') return;
+    // Realtime WebSocket handles live sync — poll is only a fallback for
+    // when the WS is disconnected. Skip while connected to avoid re-rendering
+    // the current page every 30s with data that hasn't changed.
+    if (typeof isRealtimeConnected === 'function' && isRealtimeConnected()) return;
     const active = document.activeElement;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
     if (typeof _pendingWriteCount !== 'undefined' && _pendingWriteCount > 0) return;
