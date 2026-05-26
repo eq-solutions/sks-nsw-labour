@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.33 — Timesheets: fix Direct group matching
+
+**Date:** 2026-05-26
+**Scope:** Timesheets — group filter
+
+- **Fix:** Direct employees (35 people) still not appearing — v3.10.32 used `'SKS Direct'` but the app normalises DB value `'SKS Direct'` → `'Direct'` on load (via `groupAliases`). All timesheets.js checks and the group dropdown now use `'Direct'` to match the in-memory group name.
+
+---
+
 # v3.10.32 — Timesheets: fix SKS Direct group matching
 
 **Date:** 2026-05-26
