@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.35';
+const APP_VERSION = '3.10.36';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -368,6 +368,7 @@ const STATE = {
   teamMembers:         [],   // [{team_id, person_id}]
   currentTeamFilter:   null, // legacy — use teamFilters (Set) instead
   teamFilters:         null, // Set of team IDs; empty/null = show all
+  tsShowWeekends:      null, // null = unread; restored from localStorage in timesheets.js
   // v3.4.82 — Timesheet locks (one row per locked week).
   timesheetLocks:      [],   // [{week_key, locked_at, locked_by, reason}]
   currentWeek:  '',

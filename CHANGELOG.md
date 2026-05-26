@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.36 — Timesheets: 5-day default view, weekend toggle
+
+**Date:** 2026-05-26
+**Scope:** Timesheet column layout
+
+- **Mon–Fri default** — timesheet table now shows only 5 columns by default, eliminating the horizontal scroll that Sat/Sun caused on most screens.
+- **⊞ Weekends toggle** — new button in the chip-actions bar expands Sat/Sun columns inline. Tap again to collapse. Preference persists across sessions via `localStorage`.
+- **Amber dot indicator** — if the current week has any data in Sat/Sun columns while weekends are hidden, a small amber dot appears on the toggle button so nothing goes unnoticed.
+
+---
+
 # v3.10.35 — Timesheets: pre-approve leave weeks
 
 **Date:** 2026-05-26

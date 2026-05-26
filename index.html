@@ -593,6 +593,16 @@
 }
 .ts-fchip-count { opacity: .7; font-weight: 500; }
 .ts-fchip-active .ts-fchip-count { opacity: .8; }
+/* Weekend toggle active state */
+.ts-we-active { background: #EAF5FB !important; border-color: #3DA8D8 !important; color: #2986B4 !important; }
+.ts-we-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: #F59E0B;
+  border-radius: 50%;
+  margin-left: 4px;
+  vertical-align: 2px;
+}
 
 /* Variance chip — small ⚠ in the name cell. Tone amber for high,
    blue for low (low-hours weeks are less alarming, just unusual). */
@@ -622,8 +632,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.35
+  EQ Solves — Field  v3.10.36
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.36  (Timesheets: 5-day default view, weekend toggle)
+  ────────────────────────────────────────────────────────
+   • Timesheets now default to Mon–Fri columns only — removes the horizontal
+     scroll caused by always-visible Sat/Sun columns.
+   • "⊞ Weekends" toggle button in the chip-actions bar expands/collapses
+     Sat/Sun. State persists across sessions via localStorage.
+   • Amber dot on the toggle button when the current week has weekend data
+     but weekends are hidden, so nothing goes unnoticed.
 
   CHANGES IN v3.10.35  (Timesheets: pre-approve leave weeks)
   ────────────────────────────────────────────────────────

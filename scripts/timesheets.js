@@ -477,6 +477,12 @@ function setTsFilter(name) {
   renderTimesheets();
 }
 
+function toggleTsWeekends() {
+  STATE.tsShowWeekends = !STATE.tsShowWeekends;
+  try { localStorage.setItem('eq_ts_show_weekends', STATE.tsShowWeekends ? '1' : '0'); } catch (e) {}
+  renderTimesheets();
+}
+
 // Lock-state lookup. Empty array == no locks; matches the absence-
 // means-open convention. Returns the lock row or null.
 function _getTsLock(weekKey) {
@@ -1094,12 +1100,13 @@ function renderTimesheets() {
   const weekEntries = (STATE.timesheets || []).filter(r => r.week === week);
   const hasSat      = weekEntries.some(r => r.sat_job || r.sat_hrs);
   const hasSun      = weekEntries.some(r => r.sun_job || r.sun_hrs);
-  const days        = TS_DAYS.filter((_, i) =>
-    i < 5 || (i === 5 && (hasSat || isManager)) || (i === 6 && (hasSun || isManager))
-  );
-  const dlabels = TS_LABELS.filter((_, i) =>
-    i < 5 || (i === 5 && (hasSat || isManager)) || (i === 6 && (hasSun || isManager))
-  );
+  // v3.10.36: default to Mon–Fri only; user can expand weekends via toggle
+  if (STATE.tsShowWeekends === null) {
+    STATE.tsShowWeekends = localStorage.getItem('eq_ts_show_weekends') === '1';
+  }
+  const _showWE = STATE.tsShowWeekends;
+  const days        = TS_DAYS.filter((_, i) => i < 5 || (_showWE && (i === 5 || i === 6)));
+  const dlabels     = TS_LABELS.filter((_, i) => i < 5 || (_showWE && (i === 5 || i === 6)));
 
   const disabled    = isManager ? '' : ' disabled';
   const weekDatesTs = getWeekDates(week);
@@ -1183,6 +1190,7 @@ function renderTimesheets() {
             ? '<button class="btn btn-secondary btn-sm" onclick="unlockCurrentWeek()" title="Unlock this week for editing">🔓 Unlock week</button>'
             : '<button class="btn btn-secondary btn-sm" onclick="lockCurrentWeek()" title="Lock this week from edits (accounts sign-off)">🔒 Lock week</button>')
         : ''}
+      <button class="btn btn-secondary btn-sm${_showWE ? ' ts-we-active' : ''}" onclick="toggleTsWeekends()" title="${_showWE ? 'Hide Saturday & Sunday columns' : 'Show Saturday & Sunday columns'}">${_showWE ? '⊟ Weekends' : '⊞ Weekends'}${(hasSat || hasSun) && !_showWE ? '<span class="ts-we-dot" title="Weekend data exists this week"></span>' : ''}</button>
       <button class="btn btn-secondary btn-sm" onclick="exportTsByJob()" title="Grouped by job number with subtotals">↓ By Job</button>
     </div>
   </div>`;
