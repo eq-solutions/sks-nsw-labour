@@ -17,13 +17,15 @@ const TEAMS_FILTER_LS_KEY = 'eq.teams.currentFilter';
 // ── Restore filter from localStorage ────────────────────────
 // Run synchronously at module load so the first roster render
 // already filters to the supervisor's last-used team.
+// Stored as a JSON array of IDs (supports multi-select). Older
+// single-ID values (plain number string) are silently dropped.
 (function _restoreTeamFilter() {
   try {
     const raw = localStorage.getItem(TEAMS_FILTER_LS_KEY);
     if (raw && raw !== 'null' && raw !== 'undefined') {
-      const id = Number(raw);
-      if (!isNaN(id) && id > 0) {
-        STATE.currentTeamFilter = id;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        STATE.teamFilters = new Set(parsed);
       }
     }
   } catch (e) {}
@@ -31,62 +33,69 @@ const TEAMS_FILTER_LS_KEY = 'eq.teams.currentFilter';
 
 function _persistTeamFilter() {
   try {
-    if (STATE.currentTeamFilter == null) {
+    const filters = STATE.teamFilters;
+    if (!filters || !filters.size) {
       localStorage.removeItem(TEAMS_FILTER_LS_KEY);
     } else {
-      localStorage.setItem(TEAMS_FILTER_LS_KEY, String(STATE.currentTeamFilter));
+      localStorage.setItem(TEAMS_FILTER_LS_KEY, JSON.stringify([...filters]));
     }
   } catch (e) {}
 }
 
 // ── Membership lookups ──────────────────────────────────────
-// Build a Set of person_ids for the currently-active team filter.
-// Recomputed lazily — invalidate by setting _membershipCache.teamId
-// to null whenever STATE.teamMembers or currentTeamFilter changes.
-let _membershipCache = { teamId: null, set: null };
+// Cache person_id Sets per team for fast lookup.
+let _membershipCache = {};
 
 function _peopleInTeam(teamId) {
-  if (teamId == null) return null;  // null filter = show all
-  if (_membershipCache.teamId === teamId && _membershipCache.set) {
-    return _membershipCache.set;
-  }
+  if (teamId == null) return null;
+  if (_membershipCache[teamId]) return _membershipCache[teamId];
   const set = new Set();
   (STATE.teamMembers || []).forEach(m => {
     if (m.team_id === teamId) set.add(m.person_id);
   });
-  _membershipCache = { teamId, set };
+  _membershipCache[teamId] = set;
   return set;
 }
 
 function _invalidateMembershipCache() {
-  _membershipCache = { teamId: null, set: null };
+  _membershipCache = {};
 }
 
 // Public: should a person row be visible given the current filter?
-// Used by renderRoster + renderContacts.
+// Used by renderRoster, renderContacts, renderTimesheets.
+// Multi-select: person is visible if they belong to ANY selected team.
 function personInActiveTeam(personId) {
-  const filter = STATE.currentTeamFilter;
-  if (filter == null) return true;  // no filter
-  if (filter === -1) {
-    // Pseudo-team "Unassigned" — show people who aren't in any team.
+  const filters = STATE.teamFilters;
+  if (!filters || !filters.size) return true;  // no filter = show all
+
+  // "Unassigned" pseudo-team: person is in no real team
+  if (filters.has(-1)) {
     const memberIds = new Set((STATE.teamMembers || []).map(m => m.person_id));
-    return !memberIds.has(personId);
+    if (!memberIds.has(personId)) return true;
   }
-  const set = _peopleInTeam(filter);
-  return set ? set.has(personId) : false;
+
+  // Real teams: pass if person is in ANY selected team
+  for (const teamId of filters) {
+    if (teamId === -1) continue;
+    const set = _peopleInTeam(teamId);
+    if (set && set.has(personId)) return true;
+  }
+  return false;
 }
 
 // Public: returns the colour to use for a person's row stripe.
-// When a specific team is filtered, all rows wear that team's colour.
-// When no filter (showing All), use the first team a person belongs
-// to alphabetically, or null if they're in no team.
+// Exactly one team selected → use that team's colour.
+// Multiple selected or none → use first team person belongs to alphabetically.
 function colorForPerson(personId) {
-  const filter = STATE.currentTeamFilter;
-  if (filter != null && filter !== -1) {
-    const t = (STATE.teams || []).find(x => x.id === filter);
-    return t ? t.color : null;
+  const filters = STATE.teamFilters;
+  if (filters && filters.size === 1) {
+    const [onlyId] = filters;
+    if (onlyId !== -1) {
+      const t = (STATE.teams || []).find(x => x.id === onlyId);
+      return t ? t.color : null;
+    }
   }
-  // No filter — find the first team alphabetically
+  // No filter or multi-select — first team alphabetically
   const personTeams = (STATE.teamMembers || [])
     .filter(m => m.person_id === personId)
     .map(m => (STATE.teams || []).find(t => t.id === m.team_id))
@@ -115,8 +124,8 @@ function renderTeamPills() {
   }
   row.style.display = '';
 
-  const teams  = (STATE.teams || []).slice().sort((a, b) => a.name.localeCompare(b.name));
-  const filter = STATE.currentTeamFilter;
+  const teams   = (STATE.teams || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const filters = STATE.teamFilters || new Set();
 
   // Unassigned count for the pseudo-team pill
   const memberIds = new Set((STATE.teamMembers || []).map(m => m.person_id));
@@ -124,7 +133,7 @@ function renderTeamPills() {
     .filter(p => !p.archived && !memberIds.has(p.id))
     .length;
 
-  // Helper to render a pill
+  // Helper to render a pill — active pills show a ✕ to indicate they can be toggled off
   const pill = (label, teamId, color, count, isActive) => {
     const bg     = isActive ? (color || '#7C77B9') : '#F1F5F9';
     const fg     = isActive ? '#FFFFFF'             : '#1F335C';
@@ -134,27 +143,28 @@ function renderTeamPills() {
       ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle;${isActive ? 'background:rgba(255,255,255,.95)' : ''}"></span>`
       : '';
     const countTxt = count != null ? ` <span style="opacity:.7;font-weight:500">(${count})</span>` : '';
+    const closeMark = isActive && teamId != null ? ` <span style="margin-left:5px;opacity:.75;font-size:10px">✕</span>` : '';
     return `<button type="button" onclick="setTeamFilter(${idAttr})"
       style="display:inline-flex;align-items:center;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:6px;margin-bottom:4px;white-space:nowrap"
-      title="${esc(label)}${count != null ? ' — ' + count + ' people' : ''}">${swatch}${esc(label)}${countTxt}</button>`;
+      title="${esc(label)}${count != null ? ' — ' + count + ' people' : ''}">${swatch}${esc(label)}${countTxt}${closeMark}</button>`;
   };
 
   let html = '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0;padding:8px 18px;background:var(--surface-2);border-bottom:1px solid var(--border)">';
   html += '<span style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-right:10px;flex-shrink:0">Team</span>';
 
-  // "All" pill — count of non-archived people
+  // "All" pill — active when no filters are set; clicking clears all filters
   const totalActive = (STATE.people || []).filter(p => !p.archived).length;
-  html += pill('All', null, null, totalActive, filter == null);
+  html += pill('All', null, null, totalActive, !filters.size);
 
   // Per-team pills
   teams.forEach(t => {
     const cnt = _peopleInTeam(t.id);
-    html += pill(t.name, t.id, t.color, cnt ? cnt.size : 0, filter === t.id);
+    html += pill(t.name, t.id, t.color, cnt ? cnt.size : 0, filters.has(t.id));
   });
 
   // "Unassigned" pseudo-team — only show if there are any
   if (unassignedCount > 0) {
-    html += pill('Unassigned', -1, '#94A3B8', unassignedCount, filter === -1);
+    html += pill('Unassigned', -1, '#94A3B8', unassignedCount, filters.has(-1));
   }
 
   // Manage button (supervisor only)
@@ -168,12 +178,22 @@ function renderTeamPills() {
   row.innerHTML = html;
 }
 
-// Public: change the filter from the pill click. teamId may be:
-//   null — clear filter (show all)
-//   -1   — pseudo-team "Unassigned"
-//   N    — specific team id
+// Public: toggle a team in/out of the active filter set.
+//   null  — clear all filters (show All)
+//   -1    — toggle Unassigned pseudo-team
+//   N     — toggle a specific team id on/off
 function setTeamFilter(teamId) {
-  STATE.currentTeamFilter = teamId;
+  if (!STATE.teamFilters) STATE.teamFilters = new Set();
+  if (teamId == null) {
+    // "All" pill — clear everything
+    STATE.teamFilters.clear();
+  } else {
+    if (STATE.teamFilters.has(teamId)) {
+      STATE.teamFilters.delete(teamId);
+    } else {
+      STATE.teamFilters.add(teamId);
+    }
+  }
   _invalidateMembershipCache();
   _persistTeamFilter();
   renderTeamPills();
@@ -409,8 +429,8 @@ async function deleteTeam(teamId) {
     await sbFetch('teams?id=eq.' + teamId, 'DELETE');
     STATE.teams       = (STATE.teams || []).filter(t => t.id !== teamId);
     STATE.teamMembers = (STATE.teamMembers || []).filter(m => m.team_id !== teamId);
-    if (STATE.currentTeamFilter === teamId) {
-      STATE.currentTeamFilter = null;
+    if (STATE.teamFilters && STATE.teamFilters.has(teamId)) {
+      STATE.teamFilters.delete(teamId);
       _persistTeamFilter();
     }
     _invalidateMembershipCache();

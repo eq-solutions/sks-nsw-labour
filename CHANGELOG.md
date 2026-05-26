@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.34 — Teams: multi-select filter
+
+**Date:** 2026-05-26
+**Scope:** Team filter pills (roster, contacts, timesheets, schedule)
+
+- **Multi-select** — click any team pill to add it to the filter; click it again to remove. Multiple teams can be active simultaneously — a person is shown if they belong to any selected team.
+- **All pill** — clears all active filters in one click.
+- **Toggle off** — active pills show a ✕ indicator; clicking deactivates that team only.
+- **Color stripe** — when exactly one team is active, rows use that team's colour. With multiple teams selected, rows use their natural team colour.
+- Persisted to localStorage as a JSON array (old single-ID format silently dropped on upgrade).
+
+---
+
 # v3.10.33 — Timesheets: fix Direct group matching
 
 **Date:** 2026-05-26

@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.33';
+const APP_VERSION = '3.10.34';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -366,7 +366,8 @@ const STATE = {
   // v3.4.78 — Teams filter (many-to-many person↔team).
   teams:               [],   // [{id, name, color}]
   teamMembers:         [],   // [{team_id, person_id}]
-  currentTeamFilter:   null, // null = show all; -1 = unassigned; N = team id
+  currentTeamFilter:   null, // legacy — use teamFilters (Set) instead
+  teamFilters:         null, // Set of team IDs; empty/null = show all
   // v3.4.82 — Timesheet locks (one row per locked week).
   timesheetLocks:      [],   // [{week_key, locked_at, locked_by, reason}]
   currentWeek:  '',
