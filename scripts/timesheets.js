@@ -421,10 +421,13 @@ function _getTsFilteredPeople() {
   const search    = searchRaw.toLowerCase().trim();
 
   let people = [...STATE.people]
-    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire');
+    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct Employee');
 
   if (typeof agencyMode !== 'undefined' && agencyMode && typeof agencyName !== 'undefined') {
     people = people.filter(p => p.agency === agencyName);
+  }
+  if (typeof personInActiveTeam === 'function') {
+    people = people.filter(p => personInActiveTeam(p.id));
   }
   if (grpFilter) people = people.filter(p => p.group === grpFilter);
   if (search)    people = people.filter(p => p.name.toLowerCase().includes(search));
@@ -438,6 +441,24 @@ function _getTsFilteredPeople() {
 // Lock state is one row per (week, org) in public.timesheet_locks;
 // loaded into STATE.timesheetLocks alongside the rest in
 // loadFromSupabase. The lock itself is workflow UX, not RLS.
+
+// Group collapse state — starts with all groups collapsed; user taps ▸ to expand.
+// Persisted per-browser so preference survives refresh.
+const TS_GROUPS_LS_KEY = 'eq.ts.collapsedGroups';
+let _tsCollapsedGroups = (function() {
+  try {
+    const saved = localStorage.getItem(TS_GROUPS_LS_KEY);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch (e) {}
+  return new Set(['Apprentice', 'Labour Hire', 'Direct Employee']);
+})();
+
+function _tsToggleGroup(group) {
+  if (_tsCollapsedGroups.has(group)) _tsCollapsedGroups.delete(group);
+  else _tsCollapsedGroups.add(group);
+  try { localStorage.setItem(TS_GROUPS_LS_KEY, JSON.stringify([..._tsCollapsedGroups])); } catch (e) {}
+  renderTimesheets();
+}
 
 const TS_FILTER_LS_KEY = 'eq.ts.currentFilter';
 // Restored synchronously so the first renderTimesheets call picks up
@@ -1187,10 +1208,13 @@ function renderTimesheets() {
     // strip treatment so the two pages feel consistent.
     if (p.group !== lastGroup) {
       lastGroup = p.group;
-      const icon = p.group === 'Apprentice' ? '🎓' : '🔧';
-      const stripeColor = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
-      html += `<tr class="ts-group-row"><td colspan="${days.length + 3}" style="background:var(--surface-2);border-left:5px solid ${stripeColor};font-size:12px;font-weight:700;color:var(--navy);padding:10px 14px;text-transform:uppercase;letter-spacing:.6px">${icon} ${p.group}</td></tr>`;
+      const icon = p.group === 'Apprentice' ? '🎓' : p.group === 'Direct Employee' ? '👷' : '🔧';
+      const stripeColor = p.group === 'Apprentice' ? 'var(--purple)' : p.group === 'Direct Employee' ? 'var(--blue)' : 'var(--navy-3)';
+      const _grpCount = people.filter(x => x.group === lastGroup).length;
+      const _grpCollapsed = _tsCollapsedGroups.has(lastGroup);
+      html += `<tr class="ts-group-row" onclick="_tsToggleGroup('${lastGroup}')" style="cursor:pointer"><td colspan="${days.length + 3}" style="background:var(--surface-2);border-left:5px solid ${stripeColor};font-size:12px;font-weight:700;color:var(--navy);padding:10px 14px;text-transform:uppercase;letter-spacing:.6px;user-select:none"><span style="font-size:11px;margin-right:8px;opacity:.55">${_grpCollapsed ? '▸' : '▾'}</span>${icon} ${p.group} <span style="font-size:11px;font-weight:500;opacity:.45;margin-left:8px;text-transform:none;letter-spacing:0">${_grpCount} ${_grpCount === 1 ? 'person' : 'people'}</span></td></tr>`;
     }
+    if (_tsCollapsedGroups.has(p.group)) return;
 
     const entry      = getTsEntry(p.name, week);
     // Completion rule: every workable day ≥ 8h AND total ≥ 40h.
@@ -1228,6 +1252,8 @@ function renderTimesheets() {
     const pid        = p.name.replace(/\W/g, '_');
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
+      : p.group === 'Direct Employee'
+      ? '<span style="font-size:9px;font-weight:700;color:var(--blue);background:#EAF5FB;padding:1px 5px;border-radius:3px">DE</span>'
       : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
     const approvalChip = _tsApprovalChip(p.name, week, entry);
     // v3.4.80: status pill dropped — the 4px row left-stripe is the
@@ -1438,7 +1464,10 @@ async function sendTsReminder(personName, week, btn) {
 // ── Stats ─────────────────────────────────────────────────────
 
 function updateTsStats() {
-  const allTs = [...STATE.people].filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire');
+  const allTs = [...STATE.people].filter(p =>
+    (p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct Employee') &&
+    (typeof personInActiveTeam !== 'function' || personInActiveTeam(p.id))
+  );
   const week  = STATE.currentWeek;
   let complete = 0, partial = 0, empty = 0;
   const pending = []; // v3.4.17: names of staff whose timesheets aren't complete for this week
@@ -1630,7 +1659,7 @@ async function runTsBatch() {
 
 function exportTsCSV() {
   const people = [...STATE.people]
-    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire')
+    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct Employee')
     .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
   const week   = STATE.currentWeek;
   const header = 'Name,Group,Week,Mon Job,Mon Hrs,Tue Job,Tue Hrs,Wed Job,Wed Hrs,Thu Job,Thu Hrs,Fri Job,Fri Hrs,Sat Job,Sat Hrs,Sun Job,Sun Hrs,Total Hrs';
@@ -1650,7 +1679,7 @@ function exportTsCSV() {
 
 function exportTsPayroll() {
   const people = [...STATE.people]
-    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire')
+    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct Employee')
     .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
   const week   = STATE.currentWeek;
   const rows   = [
@@ -1925,6 +1954,7 @@ async function onStaffTsCellChange(el) {
     showToast('Save failed — check connection');
   }
   if (!saveOk) return;
+  auditLog(`${(day || '?').toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
   try {
     const newTotal = tsTotalHrs(entry);
     const totalEl  = document.getElementById('staff-ts-total-display');
@@ -2091,10 +2121,13 @@ function _renderTimesheetsMobile(opts) {
   people.forEach(p => {
     if (p.group !== lastGroup) {
       lastGroup = p.group;
-      const gIcon  = p.group === 'Apprentice' ? '🎓' : '🔧';
-      const stripe = p.group === 'Apprentice' ? 'var(--purple)' : 'var(--navy-3)';
-      html += `<div class="ts-mgroup" style="border-left-color:${stripe}">${gIcon} ${esc(p.group)}</div>`;
+      const gIcon  = p.group === 'Apprentice' ? '🎓' : p.group === 'Direct Employee' ? '👷' : '🔧';
+      const stripe = p.group === 'Apprentice' ? 'var(--purple)' : p.group === 'Direct Employee' ? 'var(--blue)' : 'var(--navy-3)';
+      const _mGrpCount = people.filter(x => x.group === lastGroup).length;
+      const _mGrpCollapsed = _tsCollapsedGroups.has(lastGroup);
+      html += `<div class="ts-mgroup" style="border-left-color:${stripe};cursor:pointer" onclick="_tsToggleGroup('${lastGroup}')"><span style="font-size:10px;margin-right:6px;opacity:.55">${_mGrpCollapsed ? '▸' : '▾'}</span>${gIcon} ${esc(p.group)} <span style="font-size:10px;font-weight:500;opacity:.45;margin-left:6px">${_mGrpCount} ${_mGrpCount === 1 ? 'person' : 'people'}</span></div>`;
     }
+    if (_tsCollapsedGroups.has(p.group)) return;
 
     const pid    = p.name.replace(/\W/g, '_');
     const entry  = getTsEntry(p.name, week);
@@ -2110,8 +2143,8 @@ function _renderTimesheetsMobile(opts) {
     else if (rowStatus.kind === 'empty')      { statusIcon = '—'; statusCls = 'empty';    totalCls = 'empty'; }
     else                                      { statusIcon = '⚠'; statusCls = 'partial';  totalCls = 'red'; }
 
-    const grpBadgeCls = p.group === 'Apprentice' ? 'ts-mbadge-app' : 'ts-mbadge-lh';
-    const grpBadge    = p.group === 'Apprentice' ? 'APP' : 'LH';
+    const grpBadgeCls = p.group === 'Apprentice' ? 'ts-mbadge-app' : p.group === 'Direct Employee' ? 'ts-mbadge-de' : 'ts-mbadge-lh';
+    const grpBadge    = p.group === 'Apprentice' ? 'APP' : p.group === 'Direct Employee' ? 'DE' : 'LH';
 
     const _variance    = _tsRowVariance(p.name, week);
     const varianceChip = _variance
@@ -2149,7 +2182,7 @@ function _renderTimesheetsMobile(opts) {
     html += `<div class="ts-mcard${cardClass} ts-mcard-status-${statusCls}" id="ts-mcard-${pid}">
       <div class="ts-mcard-head" onclick="toggleTsCard('${pid}')">
         <span class="ts-mcard-chev">▸</span>
-        <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : '🔧'}</span>
+        <span class="ts-mcard-icon">${p.group === 'Apprentice' ? '🎓' : p.group === 'Direct Employee' ? '👷' : '🔧'}</span>
         <span class="ts-mcard-name">${esc(p.name)}${varianceChip}</span>
         <span class="ts-mcard-badge ${grpBadgeCls}">${grpBadge}</span>
         ${_tsApprovalChip(p.name, week, entry)}

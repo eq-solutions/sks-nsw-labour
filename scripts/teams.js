@@ -104,7 +104,7 @@ function renderTeamPills() {
 
   // Only show on roster / contacts pages. The page-change handler
   // toggles row visibility; this just guards against a stale render.
-  if (currentPage !== 'roster' && currentPage !== 'contacts' && currentPage !== 'schedule') {
+  if (currentPage !== 'roster' && currentPage !== 'contacts' && currentPage !== 'schedule' && currentPage !== 'timesheets') {
     row.style.display = 'none';
     return;
   }

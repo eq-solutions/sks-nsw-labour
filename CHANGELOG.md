@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.31 — Timesheets: collapsed groups, teams filter, Direct Employee
+
+**Date:** 2026-05-26
+**Scope:** Timesheets page (supervisor + mobile), teams filter, staff self-entry audit.
+
+- **Collapsed groups** — all three groups (Apprentice, Labour Hire, Direct Employee) start collapsed on load. Click the group header to expand. State persists per-browser via localStorage so the preference survives refresh.
+- **Teams filter on timesheets** — the existing Team pill row (CDC / Vans / Unassigned etc.) now also shows on the Timesheets page. Filtering to a team scopes both the grid and the completion stats to that team's headcount.
+- **Direct Employee group** — added as a third supported group alongside Apprentice and Labour Hire. Shows a `DE` badge (blue), 👷 icon, and blue group stripe. Included in group filter dropdown, stats, and all exports.
+- **Fix: self-entry audit gap** — `onStaffTsCellChange` now writes an `auditLog` entry after each successful save, matching the supervisor path. Enables discrepancy investigation by day when staff self-enter.
+
 # v3.10.30 — Pipeline: fix value totals
 
 **Date:** 2026-05-26
