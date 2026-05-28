@@ -632,21 +632,15 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.38
+  EQ Solves — Field  v3.10.39
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.10.38  (Auth: EQ Core parallel login + Shell handoff polish)
+  CHANGES IN v3.10.39  (Teams: AND-mode multi-select filter)
   ────────────────────────────────────────────────────
-   • Shell handoff supervisor instant-paint — supervisor state (isManager +
-     currentManagerName + applyManagerMode) pre-set immediately on Shell token
-     success, matching the remember-me restore path; eliminates "View only"
-     flash for supervisor Shell users.
-   • initPushOptIn for Shell/remember-me paths — window.onload now calls
-     initPushOptIn after initApp() for non-PIN auth paths (Shell token,
-     remember-me, existing session restore).
-   • EQ Core nudge banner — SKS PIN users see a soft dismissible banner 4.5s
-     after login prompting them to set up their EQ Core account. One per
-     session until permanently dismissed (× button writes localStorage flag).
+   • Team filter is now intersection (AND) not union (OR) — selecting Comms +
+     Vans shows only people in both teams simultaneously (slicer behaviour).
+   • Unassigned pseudo-team works as before when selected alone; mixed with
+     real teams it falls back to the real-team intersection.
 
   CHANGES IN v3.10.37  (Realtime: suppress 30s poll flicker)
   ────────────────────────────────────────────────────

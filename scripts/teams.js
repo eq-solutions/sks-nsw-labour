@@ -63,24 +63,26 @@ function _invalidateMembershipCache() {
 
 // Public: should a person row be visible given the current filter?
 // Used by renderRoster, renderContacts, renderTimesheets.
-// Multi-select: person is visible if they belong to ANY selected team.
+// Multi-select: person must belong to ALL selected teams (intersection / slicer behaviour).
 function personInActiveTeam(personId) {
   const filters = STATE.teamFilters;
   if (!filters || !filters.size) return true;  // no filter = show all
 
-  // "Unassigned" pseudo-team: person is in no real team
-  if (filters.has(-1)) {
+  // "Unassigned" pseudo-team: only meaningful when selected alone.
+  // If mixed with real teams, skip the unassigned check (impossible intersection).
+  const realTeams = [...filters].filter(id => id !== -1);
+
+  if (filters.has(-1) && realTeams.length === 0) {
     const memberIds = new Set((STATE.teamMembers || []).map(m => m.person_id));
-    if (!memberIds.has(personId)) return true;
+    return !memberIds.has(personId);
   }
 
-  // Real teams: pass if person is in ANY selected team
-  for (const teamId of filters) {
-    if (teamId === -1) continue;
+  // Real teams: pass only if person is in EVERY selected team
+  for (const teamId of realTeams) {
     const set = _peopleInTeam(teamId);
-    if (set && set.has(personId)) return true;
+    if (!set || !set.has(personId)) return false;
   }
-  return false;
+  return true;
 }
 
 // Public: returns the colour to use for a person's row stripe.

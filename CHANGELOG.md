@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.39 — Teams: AND-mode multi-select filter (slicer)
+
+**Date:** 2026-05-28
+**Scope:** Weekly Roster / Contacts / Timesheets — team filter
+
+- **Team filter is now an intersection (AND) not a union (OR)** — selecting Comms + Vans shows only people who are in both teams simultaneously, like a slicer. Previously it showed anyone in either team.
+- Unassigned pseudo-team still works as expected when selected alone; mixing Unassigned with real-team filters applies the real-team intersection only.
+
+---
+
 # v3.10.38 — Auth: EQ Core parallel login + Shell handoff polish
 
 **Date:** 2026-05-28
