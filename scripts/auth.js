@@ -72,7 +72,14 @@ async function _consumeShellToken() {
     }
     sessionStorage.setItem(ACCESS_KEY, '1');
     sessionStorage.setItem('eq_logged_in_name', data.name || '');
-    if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+    if (data.role === 'supervisor') {
+      sessionStorage.setItem('eq_auto_admin', '1');
+      // Pre-set supervisor state so sidebar paints unlocked from first frame,
+      // same as the local remember-me restore path.
+      isManager          = true;
+      currentManagerName = data.name || '';
+      if (typeof applyManagerMode === 'function') applyManagerMode();
+    }
     if (data.sessionToken) {
       sessionStorage.setItem('eq_session_token', data.sessionToken);
       localStorage.setItem('eq_agent_token', data.sessionToken);
@@ -330,6 +337,7 @@ async function checkPin() {
       document.getElementById('gate-pin').value = '';
       initApp();
       initPushOptIn(name);
+      _showCoreNudge(name);
     } else {
       document.getElementById('gate-err').textContent = 'Incorrect code. Please try again.';
       document.getElementById('gate-pin').value = '';
@@ -357,6 +365,7 @@ async function checkPin() {
       document.getElementById('gate-pin').value = '';
       initApp();
       initPushOptIn(name);
+      _showCoreNudge(name);
     } else {
       document.getElementById('gate-err').textContent = 'Incorrect code. Use the demo codes shown above.';
       document.getElementById('gate-pin').value = '';
@@ -403,6 +412,7 @@ async function checkPin() {
       document.getElementById('gate-pin').value = '';
       initApp();
       initPushOptIn(name);
+      _showCoreNudge(name);
     } else {
       document.getElementById('gate-err').textContent = 'Incorrect code. Please try again.';
       document.getElementById('gate-pin').value = '';
@@ -1010,6 +1020,40 @@ function _showPushBanner(personName) {
     el.remove();
     localStorage.setItem('eq_push_declined', '1');
   });
+}
+
+// Soft nudge for PIN users to set up their EQ Core account.
+// Shown once per session until the user permanently dismisses it.
+// Never shown for Shell-authenticated users (they already have Core).
+function _showCoreNudge(name) {
+  if ((TENANT.ORG_SLUG !== 'sks') && (TENANT.ORG_SLUG !== 'eq-field')) return;
+  if (localStorage.getItem('eq_core_nudge_dismissed')) return;
+  if (sessionStorage.getItem('eq_core_nudge_shown')) return;
+  sessionStorage.setItem('eq_core_nudge_shown', '1');
+  setTimeout(() => {
+    if (document.getElementById('eq-core-nudge')) return;
+    const el = document.createElement('div');
+    el.id = 'eq-core-nudge';
+    el.style.cssText = [
+      'position:fixed','top:68px','left:50%','transform:translateX(-50%)',
+      'background:#1F335C','color:#fff','padding:12px 16px','border-radius:10px',
+      'font-size:13px','font-family:inherit','z-index:9998',
+      'display:flex','align-items:center','gap:10px',
+      'box-shadow:0 4px 20px rgba(0,0,0,.35)',
+      'max-width:calc(100vw - 32px)'
+    ].join(';');
+    el.innerHTML = [
+      '<span style="font-size:15px">🔑</span>',
+      '<span>Set up your <strong>EQ Core</strong> account for one-tap login — ask your manager for the link</span>',
+      '<button id="eq-core-nudge-dismiss" style="background:none;border:none;color:rgba(255,255,255,.5);padding:4px 8px;cursor:pointer;font-size:20px;line-height:1;flex-shrink:0" aria-label="Dismiss">&times;</button>'
+    ].join('');
+    document.body.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 15000);
+    document.getElementById('eq-core-nudge-dismiss').addEventListener('click', () => {
+      el.remove();
+      localStorage.setItem('eq_core_nudge_dismissed', '1');
+    });
+  }, 4500);
 }
 
 async function _requestAndSubscribe(personName) {

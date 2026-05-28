@@ -632,8 +632,21 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.37
+  EQ Solves — Field  v3.10.38
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.38  (Auth: EQ Core parallel login + Shell handoff polish)
+  ────────────────────────────────────────────────────
+   • Shell handoff supervisor instant-paint — supervisor state (isManager +
+     currentManagerName + applyManagerMode) pre-set immediately on Shell token
+     success, matching the remember-me restore path; eliminates "View only"
+     flash for supervisor Shell users.
+   • initPushOptIn for Shell/remember-me paths — window.onload now calls
+     initPushOptIn after initApp() for non-PIN auth paths (Shell token,
+     remember-me, existing session restore).
+   • EQ Core nudge banner — SKS PIN users see a soft dismissible banner 4.5s
+     after login prompting them to set up their EQ Core account. One per
+     session until permanently dismissed (× button writes localStorage flag).
 
   CHANGES IN v3.10.37  (Realtime: suppress 30s poll flicker)
   ────────────────────────────────────────────────────
@@ -4148,6 +4161,10 @@ window.onload = async function() {
   const ok = await checkAccess();
   if (!ok) return;
   initApp();
+  // For Shell handoff and remember-me restores: PIN paths call initPushOptIn
+  // directly from checkPin(), so this only fires for non-PIN auth paths.
+  const _restoredName = sessionStorage.getItem('eq_logged_in_name');
+  if (_restoredName) initPushOptIn(_restoredName);
 };
 
 // ── Background polling ───────────────────────────────────────

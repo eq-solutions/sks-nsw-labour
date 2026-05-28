@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.38 — Auth: EQ Core parallel login + Shell handoff polish
+
+**Date:** 2026-05-28
+**Scope:** Authentication / EQ Shell integration
+
+- **Shell handoff supervisor instant-paint** — supervisor state (`isManager`, `currentManagerName`, `applyManagerMode`) is pre-set immediately when a Shell token is verified, matching the existing remember-me restore pattern. Eliminates the "View only" flash for supervisor Shell users.
+- **`initPushOptIn` for non-PIN paths** — `window.onload` now calls `initPushOptIn` after `initApp()` for Shell token, remember-me, and existing-session restore paths. Previously only PIN logins triggered push opt-in.
+- **EQ Core nudge banner** — SKS PIN users see a soft dismissible banner 4.5 s after login: "Set up your EQ Core account for one-tap login." Shown once per session until permanently dismissed (× writes a localStorage flag). Never shown to Shell-authenticated users.
+
+---
+
 # v3.10.37 — Realtime: suppress 30s poll flicker
 
 **Date:** 2026-05-27
