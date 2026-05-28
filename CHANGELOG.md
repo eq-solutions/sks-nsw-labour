@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.40 — Timesheets: fix scroll-to-top on job/hours entry
+
+**Date:** 2026-05-29
+**Scope:** Timesheets
+
+- **Scroll jump fixed** — selecting a job from the dropdown or entering hours no longer jumps the page back to the top. The vertical and horizontal scroll positions are preserved across the post-cell-change table re-render.
+
+---
+
 # v3.10.39 — Teams: AND-mode multi-select filter (slicer)
 
 **Date:** 2026-05-28

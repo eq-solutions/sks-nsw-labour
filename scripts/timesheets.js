@@ -293,7 +293,14 @@ function onTsCellChange(el) {
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
 
+  // Preserve scroll position — renderTimesheets() rebuilds the entire table
+  // DOM which resets window.scrollY and drops the horizontal table scroll.
+  const _sy = window.scrollY;
+  const _sx = document.querySelector('.ts-table-scroll')?.scrollLeft ?? 0;
   renderTimesheets();
+  window.scrollTo(0, _sy);
+  const _tss = document.querySelector('.ts-table-scroll');
+  if (_tss) _tss.scrollLeft = _sx;
 }
 
 // ── Split row toggle ──────────────────────────────────────────
