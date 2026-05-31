@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.41 — Timesheets: A/L + SICK count as 8h; unlock-on-page edit fix
+
+**Date:** 2026-05-31
+**Scope:** Timesheets, Auth
+
+- **A/L + SICK now count as 8h/day** — annual leave and sick days contribute 8h each toward the weekly total (mirroring how rostered TAFE days already count for apprentices), so a full leave week reads as 40h / complete instead of "—". RDO, OFF, U/L, PH and JURY are unchanged and still count as 0h. To make another code count as paid 8h, add it to `TS_PAID_LEAVE_TERMS` in `scripts/timesheets.js`.
+- **SICK gets a 🏥 icon** — sick days show a hospital icon in the day cell instead of the 🌴 palm tree used for other leave. Other leave codes keep the palm.
+- **Unlock-on-page edit fix** — unlocking supervision mode while already sitting on a page (e.g. Timesheets) now re-renders that page immediately, so job-number and hours inputs become editable straight away. Previously the inputs stayed disabled (rendered while view-only) until you navigated away and back, making it look like a supervisor couldn't edit the timesheet.
+- **Scroll-to-top on hours/job entry — actually fixed** — entering hours or selecting a job no longer jumps the page to the top. v3.10.40 tried to fix this by restoring `window.scrollY`, but the timesheets page scrolls inside the `.page` container (`overflow-y:auto`), not the window — so `window.scrollY` was always ~0 and the restore was a no-op. Now restores the real scroll container's `scrollTop`.
+- **New "Outstanding" report** — a 🖨 button (export bar + the "pending" popover) opens a clean, printable list of everyone whose timesheet is still incomplete for the current week, showing their group, status (No data / Partial) and exactly which days are missing. Save it as PDF to email out. Roster leave/TAFE days are excluded since nothing is expected on those.
+
+---
+
 # v3.10.40 — Timesheets: fix scroll-to-top on job/hours entry
 
 **Date:** 2026-05-29

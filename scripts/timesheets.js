@@ -195,12 +195,43 @@ function _tsApprenticeTotal(personName, week, entry) {
   return workHrs + tafeHrs;
 }
 
+// v3.10.41: paid-absence codes that auto-count as 8h/day toward the
+// weekly total. A/L and SICK are paid days — the cell shows a muted
+// label (no job/hours typed) but the day still contributes 8h to the
+// 40h total, exactly the way TAFE days already do for apprentices.
+// RDO, OFF, U/L, PH, JURY etc. deliberately stay at 0h — add a code
+// here only if it should count as paid 8h.
+const TS_PAID_LEAVE_TERMS = ['A/L', 'AL', 'SICK'];
+function _tsIsPaidLeave(code) {
+  if (!code) return false;
+  return TS_PAID_LEAVE_TERMS.indexOf(String(code).toUpperCase().trim()) !== -1;
+}
+// SICK gets a medical icon instead of the 🌴 palm tree used for leave.
+function _tsIsSick(code) {
+  return String(code || '').toUpperCase().trim() === 'SICK';
+}
+// Icon for a muted absence cell: 🏥 for sick, 🌴 for any other leave.
+function _tsLeaveIcon(code) {
+  return _tsIsSick(code) ? '🏥' : '🌴';
+}
+// 8h for every rostered A/L or SICK day in the Mon–Fri week.
+function _tsPaidLeaveHrs(name, week) {
+  let h = 0;
+  ['mon','tue','wed','thu','fri'].forEach(d => {
+    const st = _tsDayStatus(name, week, d);
+    if (st.leaveLabel && _tsIsPaidLeave(st.leaveLabel)) h += 8;
+  });
+  return h;
+}
+
 function updateTsRowTotal(name, week) {
   const entry  = getTsEntry(name, week);
   const person = (STATE.people || []).find(p => p.name === name);
-  const total  = (person && person.group === 'Apprentice')
+  const base   = (person && person.group === 'Apprentice')
     ? _tsApprenticeTotal(name, week, entry)
     : tsTotalHrs(entry);
+  // v3.10.41: A/L + SICK days count as 8h toward the total.
+  const total  = base + _tsPaidLeaveHrs(name, week);
   const id = 'tst-' + name.replace(/\W/g, '_');
   const el = document.getElementById(id);
   if (!el) return;
@@ -293,11 +324,18 @@ function onTsCellChange(el) {
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
 
-  // Preserve scroll position — renderTimesheets() rebuilds the entire table
-  // DOM which resets window.scrollY and drops the horizontal table scroll.
-  const _sy = window.scrollY;
-  const _sx = document.querySelector('.ts-table-scroll')?.scrollLeft ?? 0;
+  // Preserve scroll position — renderTimesheets() rebuilds the entire
+  // #ts-content table, which momentarily shrinks the page and clamps the
+  // scroll back to the top. v3.10.41: the vertical scroll lives on the
+  // `.page` container (#page-timesheets, overflow-y:auto), NOT window —
+  // so the v3.10.40 fix that restored window.scrollY did nothing and the
+  // jump-to-top persisted. Capture/restore the real scroller.
+  const _pageEl = document.getElementById('page-timesheets');
+  const _pst    = _pageEl ? _pageEl.scrollTop : 0;
+  const _sy     = window.scrollY;
+  const _sx     = document.querySelector('.ts-table-scroll')?.scrollLeft ?? 0;
   renderTimesheets();
+  if (_pageEl) _pageEl.scrollTop = _pst;
   window.scrollTo(0, _sy);
   const _tss = document.querySelector('.ts-table-scroll');
   if (_tss) _tss.scrollLeft = _sx;
@@ -1273,7 +1311,9 @@ function renderTimesheets() {
     const _tafeHrs         = p.group === 'Apprentice'
       ? _dayStats.filter(st => st.tafeLabel).length * 8
       : 0;
-    const total            = tsTotalHrs(entry) + _tafeHrs;
+    // v3.10.41: A/L + SICK days count as 8h toward the total.
+    const _leaveHrs        = _dayStats.filter(st => st.leaveLabel && _tsIsPaidLeave(st.leaveLabel)).length * 8;
+    const total            = tsTotalHrs(entry) + _tafeHrs + _leaveHrs;
     const _hasAnyHrs       = _workableHrs.some(h => h > 0);
     const _allDaysAt8Plus  = _workableHrs.every(h => h >= 8);
     const _isComplete      = _hasAnyHrs && _allDaysAt8Plus && total >= 40;
@@ -1336,7 +1376,7 @@ function renderTimesheets() {
         // — no extra DB calls. View-only users get the same mute.
         const dayStatus = _tsDayStatus(p.name, week, d);
         if (!dayStatus.workable) {
-          const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : '🌴 ' + (dayStatus.leaveLabel || 'Leave');
+          const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : _tsLeaveIcon(dayStatus.leaveLabel) + ' ' + (dayStatus.leaveLabel || 'Leave');
           const muteTone  = dayStatus.tafeLabel ? 'ts-cell-tafe' : 'ts-cell-leave';
           return `<td class="ts-cell-muted ${muteTone}" style="padding:5px 6px;text-align:center" title="From roster — no timesheet entry needed">
             <div class="ts-mute-label">${muteLabel}</div>
@@ -1560,7 +1600,10 @@ function updateTsStats() {
             ${pending.length} pending ▾
          </button>
          <div id="ts-pending-popover" style="display:none;margin-top:8px;padding:10px 12px;background:white;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow:auto">
-           <div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Timesheets pending this week</div>
+           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+             <span style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px">Timesheets pending this week</span>
+             <button type="button" onclick="printOutstandingTs()" title="Printable list — Save as PDF to send out" style="padding:3px 9px;border:1px solid var(--navy);background:var(--navy);color:#fff;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">🖨 Print list</button>
+           </div>
            ${pending.map(x => {
              const _pp      = _peopleByName[x.name];
              const _hasMail = !!(_pp && _pp.email);
@@ -1745,6 +1788,98 @@ function exportTsPayroll() {
   });
   downloadCSV(rows.map(r => r.join(',')).join('\n'), 'EQ_Payroll_' + week.replace(/\./g, '-') + '.csv');
   showToast('Payroll report exported');
+}
+
+// ── Outstanding timesheets report ─────────────────────────────
+// v3.10.41: clean, printable (→ Save as PDF) list of everyone whose
+// timesheet for the current week is still incomplete — who they are,
+// the status, and which workable days are still missing. Built because
+// the in-app grid is hard to scan or share when only a handful of
+// people are outstanding. Read-only; opens a formatted window so it can
+// be printed, saved as PDF, and emailed out. Roster leave/TAFE days are
+// excluded (nothing is expected on those), matching _tsRowStatus.
+function _tsOutstandingList(week) {
+  const people = [...STATE.people].filter(p =>
+    (p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct') &&
+    (typeof personInActiveTeam !== 'function' || personInActiveTeam(p.id))
+  );
+  const days      = ['mon', 'tue', 'wed', 'thu', 'fri'];
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const out = [];
+  people.forEach(p => {
+    const entry  = getTsEntry(p.name, week);
+    const status = _tsRowStatus(p, week, entry);
+    // complete / on-leave / tafe → nothing left to fill → not outstanding.
+    if (status.kind !== 'empty' && status.kind !== 'partial') return;
+    const missing = [];
+    days.forEach((d, i) => {
+      if (!_tsDayStatus(p.name, week, d).workable) return; // leave/TAFE — not expected
+      const job = entry && entry[d + '_job'];
+      const hrs = entry && entry[d + '_hrs'];
+      if (!(job && Number(hrs) > 0)) missing.push(dayLabels[i]);
+    });
+    out.push({ name: p.name, group: p.group, status: status.kind, missing });
+  });
+  const order = { empty: 0, partial: 1 };
+  out.sort((a, b) => order[a.status] - order[b.status] ||
+    a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+  return out;
+}
+
+function printOutstandingTs() {
+  const week = STATE.currentWeek;
+  const outstanding = _tsOutstandingList(week);
+  if (!outstanding.length) { showToast('🎉 No outstanding timesheets for ' + week); return; }
+
+  const weekLabel = (typeof formatWeekLabel === 'function') ? formatWeekLabel(week) : week;
+  const generated = new Date().toLocaleString('en-AU',
+    { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const rowsHtml = outstanding.map(o => `
+    <tr>
+      <td class="nm">${esc(o.name)}</td>
+      <td>${esc(o.group)}</td>
+      <td><span class="badge ${o.status}">${o.status === 'empty' ? 'No data' : 'Partial'}</span></td>
+      <td>${o.missing.length ? esc(o.missing.join(', ')) : '—'}</td>
+    </tr>`).join('');
+
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+  <title>Outstanding Timesheets — ${esc(week)}</title>
+  <style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1A1A2E;margin:32px;}
+    h1{font-size:20px;margin:0 0 2px;color:#1F335C;}
+    .sub{font-size:12px;color:#666;margin:0 0 2px;}
+    .count{font-size:13px;font-weight:700;color:#1F335C;margin:16px 0 8px;}
+    table{border-collapse:collapse;width:100%;font-size:12.5px;}
+    th{text-align:left;background:#1F335C;color:#fff;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+    td{padding:7px 10px;border-bottom:1px solid #e5e7eb;}
+    .nm{font-weight:600;}
+    .badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;}
+    .badge.empty{background:#FEF2F2;color:#DC2626;}
+    .badge.partial{background:#FFFBEB;color:#D97706;}
+    tr:nth-child(even) td{background:#f9fafb;}
+    .foot{margin-top:18px;font-size:11px;color:#999;}
+    .noprint{margin-bottom:18px;}
+    button{font:inherit;padding:8px 16px;border:1px solid #1F335C;background:#1F335C;color:#fff;border-radius:6px;cursor:pointer;}
+    @media print{body{margin:12mm;} .noprint{display:none;}}
+  </style></head><body>
+  <div class="noprint"><button onclick="window.print()">🖨 Print / Save as PDF</button></div>
+  <h1>Outstanding Timesheets</h1>
+  <p class="sub">Week starting ${esc(weekLabel)}</p>
+  <p class="sub">Generated ${esc(generated)}</p>
+  <div class="count">${outstanding.length} ${outstanding.length === 1 ? 'person' : 'people'} outstanding</div>
+  <table>
+    <thead><tr><th>Name</th><th>Group</th><th>Status</th><th>Days missing</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <p class="foot">EQ Solves — Field · Timesheets</p>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Allow pop-ups to open the report'); return; }
+  w.document.write(html);
+  w.document.close();
+  auditLog('Printed outstanding timesheets (' + outstanding.length + ')', 'Timesheet', null, week);
 }
 
 // ── Import CSV ────────────────────────────────────────────────
@@ -2180,7 +2315,9 @@ function _renderTimesheetsMobile(opts) {
     const _mTafeHrs = p.group === 'Apprentice'
       ? ['mon','tue','wed','thu','fri'].filter(d => _tsDayStatus(p.name, week, d).tafeLabel).length * 8
       : 0;
-    const total  = tsTotalHrs(entry) + _mTafeHrs;
+    // v3.10.41: A/L + SICK days count as 8h toward the total.
+    const _mLeaveHrs = _tsPaidLeaveHrs(p.name, week);
+    const total  = tsTotalHrs(entry) + _mTafeHrs + _mLeaveHrs;
     const rowStatus = _tsRowStatus(p, week, entry);
 
     let statusIcon, statusCls, totalCls;
@@ -2245,7 +2382,7 @@ function _renderTimesheetsMobile(opts) {
       const isTodayCol = _isThisWeek && d === _todayDayKey;
 
       if (!dayStatus.workable) {
-        const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : '🌴 ' + (dayStatus.leaveLabel || 'Leave');
+        const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : _tsLeaveIcon(dayStatus.leaveLabel) + ' ' + (dayStatus.leaveLabel || 'Leave');
         const muteCls   = dayStatus.tafeLabel ? 'ts-mday-tafe' : 'ts-mday-leave';
         html += `<div class="ts-mday ts-mday-muted ${muteCls}">
           <div class="ts-mday-head">

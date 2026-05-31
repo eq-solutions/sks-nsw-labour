@@ -632,8 +632,24 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.40
+  EQ Solves — Field  v3.10.41
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.41  (Timesheets: A/L + SICK = 8h, scroll fix, outstanding report)
+  ────────────────────────────────────────────────────
+   • A/L and SICK days now count as 8h/day toward the weekly total
+     (same as TAFE days already did for apprentices). RDO/OFF/U/L/PH/JURY
+     still count as 0h.
+   • SICK days show a 🏥 icon instead of the 🌴 palm tree.
+   • Fix: unlocking supervision mode while already on a page (e.g.
+     Timesheets) now re-renders so job/hours inputs become editable
+     immediately — previously you had to navigate away and back.
+   • Fix: entering hours/job no longer jumps the page to the top. The
+     real fix this time — vertical scroll lives on the .page container,
+     not window, so v3.10.40's window.scrollY restore did nothing.
+   • New "🖨 Outstanding" report — printable / Save-as-PDF list of who's
+     still incomplete this week and which days are missing, to send out.
+     Available in the export bar and the "pending" popover.
 
   CHANGES IN v3.10.40  (Timesheets: fix scroll-to-top on job/hours entry)
   ────────────────────────────────────────────────────
@@ -3036,6 +3052,7 @@
       <input type="file" id="ts-import-file" accept=".csv,text/csv" style="display:none" onchange="importTsCSV(event)">
       <button class="btn btn-secondary btn-sm edit-only" onclick="document.getElementById('ts-import-file').click()">↑ Import CSV</button>
       <button class="btn btn-secondary btn-sm" onclick="exportTsCSV()">↓ Export CSV</button>
+      <button class="btn btn-secondary btn-sm" onclick="printOutstandingTs()" title="Printable list of who's still incomplete this week — Save as PDF to send out">🖨 Outstanding</button>
       <button class="btn btn-primary btn-sm" onclick="exportTsPayroll()">↓ Payroll Report</button>
     </div>
   </div>

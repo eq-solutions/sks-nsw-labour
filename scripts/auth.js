@@ -549,6 +549,9 @@ function toggleManagerMode() {
     isManager          = false;
     currentManagerName = '';
     applyManagerMode();
+    // v3.10.41: re-render so the current page drops edit affordances
+    // (re-disables inputs, hides supervisor-only chips) immediately.
+    if (typeof currentPage !== 'undefined' && currentPage && typeof renderCurrentPage === 'function') renderCurrentPage();
     showToast('Switched to view only');
     return;
   }
@@ -644,6 +647,12 @@ async function submitManagerPassword() {
     isManager          = true;
     currentManagerName = name;
     applyManagerMode();
+    // v3.10.41: re-render the page you're already on so edit affordances
+    // (disabled job/hours inputs, supervisor-only chips) switch on
+    // immediately. applyManagerMode() only repaints the lock chrome —
+    // without this, unlocking while sitting on Timesheets left every
+    // cell disabled until you navigated away and back.
+    if (typeof currentPage !== 'undefined' && currentPage && typeof renderCurrentPage === 'function') renderCurrentPage();
     closeModal('modal-manager-pw');
     showToast('Supervision mode unlocked — ' + name);
     auditLog('Unlocked manager mode', 'Access', null, null);
