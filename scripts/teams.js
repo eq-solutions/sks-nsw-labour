@@ -113,9 +113,12 @@ function renderTeamPills() {
   const row = document.getElementById('teams-filter-row');
   if (!row) return;
 
-  // Only show on roster / contacts pages. The page-change handler
-  // toggles row visibility; this just guards against a stale render.
-  if (currentPage !== 'roster' && currentPage !== 'contacts' && currentPage !== 'schedule' && currentPage !== 'timesheets') {
+  // Only show on pages that use the team filter. The page-change handler
+  // calls renderTeamPills() on every navigation; this hides the row
+  // everywhere else. 'editor' added (v3.10.43): the edit roster page
+  // already applies personInActiveTeam() so filters silently hide rows —
+  // without the pill bar here there's no way to see or clear them.
+  if (currentPage !== 'roster' && currentPage !== 'contacts' && currentPage !== 'schedule' && currentPage !== 'timesheets' && currentPage !== 'editor') {
     row.style.display = 'none';
     return;
   }

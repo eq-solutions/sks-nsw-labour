@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.43 — Edit Roster: show team filter bar
+
+**Date:** 2026-06-01
+**Scope:** `scripts/teams.js`
+
+- Team filter pill bar now appears on the Edit Roster (`editor`) page. The filter was already being applied via `personInActiveTeam()` — rows were silently hidden if a team filter was active — but the pill bar was excluded from the page allowlist so there was no visual indicator and no way to clear it.
+- One-line fix: added `'editor'` to the page list in `renderTeamPills()`.
+
+---
+
 # v3.10.42 — Leave hardening sprint
 
 **Date:** 2026-06-01
