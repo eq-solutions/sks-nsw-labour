@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.38 — Leave: fix ghost approve/reject from email scanners
+
+**Date:** 2026-06-01
+**Scope:** `netlify/functions/approve-leave.js`
+
+- **Root cause:** Email security scanners (Gmail, Outlook SafeLinks) follow every `<a href>` in an email via GET before the recipient opens it. The approve-leave endpoint was applying the action on GET, so requests were being approved or rejected by scanners without anyone pressing a button.
+- **Fix:** `GET` now renders a confirmation page with a `<form method="POST">`. The actual PATCH to Supabase only fires when the supervisor submits that form. Scanner visits are harmless.
+- **Cancel path:** Confirmation page includes a "Cancel — open the app" link for supervisors who clicked by accident.
+
+---
+
 # v3.10.37 — Realtime: suppress 30s poll flicker
 
 **Date:** 2026-05-27

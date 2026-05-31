@@ -632,8 +632,16 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.37
+  EQ Solves — Field  v3.10.38
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.38  (Leave: fix ghost approve/reject from email scanners)
+  ────────────────────────────────────────────────────
+   • approve-leave GET now shows a confirmation page instead of applying the
+     action — email security scanners (Gmail, Outlook SafeLinks) follow every
+     <a href> in an email body via GET, which was approving/rejecting requests
+     before the supervisor opened the email.
+   • Actual PATCH only fires on POST (form submit from the confirmation page).
 
   CHANGES IN v3.10.37  (Realtime: suppress 30s poll flicker)
   ────────────────────────────────────────────────────
