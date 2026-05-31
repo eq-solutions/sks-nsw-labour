@@ -1,5 +1,35 @@
 # EQ Solves Field — Changelog
 
+# v3.10.42 — Leave hardening sprint
+
+**Date:** 2026-06-01
+**Scope:** `netlify/functions/approve-leave.js`, `netlify/functions/send-email.js`, `scripts/leave.js`
+
+**Root cause fixed: ghost approve/reject from email scanners**
+- GET on `approve-leave` now renders a confirmation page only — email security scanners (Gmail, Outlook SafeLinks) follow `<a href>` links via GET before the recipient opens the email. The actual PATCH only fires when the supervisor submits the POST form.
+
+**Org_id scoping on approver lookups**
+- Manager name lookups in `approve-leave.js` and `send-email.js` now include `&org_id=eq.${org_id}` so same-name managers across different tenants don't resolve to each other's email.
+
+**Email failure surfaced on magic-link path**
+- `sendStatusEmail` is now awaited in `approve-leave.js`. If the requester notification fails, the success page shows a warning: "Leave approved, but the notification email failed — please let them know directly."
+
+**Roster conflict confirmation before overwrite (LEV-003 → LEV-004)**
+- Approving leave that overlaps scheduled shifts now shows a confirm modal *before* the PATCH, so the supervisor can cancel cleanly. Previously warned with a toast *after* the write had already happened.
+- `respondLeave` extracted the commit logic into `_commitLeaveResponse()` to allow the conflict modal to call it after confirmation.
+
+**Write-back failure surfaced (LEV-011)**
+- `writeLeaveToSchedule()` is now wrapped in its own try/catch inside `_commitLeaveResponse`. If the roster write fails, the approval stays committed (correct) and a distinct toast tells the supervisor to check the schedule manually.
+
+**Withdrawal notification to approver (LEV-009)**
+- Withdrawing a pending request now emails the named approver: "No action is needed — any approval link in your email is no longer valid." Prevents supervisors from acting on a ghost pending link.
+- New `triggerLeaveEmail('withdrawal_notification', req)` type added.
+
+**TTL constant documented as single source of truth**
+- `LEAVE_ACTION_TTL_MS` in `send-email.js` now carries a comment clarifying it is the *only* place the TTL lives. `approve-leave.js` reads `exp` from the token and has no TTL constant.
+
+---
+
 # v3.10.41 — Timesheets: A/L + SICK count as 8h; unlock-on-page edit fix
 
 **Date:** 2026-05-31

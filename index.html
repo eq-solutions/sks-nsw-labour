@@ -632,8 +632,27 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.41
+  EQ Solves — Field  v3.10.42
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.42  (Leave: hardening sprint — scanner fix, conflict confirm, write-back surface, withdrawal notify)
+  ────────────────────────────────────────────────────
+   • Email scanner fix (v3.10.42): GET on approve-leave now shows a confirmation
+     form only — email security scanners can no longer auto-approve/reject by
+     following links. Actual PATCH only fires on POST (form submit).
+   • Org_id filter on approver lookups: manager name lookups in approve-leave.js
+     and send-email.js now scope by org_id so same-name managers across tenants
+     don't cross-resolve.
+   • Email failure surfaced: magic-link approval page now shows a warning if the
+     requester notification email fails, rather than silently swallowing it.
+   • Conflict confirmation (v3.10.46): approving leave that overlaps scheduled
+     shifts now shows a confirm modal BEFORE committing. Previously showed a
+     toast after the fact.
+   • Write-back failure surfaced (v3.10.48): if the roster write-back fails after
+     approval, the approval stays committed but a distinct toast warns the
+     supervisor to check the schedule manually.
+   • Withdrawal notification (v3.10.47): withdrawing a pending request now
+     emails the named approver so they know not to action any pending link.
 
   CHANGES IN v3.10.41  (Timesheets: A/L + SICK = 8h, scroll fix, outstanding report)
   ────────────────────────────────────────────────────

@@ -10,17 +10,24 @@
 // twice shows an "already actioned" page on the second click,
 // not a double-process.
 //
+// ── GET vs POST split (v3.10.42) ────────────────────────────
+// GET renders a confirmation page — it does NOT apply the action.
+// POST (form submit from that page) applies the action.
+//
+// Reason: email security scanners (Gmail, Outlook SafeLinks, etc.)
+// follow every <a href> in an email body via GET before the
+// recipient opens the message. If we acted on GET, the scanner
+// would approve or reject the request invisibly. GET is now
+// harmless; only an explicit form submit can change state.
+//
 // Env vars required:
-//   EQ_SECRET_SALT     — HMAC signing key (must match send-email
-//                        and supervisor-digest)
-//   LEAVE_SB_URL       — Supabase REST URL (for leave_requests,
-//                        managers, audit_log)
+//   EQ_SECRET_SALT     — HMAC signing key (must match send-email.js)
+//   LEAVE_SB_URL       — Supabase REST URL
 //   LEAVE_SB_KEY       — Supabase publishable key
 //   RESEND_API_KEY     — for the requester notification
 //   EMAIL_FROM         — from-address (optional, has fallback)
-//   APP_ORIGIN         — used in the confirmation HTML "Open app"
-//                        link (optional, defaults to the request
-//                        host)
+//   APP_ORIGIN         — origin used in "Open app" links
+//                        (optional, defaults to request host)
 // ─────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
@@ -36,6 +43,9 @@ if (!SB_URL || !SB_KEY) console.error('FATAL: LEAVE_SB_URL or LEAVE_SB_KEY not s
 // Same wire format as verify-pin's session token:
 //   base64(JSON payload) + '.' + hex(HMAC-SHA256)
 // Payload: { kind: 'leave-action', leave_id, action, approver_email, exp }
+// Token TTL is set at mint time in send-email.js (LEAVE_ACTION_TTL_MS).
+// This function only reads the exp field baked into the token — it does
+// not need its own TTL constant.
 function verifyToken(token) {
   try {
     const [payloadB64, sig] = (token || '').split('.');
@@ -90,6 +100,8 @@ function renderPage(opts) {
   .meta div{padding:3px 0}
   .meta .lbl{color:#6B7280;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
   .btn{display:inline-block;background:#1F335C;color:white;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;margin-top:8px}
+  .btn-confirm{display:inline-block;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;border:none;color:white;margin-top:4px}
+  .warn{background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400E;margin-top:12px}
   .foot{padding:14px;text-align:center;font-size:11px;color:#9CA3AF}
 </style></head><body>
 <div class="card">
@@ -126,12 +138,16 @@ async function sendStatusEmail(req, statusWord, respondedBy) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, detail: 'RESEND_API_KEY not set' };
 
+  // v3.10.44: include org_id in both lookups so multi-tenant name collisions
+  // don't resolve to the wrong person's email.
+  const orgFilter = req.org_id ? `&org_id=eq.${encodeURIComponent(req.org_id)}` : '';
+
   // Look up the requester's email from people OR managers (supervisors
   // can submit leave too).
-  const peopleRes = await sb(`people?name=eq.${encodeURIComponent(req.requester_name)}&select=email`, 'GET');
+  const peopleRes = await sb(`people?name=eq.${encodeURIComponent(req.requester_name)}${orgFilter}&select=email`, 'GET');
   let toEmail = (peopleRes.ok && peopleRes.data && peopleRes.data[0] && peopleRes.data[0].email) || null;
   if (!toEmail) {
-    const mgrsRes = await sb(`managers?name=eq.${encodeURIComponent(req.requester_name)}&select=email`, 'GET');
+    const mgrsRes = await sb(`managers?name=eq.${encodeURIComponent(req.requester_name)}${orgFilter}&select=email`, 'GET');
     toEmail = (mgrsRes.ok && mgrsRes.data && mgrsRes.data[0] && mgrsRes.data[0].email) || null;
   }
   if (!toEmail) return { ok: false, detail: 'no email on file for requester' };
@@ -163,6 +179,70 @@ async function sendStatusEmail(req, statusWord, respondedBy) {
   return { ok: resp.ok, detail: text.slice(0, 300) };
 }
 
+// ── Shared: validate token + fetch leave row + verify approver ─
+// Returns { error } on failure, or { req, data, typeLabel, datesStr } on success.
+async function resolveRequest(token, orgIdHint) {
+  const data = verifyToken(token);
+  if (!data) return { error: 'expired' };
+
+  const lvRes = await sb(`leave_requests?id=eq.${encodeURIComponent(data.leave_id)}&select=*`, 'GET');
+  if (!lvRes.ok || !Array.isArray(lvRes.data) || !lvRes.data.length) return { error: 'not_found' };
+  const req = lvRes.data[0];
+
+  // v3.10.44: filter approver lookup by org_id so same-name managers
+  // across different tenants don't cross-resolve.
+  const orgFilter = req.org_id ? `&org_id=eq.${encodeURIComponent(req.org_id)}` : '';
+  const mgrRes = await sb(`managers?name=eq.${encodeURIComponent(req.approver_name)}${orgFilter}&select=name,email`, 'GET');
+  const mgr = (mgrRes.ok && Array.isArray(mgrRes.data) && mgrRes.data[0]) || null;
+  if (!mgr || !mgr.email || mgr.email.toLowerCase() !== String(data.approver_email).toLowerCase()) {
+    return { error: 'approver_changed' };
+  }
+
+  if (req.requester_name === req.approver_name) return { error: 'self_approve' };
+
+  const typeLabel = TYPE_LABELS[req.leave_type] || req.leave_type;
+  const datesStr = `${fmtPrettyDate(req.date_start)} → ${fmtPrettyDate(req.date_end)}`;
+  return { req, data, typeLabel, datesStr };
+}
+
+function renderError(error, appOrigin) {
+  if (error === 'expired') return renderPage({
+    title: 'Link expired', headline: 'This link has expired', accent: '#D97706', appOrigin,
+    body: '<p>The approve/reject link in your email is no longer valid (expired or already used elsewhere). Open the app to action this request.</p>'
+  });
+  if (error === 'not_found') return renderPage({
+    title: 'Request not found', headline: 'Request not found', accent: '#DC2626', appOrigin,
+    body: '<p>The leave request this link refers to no longer exists.</p>'
+  });
+  if (error === 'approver_changed') return renderPage({
+    title: 'Link no longer valid', headline: 'This link is no longer valid', accent: '#DC2626', appOrigin,
+    body: '<p>The approver on this request has changed since the link was sent. Open the app to action it.</p>'
+  });
+  if (error === 'self_approve') return renderPage({
+    title: 'Cannot self-approve', headline: "You can't approve your own request", accent: '#DC2626', appOrigin,
+    body: '<p>This request lists you as both the requester and the approver. Ask another supervisor to action it via the app.</p>'
+  });
+  return renderPage({ title: 'Error', headline: 'Something went wrong', accent: '#DC2626', appOrigin,
+    body: '<p>An unexpected error occurred. Open the app to action this request.</p>'
+  });
+}
+
+function renderAlreadyActioned(req, typeLabel, datesStr, appOrigin) {
+  const respondedAt = req.responded_at
+    ? new Date(req.responded_at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    : '—';
+  return renderPage({
+    title: 'Already actioned', headline: 'Already actioned', accent: '#6B7280', appOrigin,
+    body: `<p>This request was already actioned. No change was made.</p>
+      <div class="meta">
+        <div><span class="lbl">Requester</span><br>${escHtml(req.requester_name)}</div>
+        <div><span class="lbl">Type</span><br>${escHtml(typeLabel)}</div>
+        <div><span class="lbl">Dates</span><br>${escHtml(datesStr)}</div>
+        <div><span class="lbl">Current status</span><br><strong>${escHtml(req.status)}</strong> by ${escHtml(req.responded_by || '—')} · ${escHtml(respondedAt)}</div>
+      </div>`
+  });
+}
+
 // ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'text/html; charset=utf-8' };
@@ -173,13 +253,6 @@ exports.handler = async (event) => {
   const appOrigin = process.env.APP_ORIGIN
     || (reqHost ? `https://${reqHost.replace(/^https?:\/\//, '')}` : '');
 
-  if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers, body: renderPage({
-      title: 'Not allowed', headline: 'Not allowed', accent: '#DC2626', appOrigin,
-      body: '<p>This link only responds to GET requests.</p>'
-    })};
-  }
-
   if (!SECRET_SALT || !SB_URL || !SB_KEY) {
     return { statusCode: 500, headers, body: renderPage({
       title: 'Server misconfigured', headline: 'Something went wrong', accent: '#DC2626', appOrigin,
@@ -187,128 +260,141 @@ exports.handler = async (event) => {
     })};
   }
 
-  // Token may arrive as ?t=… or ?token=…
-  const params = event.queryStringParameters || {};
-  const token = params.t || params.token || '';
-  const data = verifyToken(token);
-  if (!data) {
-    return { statusCode: 200, headers, body: renderPage({
-      title: 'Link expired', headline: 'This link has expired', accent: '#D97706', appOrigin,
-      body: '<p>The approve/reject link in your email is no longer valid (expired or already used elsewhere). Open the app to action this request.</p>'
-    })};
-  }
+  // ── GET: confirmation page — scanner-safe, no state change ──
+  // Email security scanners (Gmail, Outlook SafeLinks) follow every
+  // <a href> in an email body via GET. This path only renders a
+  // confirmation form; the actual PATCH fires only on POST below.
+  if (event.httpMethod === 'GET') {
+    const params = event.queryStringParameters || {};
+    const token = params.t || params.token || '';
+    const resolved = await resolveRequest(token);
+    if (resolved.error) {
+      return { statusCode: 200, headers, body: renderError(resolved.error, appOrigin) };
+    }
+    const { req, data, typeLabel, datesStr } = resolved;
 
-  // Fetch the leave request.
-  const lvRes = await sb(`leave_requests?id=eq.${encodeURIComponent(data.leave_id)}&select=*`, 'GET');
-  if (!lvRes.ok || !Array.isArray(lvRes.data) || !lvRes.data.length) {
-    return { statusCode: 200, headers, body: renderPage({
-      title: 'Request not found', headline: 'Request not found', accent: '#DC2626', appOrigin,
-      body: '<p>The leave request this link refers to no longer exists.</p>'
-    })};
-  }
-  const req = lvRes.data[0];
+    if (req.status && req.status !== 'Pending') {
+      return { statusCode: 200, headers, body: renderAlreadyActioned(req, typeLabel, datesStr, appOrigin) };
+    }
 
-  // Look up the named approver and verify the token's email matches.
-  // The approver_name on the row is the source of truth — the token's
-  // approver_email field is just an extra binding that must agree with
-  // what the DB says. If they disagree, refuse (defense-in-depth
-  // against a token that was minted with a different approver in mind).
-  const mgrRes = await sb(`managers?name=eq.${encodeURIComponent(req.approver_name)}&select=name,email`, 'GET');
-  const mgr = (mgrRes.ok && Array.isArray(mgrRes.data) && mgrRes.data[0]) || null;
-  if (!mgr || !mgr.email || mgr.email.toLowerCase() !== String(data.approver_email).toLowerCase()) {
-    return { statusCode: 200, headers, body: renderPage({
-      title: 'Link no longer valid', headline: 'This link is no longer valid', accent: '#DC2626', appOrigin,
-      body: '<p>The approver on this request has changed since the link was sent. Open the app to action it.</p>'
-    })};
-  }
+    const isApprove   = data.action === 'approve';
+    const btnAccent   = isApprove ? '#16A34A' : '#DC2626';
+    const btnLabel    = isApprove ? 'Confirm — Approve leave' : 'Confirm — Reject leave';
+    const confirmMsg  = isApprove
+      ? `<p>You're about to <strong style="color:#16A34A">approve</strong> this leave request.</p>`
+      : `<p>You're about to <strong style="color:#DC2626">reject</strong> this leave request.</p>`;
+    const selfUrl = `${appOrigin}/.netlify/functions/approve-leave`;
 
-  // Defense-in-depth: client-side blocks self-approval; mirror that here.
-  if (req.requester_name === req.approver_name) {
     return { statusCode: 200, headers, body: renderPage({
-      title: 'Cannot self-approve', headline: 'You can\'t approve your own request', accent: '#DC2626', appOrigin,
-      body: '<p>This request lists you as both the requester and the approver. Ask another supervisor to action it via the app.</p>'
-    })};
-  }
-
-  const typeLabel = TYPE_LABELS[req.leave_type] || req.leave_type;
-  const datesStr = `${fmtPrettyDate(req.date_start)} → ${fmtPrettyDate(req.date_end)}`;
-
-  // Idempotency: if not Pending, render "already actioned" — never
-  // re-process. This is what makes a double-click safe.
-  if (req.status && req.status !== 'Pending') {
-    const respondedAt = req.responded_at
-      ? new Date(req.responded_at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-      : '—';
-    return { statusCode: 200, headers, body: renderPage({
-      title: 'Already actioned', headline: 'Already actioned', accent: '#6B7280', appOrigin,
-      body: `<p>This request was already actioned. No change was made.</p>
+      title: isApprove ? 'Approve leave' : 'Reject leave',
+      headline: isApprove ? 'Approve leave' : 'Reject leave',
+      accent: btnAccent,
+      appOrigin: '',   // suppress "Open app" here — we provide Cancel instead
+      body: `${confirmMsg}
         <div class="meta">
           <div><span class="lbl">Requester</span><br>${escHtml(req.requester_name)}</div>
           <div><span class="lbl">Type</span><br>${escHtml(typeLabel)}</div>
           <div><span class="lbl">Dates</span><br>${escHtml(datesStr)}</div>
-          <div><span class="lbl">Current status</span><br><strong>${escHtml(req.status)}</strong> by ${escHtml(req.responded_by || '—')} · ${escHtml(respondedAt)}</div>
-        </div>`
+        </div>
+        <form method="POST" action="${escHtml(selfUrl)}">
+          <input type="hidden" name="t" value="${escHtml(token)}">
+          <button type="submit" class="btn-confirm" style="background:${btnAccent}">${escHtml(btnLabel)}</button>
+        </form>
+        ${appOrigin ? `<div style="margin-top:14px"><a class="btn" style="background:#6B7280" href="${escHtml(appOrigin)}">Cancel — open the app instead</a></div>` : ''}`
     })};
   }
 
-  // Apply the action.
-  const newStatus = data.action === 'approve' ? 'Approved' : 'Rejected';
-  const respondedAtISO = new Date().toISOString();
-  // Note about response_note: the magic-link path doesn't collect a
-  // free-text reason. The app blocks Reject without a note, but a
-  // one-click Reject from email lands here without one. Set a marker
-  // so it's clear in the UI which path was used. Approves stay null.
-  const responseNote = newStatus === 'Rejected' ? 'Rejected via email link' : null;
+  // ── POST: supervisor confirmed — apply the action ────────────
+  if (event.httpMethod === 'POST') {
+    // Parse application/x-www-form-urlencoded body.
+    let token = '';
+    try {
+      const body = event.isBase64Encoded
+        ? Buffer.from(event.body || '', 'base64').toString()
+        : (event.body || '');
+      token = new URLSearchParams(body).get('t') || '';
+    } catch (e) { /* token stays empty — verifyToken will reject */ }
 
-  const patchRes = await sb(`leave_requests?id=eq.${encodeURIComponent(req.id)}&status=eq.Pending`, 'PATCH', {
-    status: newStatus,
-    response_note: responseNote,
-    responded_by: req.approver_name,
-    responded_at: respondedAtISO,
-  }, 'return=representation');
+    const resolved = await resolveRequest(token);
+    if (resolved.error) {
+      return { statusCode: 200, headers, body: renderError(resolved.error, appOrigin) };
+    }
+    const { req, data, typeLabel, datesStr } = resolved;
 
-  // The status=eq.Pending filter makes the PATCH a compare-and-swap:
-  // if a parallel click already flipped it, we get [] back and treat
-  // it as already-actioned (race-safe idempotency).
-  if (!patchRes.ok || !Array.isArray(patchRes.data) || !patchRes.data.length) {
-    // Re-fetch to show current state.
-    const fresh = await sb(`leave_requests?id=eq.${encodeURIComponent(req.id)}&select=*`, 'GET');
-    const cur = (fresh.ok && Array.isArray(fresh.data) && fresh.data[0]) || req;
+    if (req.status && req.status !== 'Pending') {
+      return { statusCode: 200, headers, body: renderAlreadyActioned(req, typeLabel, datesStr, appOrigin) };
+    }
+
+    const newStatus = data.action === 'approve' ? 'Approved' : 'Rejected';
+    const respondedAtISO = new Date().toISOString();
+    // Magic-link path doesn't collect a free-text reason. Set a marker
+    // so it's clear in the UI which path was used. Approves stay null.
+    const responseNote = newStatus === 'Rejected' ? 'Rejected via email link' : null;
+
+    // Compare-and-swap PATCH: the WHERE status=eq.Pending filter means a
+    // parallel submit that already flipped the row returns [] here, which
+    // we treat as "already actioned" (race-safe idempotency).
+    const patchRes = await sb(`leave_requests?id=eq.${encodeURIComponent(req.id)}&status=eq.Pending`, 'PATCH', {
+      status:         newStatus,
+      response_note:  responseNote,
+      responded_by:   req.approver_name,
+      responded_at:   respondedAtISO,
+    }, 'return=representation');
+
+    if (!patchRes.ok || !Array.isArray(patchRes.data) || !patchRes.data.length) {
+      const fresh = await sb(`leave_requests?id=eq.${encodeURIComponent(req.id)}&select=*`, 'GET');
+      const cur = (fresh.ok && Array.isArray(fresh.data) && fresh.data[0]) || req;
+      return { statusCode: 200, headers, body: renderPage({
+        title: 'Already actioned', headline: 'Already actioned', accent: '#6B7280', appOrigin,
+        body: `<p>This request was actioned by another submission moments ago. No change was made.</p>
+          <div class="meta">
+            <div><span class="lbl">Current status</span><br><strong>${escHtml(cur.status || '—')}</strong></div>
+          </div>`
+      })};
+    }
+
+    // Audit log — fire-and-forget; don't block the success page.
+    sb('audit_log', 'POST', {
+      manager_name: req.approver_name,
+      action:       `Leave ${newStatus} via email link`,
+      category:     'Leave',
+      detail:       `${req.requester_name} ${typeLabel} ${req.date_start} to ${req.date_end}`,
+      week:         null,
+      org_id:       req.org_id || null,
+    }, 'return=minimal').catch(() => {});
+
+    // v3.10.43: await the status email and surface failure on the success
+    // page rather than swallowing it. The action is still committed — we
+    // just warn the supervisor so they can notify the requester manually.
+    let emailWarning = '';
+    try {
+      const emailRes = await sendStatusEmail(req, newStatus, req.approver_name);
+      if (!emailRes.ok) {
+        console.error('approve-leave: status email failed:', emailRes.detail);
+        emailWarning = `<div class="warn">⚠ Leave ${newStatus.toLowerCase()}, but the notification email to ${escHtml(req.requester_name)} failed to send. Please let them know directly.</div>`;
+      }
+    } catch (e) {
+      console.error('approve-leave: status email threw:', e && e.message);
+      emailWarning = `<div class="warn">⚠ Leave ${newStatus.toLowerCase()}, but the notification email to ${escHtml(req.requester_name)} failed to send. Please let them know directly.</div>`;
+    }
+
+    const accent = newStatus === 'Approved' ? '#16A34A' : '#DC2626';
     return { statusCode: 200, headers, body: renderPage({
-      title: 'Already actioned', headline: 'Already actioned', accent: '#6B7280', appOrigin,
-      body: `<p>This request was actioned by another click moments ago. No change was made.</p>
+      title: newStatus,
+      headline: `Leave ${newStatus.toLowerCase()}`,
+      accent,
+      appOrigin,
+      body: `<p><strong>${escHtml(req.requester_name)}</strong>'s leave request has been <strong style="color:${accent}">${escHtml(newStatus.toLowerCase())}</strong>.</p>
         <div class="meta">
-          <div><span class="lbl">Current status</span><br><strong>${escHtml(cur.status || '—')}</strong></div>
-        </div>`
+          <div><span class="lbl">Type</span><br>${escHtml(typeLabel)}</div>
+          <div><span class="lbl">Dates</span><br>${escHtml(datesStr)}</div>
+          <div><span class="lbl">Actioned by</span><br>${escHtml(req.approver_name)}</div>
+        </div>${emailWarning}`
     })};
   }
 
-  // Audit log — same shape as scripts/audit.js auditLog().
-  // Fire-and-forget; don't block the success page on audit failure.
-  sb('audit_log', 'POST', {
-    manager_name: req.approver_name,
-    action:       `Leave ${newStatus} via email link`,
-    category:     'Leave',
-    detail:       `${req.requester_name} ${typeLabel} ${req.date_start} to ${req.date_end}`,
-    week:         null,
-    org_id:       req.org_id || null,
-  }, 'return=minimal').catch(() => {});
-
-  // Notify requester — fire-and-forget, log failures but don't fail
-  // the success page.
-  sendStatusEmail(req, newStatus, req.approver_name).catch((e) => {
-    console.error('approve-leave: status email failed', e && e.message);
-  });
-
-  // Render success.
-  const accent = newStatus === 'Approved' ? '#16A34A' : '#DC2626';
-  return { statusCode: 200, headers, body: renderPage({
-    title: `${newStatus}`, headline: `Leave ${newStatus.toLowerCase()}`, accent, appOrigin,
-    body: `<p><strong>${escHtml(req.requester_name)}</strong>'s leave request has been <strong style="color:${accent}">${escHtml(newStatus.toLowerCase())}</strong>. They'll be notified by email.</p>
-      <div class="meta">
-        <div><span class="lbl">Type</span><br>${escHtml(typeLabel)}</div>
-        <div><span class="lbl">Dates</span><br>${escHtml(datesStr)}</div>
-        <div><span class="lbl">Actioned by</span><br>${escHtml(req.approver_name)}</div>
-      </div>`
+  return { statusCode: 405, headers, body: renderPage({
+    title: 'Not allowed', headline: 'Not allowed', accent: '#DC2626', appOrigin,
+    body: '<p>This endpoint only responds to GET and POST requests.</p>'
   })};
 };

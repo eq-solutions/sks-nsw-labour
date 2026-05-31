@@ -85,7 +85,11 @@ function validateEmails(arr, fieldName, max) {
 // Tokens are minted server-side ONLY — the requester's browser never
 // sees them, which is what stops a requester from minting their own
 // approve-link to bypass the named approver.
-const LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+//
+// v3.10.45: TTL is defined here (the minting side) and baked into the
+// token's `exp` field. approve-leave.js reads `exp` from the token
+// directly — it has no TTL constant of its own. Only change it here.
+const LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — source of truth
 
 function signLeaveActionToken(leaveId, action, approverEmail) {
   const payload = JSON.stringify({
@@ -123,11 +127,16 @@ async function resolveLeaveActionContext(leaveId) {
   // invalid schemes). Same id-coercion bug class as BATTLE-TEST #22, #27.
   const idStr = (leaveId === null || leaveId === undefined) ? '' : String(leaveId);
   if (!idStr) return { error: 'leave_id required' };
-  const lvRes = await sbGet(`leave_requests?id=eq.${encodeURIComponent(idStr)}&select=id,requester_name,approver_name,status`);
+  // v3.10.44: fetch org_id alongside name fields so the manager lookup
+  // can be scoped to the same org (prevents cross-tenant name collisions).
+  const lvRes = await sbGet(`leave_requests?id=eq.${encodeURIComponent(idStr)}&select=id,requester_name,approver_name,status,org_id`);
   if (!lvRes.ok || !Array.isArray(lvRes.data) || !lvRes.data.length) return { error: 'leave row not found' };
   const lv = lvRes.data[0];
   if (lv.status && lv.status !== 'Pending') return { error: 'leave already actioned' };
-  const mgrRes = await sbGet(`managers?name=eq.${encodeURIComponent(lv.approver_name)}&select=email`);
+  // v3.10.44: scope manager lookup by org_id so same-name managers across
+  // different tenants don't cross-resolve to each other's email.
+  const orgFilter = lv.org_id ? `&org_id=eq.${encodeURIComponent(lv.org_id)}` : '';
+  const mgrRes = await sbGet(`managers?name=eq.${encodeURIComponent(lv.approver_name)}${orgFilter}&select=email`);
   const mgr = (mgrRes.ok && Array.isArray(mgrRes.data) && mgrRes.data[0]) || null;
   if (!mgr || !mgr.email) return { error: 'approver has no email on file' };
   return { leave: lv, approverEmail: String(mgr.email).toLowerCase() };

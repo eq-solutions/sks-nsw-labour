@@ -486,18 +486,56 @@ async function respondLeave(status) {
     return;
   }
 
-  // v3.4.54: per-id inflight guard. Without this, an iPad double-tap on
-  // Approve fires respondLeave twice — both PATCHes go through (idempotent
-  // server-side after the first), but each one writes a separate audit-log
-  // entry AND triggers a separate email to the requester. Confirmed in EQ
-  // Supabase audit_log: duplicate "Archived leave" entries 686ms apart
-  // (BATTLE-TEST finding #24).
+  // v3.4.54: per-id inflight guard prevents iPad double-tap duplicates.
   const lockKey = String(id);
   if (_leaveInflight.has(lockKey)) return;
-  _leaveInflight.add(lockKey);
 
+  // v3.10.46: check for roster conflicts BEFORE acquiring the inflight lock or
+  // committing the PATCH. Checking afterward (old behaviour) left no clean way
+  // to ask for confirmation without having a half-committed approval to unwind.
+  // Now: if conflicts exist, show a confirm modal and return — the inflight lock
+  // is NOT held while the modal is open. _commitLeaveResponse() acquires it when
+  // the supervisor presses "Approve anyway".
+  if (status === 'Approved') {
+    const leaveDates = _getLeaveDates(req);
+    const conflicts  = [];
+    leaveDates.forEach(ds => {
+      const weekStr = getWeekForDate(new Date(ds + 'T00:00:00'));
+      const dayName = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(ds + 'T00:00:00').getDay()];
+      const sched   = STATE.schedule.find(s => s.name === req.requester_name && s.week === weekStr);
+      if (sched && sched[dayName] && !isLeave(sched[dayName])) {
+        conflicts.push(sched[dayName] + ' on ' + ds);
+      }
+    });
+
+    if (conflicts.length) {
+      const preview = conflicts.slice(0, 3).join(', ') + (conflicts.length > 3 ? ` + ${conflicts.length - 3} more` : '');
+      document.getElementById('confirm-title').textContent = 'Roster Conflict';
+      document.getElementById('confirm-msg').textContent =
+        `Approving this leave will overwrite ${conflicts.length} scheduled shift${conflicts.length !== 1 ? 's' : ''}: ${preview}. Those days will be updated to show leave on the roster.`;
+      document.getElementById('confirm-action').textContent = 'Approve anyway';
+      document.getElementById('confirm-action').onclick = async () => {
+        closeModal('modal-confirm');
+        if (_leaveInflight.has(lockKey)) return;
+        _leaveInflight.add(lockKey);
+        await _commitLeaveResponse(req, status, note, lockKey);
+      };
+      closeModal('modal-leave-respond');
+      openModal('modal-confirm');
+      return;
+    }
+  }
+
+  _leaveInflight.add(lockKey);
+  await _commitLeaveResponse(req, status, note, lockKey);
+}
+
+// ── Commit a leave approval / rejection after all pre-checks pass ──
+// Extracted from respondLeave so the conflict-confirm modal can call it
+// after the supervisor acknowledges the overwrite (v3.10.46).
+async function _commitLeaveResponse(req, status, note, lockKey) {
   try {
-    await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', {
+    await sbFetch(`leave_requests?id=eq.${req.id}`, 'PATCH', {
       status:         status,
       response_note:  note || null,
       responded_by:   currentManagerName,
@@ -509,28 +547,24 @@ async function respondLeave(status) {
         const _days = (req.date_start && req.date_end)
           ? (Math.round((new Date(req.date_end) - new Date(req.date_start)) / 86400000) + 1)
           : null;
-        EQ_ANALYTICS.events.leaveApproved({ leave_id: id, leave_type: req.leave_type, days: _days });
+        EQ_ANALYTICS.events.leaveApproved({ leave_id: req.id, leave_type: req.leave_type, days: _days });
       } else if (status === 'Rejected') {
-        EQ_ANALYTICS.events.leaveRejected({ leave_id: id, leave_type: req.leave_type });
+        EQ_ANALYTICS.events.leaveRejected({ leave_id: req.id, leave_type: req.leave_type });
       }
     }
 
     if (status === 'Approved') {
-      // LEV-003: Warn about roster conflicts
-      const leaveDates = _getLeaveDates(req);
-      const conflicts  = [];
-      leaveDates.forEach(ds => {
-        const weekStr = getWeekForDate(new Date(ds + 'T00:00:00'));
-        const dayName = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(ds + 'T00:00:00').getDay()];
-        const sched   = STATE.schedule.find(r => r.name === req.requester_name && r.week === weekStr);
-        if (sched && sched[dayName] && !isLeave(sched[dayName])) {
-          conflicts.push(sched[dayName] + ' on ' + ds);
-        }
-      });
-      if (conflicts.length) {
-        showToast('⚠ Overwriting roster entries: ' + conflicts.slice(0, 3).join(', ') + (conflicts.length > 3 ? '…' : ''));
+      // v3.10.48: wrap write-back in its own try/catch. If the roster write
+      // fails (network drop, missing schedule row, etc.), the approval is
+      // already committed and the requester notified — don't let a write-back
+      // failure roll back or hide that. Surface it separately so the supervisor
+      // knows to check the roster manually.
+      try {
+        await writeLeaveToSchedule(req);
+      } catch (writeErr) {
+        console.error('Leave schedule write-back failed:', writeErr);
+        showToast(`⚠ Leave approved but roster write-back failed — check ${req.requester_name}'s schedule`);
       }
-      await writeLeaveToSchedule(req);
     }
 
     closeModal('modal-leave-respond');
@@ -692,6 +726,11 @@ async function withdrawLeaveRequest(id) {
       });
       showToast(`Leave withdrawn for ${req.requester_name}`);
       auditLog(`Leave withdrawn: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
+      // v3.10.47: notify the approver so they don't try to action a request
+      // that no longer exists as pending. Fire-and-forget — not critical.
+      triggerLeaveEmail('withdrawal_notification', req).catch(e => {
+        console.error('Withdrawal notification email failed:', e);
+      });
       await loadLeaveRequests();
       renderLeave();
     } catch (e) {
@@ -869,6 +908,30 @@ async function triggerLeaveEmail(type, record) {
             <tr><td style="padding:8px 0;color:#6B7280">Status</td><td style="padding:8px 0;font-weight:600;color:#D97706">Pending</td></tr>
           </table>
           <p style="margin:16px 0 0;font-size:12px;color:#6B7280">You'll receive another email once your request is approved or rejected. You can also withdraw this request from the app while it's still pending.</p>
+          <div style="margin-top:20px">
+            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
+          </div>
+        </div>
+      </div>`;
+    } else if (type === 'withdrawal_notification') {
+      // v3.10.47: notify the named approver that the requester withdrew their
+      // request. Without this, the approver might click the magic-link later
+      // and get a confusing "already actioned" page with no context.
+      const mgr = (STATE.managers || []).find(m => m.name === record.approver_name);
+      if (!mgr || !mgr.email) return; // silent — if no email on file, nothing we can do
+      to      = mgr.email;
+      subject = `Leave Withdrawn: ${typeLabels[record.leave_type] || safeTypeFallback} — ${escHtml(record.requester_name)} (${record.date_start} to ${record.date_end})`;
+      html    = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto">
+        <div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">
+          <h2 style="color:white;margin:0;font-size:18px">Leave Request Withdrawn</h2>
+          <p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">EQ Solves — Field</p>
+        </div>
+        <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
+          <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong>${escHtml(record.requester_name)}</strong> has withdrawn their leave request. No action is needed — any approval link in your email is no longer valid.</p>
+          <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">
+            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || safeTypeFallback}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280">Dates</td><td style="padding:8px 0;font-weight:600">${record.date_start} to ${record.date_end}</td></tr>
+          </table>
           <div style="margin-top:20px">
             <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
           </div>
