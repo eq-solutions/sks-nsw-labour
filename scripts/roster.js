@@ -257,6 +257,26 @@ function renderRoster() {
   const bgMap  = { blue:'var(--blue-lt)', green:'var(--green-lt)', amber:'var(--amber-lt)', red:'var(--red-lt)', purple:'var(--purple-lt)', grey:'var(--surface-2)', empty:'transparent' };
 
   let html = '';
+
+  // Management-out banner — approved leave for anyone in the managers table
+  // overlapping this week. Supervisors aren't on the roster rows below, so
+  // without this their absence is invisible on the grid.
+  if (typeof _getMgmtOutThisWeek === 'function') {
+    const mgmtOut = _getMgmtOutThisWeek(week);
+    if (mgmtOut.length) {
+      const typeLabels = { 'A/L': 'A/L', 'U/L': 'U/L', 'RDO': 'RDO' };
+      const chips = mgmtOut.map(r => {
+        const fmt   = d => new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+        const dates = r.date_start === r.date_end ? fmt(r.date_start) : fmt(r.date_start) + '–' + fmt(r.date_end);
+        return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:20px;font-size:11px;font-weight:600;color:#92400E">${esc(r.requester_name)}<span style="opacity:.65">${dates}</span><span style="background:#FCD34D;color:#92400E;border-radius:4px;padding:1px 5px;font-size:9px">${typeLabels[r.leave_type] || esc(r.leave_type)}</span></span>`;
+      }).join('');
+      html += `<div style="margin-bottom:14px">
+        <div class="group-strip" style="background:#92400E"><span>👔</span><span>Management Out This Week</span><span class="group-strip-count">${mgmtOut.length}</span></div>
+        <div class="roster-card" style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">${chips}</div>
+      </div>`;
+    }
+  }
+
   groups.forEach(group => {
     const people = getRosterPeopleForGroup(group);
     if (!people.length) return;

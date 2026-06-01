@@ -59,7 +59,7 @@ async function saveLeaveCCList() {
   // PATCH query string is a PostgREST filter operator, not a namespace.
   const payload = JSON.stringify(leaveCCList);
   try {
-    const res = await sbFetch('app_config?key=eq.leave_cc_list', 'PATCH', { value: payload });
+    const res = await sbFetch('app_config?key=eq.leave_cc_list', 'PATCH', { value: payload }, 'return=representation');
     if (!res || (Array.isArray(res) && res.length === 0)) {
       await sbFetch('app_config', 'POST', { key: 'leave_cc_list', value: payload });
     }
@@ -174,6 +174,44 @@ function updateLeaveBadge() {
     badge.textContent    = pending;
     badge.style.display  = pending > 0 ? '' : 'none';
   }
+  const notice = document.getElementById('mgmt-out-notice');
+  if (notice) {
+    const mgmtOut = _getMgmtOutThisWeek(STATE.currentWeek);
+    if (mgmtOut.length) {
+      const names = mgmtOut.map(r => r.requester_name.split(' ')[0]).join(', ');
+      notice.textContent   = '👔 Out: ' + names;
+      notice.style.display = '';
+    } else {
+      notice.style.display = 'none';
+    }
+  }
+}
+
+// Returns approved leave records for managers overlapping the given week (DD.MM.YY).
+function _getMgmtOutThisWeek(week) {
+  if (!week) return [];
+  const [dd, mm, yy] = week.split('.');
+  const mon = new Date('20' + yy + '-' + mm + '-' + dd);
+  const weekDaySet = new Set();
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    weekDaySet.add(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+  }
+  const mgrNames = new Set((STATE.managers || []).map(m => m.name));
+  return (leaveRequests || []).filter(r => {
+    if (r.status !== 'Approved' || r.archived) return false;
+    if (!mgrNames.has(r.requester_name)) return false;
+    if (r.individual_days && r.individual_days.length) {
+      return r.individual_days.some(d => weekDaySet.has(d));
+    }
+    const start = new Date(r.date_start + 'T00:00:00');
+    const end   = new Date(r.date_end   + 'T00:00:00');
+    for (const iso of weekDaySet) {
+      if (new Date(iso + 'T00:00:00') >= start && new Date(iso + 'T00:00:00') <= end) return true;
+    }
+    return false;
+  });
 }
 
 // ── Date helpers ──────────────────────────────────────────────
@@ -272,10 +310,19 @@ function _populateLeaveApprovers(excludeName) {
   const aSel = document.getElementById('leave-approver');
   if (!aSel) return;
   const current = aSel.value;
-  const mgrs = [...(STATE.managers || [])]
-    .filter(m => m.name !== excludeName)
-    .sort((a, b) => a.name.localeCompare(b.name));
-  aSel.innerHTML = '<option value="">— Select your supervisor —</option>' +
+  const isSupvRequester = (STATE.managers || []).some(m => m.name === excludeName);
+  let mgrs = [...(STATE.managers || [])].filter(m => m.name !== excludeName);
+  let placeholder = '— Select your supervisor —';
+  if (isSupvRequester) {
+    const executives = mgrs.filter(m => m.category === 'Executive');
+    if (executives.length) {
+      mgrs        = executives;
+      placeholder = '— Select an executive —';
+    }
+    // No executives configured: fall back silently to all non-self supervisors
+  }
+  mgrs = mgrs.sort((a, b) => a.name.localeCompare(b.name));
+  aSel.innerHTML = `<option value="">${placeholder}</option>` +
     mgrs.map(m => `<option value="${esc(m.name)}">${esc(m.name)}${m.role ? ' — ' + m.role : ''}</option>`).join('');
   if (current && mgrs.some(m => m.name === current)) aSel.value = current;
 }
@@ -1027,19 +1074,21 @@ function renderLeave() {
       const d = new Date(ds);
       while (d <= de) { if (d.getDay() !== 0 && d.getDay() !== 6) bizDays++; d.setDate(d.getDate() + 1); }
     }
-    const canRespond = isManager && r.status === 'Pending';
-    const isResolved = r.status === 'Approved' || r.status === 'Rejected' || r.status === 'Withdrawn';
-    const isArchived = !!r.archived;
+    const canRespond    = isManager && r.status === 'Pending';
+    const isResolved    = r.status === 'Approved' || r.status === 'Rejected' || r.status === 'Withdrawn';
+    const isArchived    = !!r.archived;
+    const isSupvLeave   = (STATE.managers || []).some(m => m.name === r.requester_name);
     // v3.4.5 (L14): requester (or a supervisor) can withdraw while pending.
     const loggedInName = sessionStorage.getItem('eq_logged_in_name') || '';
     const canWithdraw  = r.status === 'Pending' && (isManager || loggedInName === r.requester_name);
     const rowBg = isArchived ? 'background:var(--surface-2);opacity:.7' : (r.status === 'Pending' ? 'background:#FFFDF5' : '');
     html += `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);${rowBg}">
       <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
           <span style="font-weight:700;color:var(--navy);font-size:14px">${esc(r.requester_name)}</span>
           <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;${statusStyle[r.status] || ''}">${r.status}</span>
           <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:var(--purple-lt);color:var(--purple)">${typeLabels[r.leave_type] || r.leave_type}</span>
+          ${isSupvLeave ? '<span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;background:#FFFBEB;color:#D97706;border:1px solid #FCD34D">Supervisor</span>' : ''}
           ${isArchived ? '<span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--ink-4);border:1px solid var(--border)">📦 Archived</span>' : ''}
         </div>
         <div style="font-size:12px;color:var(--ink-2);margin-bottom:2px">${datesStr} — <strong>${bizDays} day${bizDays !== 1 ? 's' : ''}</strong></div>
