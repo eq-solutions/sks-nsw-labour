@@ -655,6 +655,7 @@
     html += '<button class="btn btn-secondary btn-sm" id="ra-save-' + id + '" onclick="SKS_PIPELINE_RESOURCE.saveAlloc(\'' + id + '\',false)">Save</button>';
     html += '<button class="btn btn-primary btn-sm" id="ra-conf-' + id + '" onclick="SKS_PIPELINE_RESOURCE.saveAlloc(\'' + id + '\',true)" title="Requires start date + workers">Save &amp; Confirm →</button>';
     html += '<div style="flex:1"></div>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="SKS_PIPELINE_RESOURCE.removeProject(\'' + id + '\')" style="color:#dc2626" title="Archive this job — hides it here and in the Pipeline">Remove job</button>';
     html += '<button class="btn btn-ghost btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.openPanel(null)">Cancel</button>';
     html += '</div>';
 
@@ -915,11 +916,11 @@
     // Full-width expansion panel below the table
     if (_openConfirmedPanel) {
       var ot    = confirmed.find(function (t) { return String(t.id) === _openConfirmedPanel; });
-      var oRows = _pending[_openConfirmedPanel] || [];
-      if (ot && oRows.length) {
-        var oacc = _tenderColor(_openConfirmedPanel);
+      if (ot) {
+        var oRows = _pending[_openConfirmedPanel] || [];
+        var oacc  = _tenderColor(_openConfirmedPanel);
         html += '<div style="margin-top:8px;border:1px solid #e2e8f0;border-top:3px solid ' + oacc + ';border-radius:12px;overflow:hidden;background:#fff">';
-        html += _labourCurvePanel(ot, oRows);
+        html += oRows.length ? _labourCurvePanel(ot, oRows) : _emptyConfirmedPanel(ot);
         html += '</div>';
       }
     }
@@ -1068,6 +1069,7 @@
     html += '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">';
     html += '<button class="btn btn-primary btn-sm" id="ra-push-' + id + '" onclick="SKS_PIPELINE_RESOURCE.pushToRoster(\'' + id + '\')">Push to Roster →</button>';
     html += '<div style="font-size:11px;color:var(--ink-3);flex:1">Headcount-only tracks are skipped. Writes Mon–Fri for all weeks.</div>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="SKS_PIPELINE_RESOURCE.removeProject(\'' + id + '\')" style="color:#dc2626" title="Archive this job — hides it here and in the Pipeline">Remove job</button>';
     html += '<button class="btn btn-ghost btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(null)">Close</button>';
     html += '</div>';
 
@@ -1427,6 +1429,79 @@
     }
   }
 
+  // ── Remove (archive) a job ─────────────────────────────────
+  function _emptyConfirmedPanel(t) {
+    var id = String(t.id);
+    var html = '<div style="padding:16px 18px 18px;background:#fff">';
+    html += '<div style="font-size:12px;color:var(--ink-3);margin-bottom:14px">No labour slots were generated for this job — set a duration on the Won job to plan labour.</div>';
+    html += '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:12px">';
+    html += '<div style="flex:1"></div>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="SKS_PIPELINE_RESOURCE.removeProject(\'' + id + '\')" style="color:#dc2626" title="Archive this job — hides it here and in the Pipeline">Remove job</button>';
+    html += '<button class="btn btn-ghost btn-sm" onpointerdown="SKS_PIPELINE_RESOURCE.openConfirmedPanel(null)">Close</button>';
+    html += '</div></div>';
+    return html;
+  }
+
+  // BUG-009-safe confirm via the shared #modal-confirm dialog — window.confirm
+  // is unreliable in iOS PWA standalone (where field supervisors live), so it
+  // can silently return false and the action never fires. Falls back to
+  // window.confirm if the modal markup / openModal aren't present.
+  function _raConfirm(title, msg, confirmLabel) {
+    var titleEl = document.getElementById('confirm-title');
+    var msgEl   = document.getElementById('confirm-msg');
+    var cb      = document.getElementById('confirm-action');
+    var xb      = document.querySelector('#modal-confirm .btn-secondary');
+    if (!titleEl || !msgEl || !cb || !xb || typeof openModal !== 'function') {
+      return Promise.resolve(window.confirm((title ? title + '\n\n' : '') + msg));
+    }
+    return new Promise(function (resolve) {
+      titleEl.textContent = title || 'Confirm';
+      msgEl.textContent   = msg;
+      var origX     = xb.onclick;
+      var origLabel = cb.textContent;
+      cb.textContent  = confirmLabel || 'Confirm';
+      function done(val) {
+        closeModal('modal-confirm');
+        cb.onclick = null; xb.onclick = origX; cb.textContent = origLabel;
+        resolve(val);
+      }
+      cb.onclick = function () { done(true); };
+      xb.onclick = function () { done(false); };
+      openModal('modal-confirm');
+    });
+  }
+
+  async function removeProject(tenderId) {
+    var id    = String(tenderId);
+    var t     = _tenders.find(function (x) { return String(x.id) === id; });
+    var label = (t && t.job_name) ? t.job_name : 'this job';
+    var ok = await _raConfirm(
+      'Remove job',
+      'Remove "' + label + '" from Resources? It gets archived — hidden here and in the Pipeline — and can be brought back later. Any roster entries already pushed are left in place.',
+      'Remove'
+    );
+    if (!ok) return;
+    try {
+      await sbFetch('tenders?id=eq.' + id, 'PATCH', {
+        archived_at: new Date().toISOString(),
+        updated_at:  new Date().toISOString()
+      });
+      _tenders = _tenders.filter(function (x) { return String(x.id) !== id; });
+      if (_openPanel === id)          _openPanel = null;
+      if (_openConfirmedPanel === id) _openConfirmedPanel = null;
+      delete _enr[id];
+      delete _noms[id];
+      delete _pending[id];
+      delete _ca[id];
+      delete _siteCodes[id];
+      delete _wplan[id];
+      showToast('✓ Removed — ' + label + ' archived');
+      _render();
+    } catch (e) {
+      showToast('Remove failed — ' + e.message);
+    }
+  }
+
   // ── Helpers ────────────────────────────────────────────────
   function _mgrName(personId) {
     if (!personId) return null;
@@ -1475,6 +1550,7 @@
     pushSkipConflicts:      pushSkipConflicts,
     openAddJob:             openAddJob,
     submitAddJob:           submitAddJob,
+    removeProject:          removeProject,
     toggleFloat:            toggleFloat
   };
 })();

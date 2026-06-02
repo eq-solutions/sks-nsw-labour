@@ -632,8 +632,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.42
+  EQ Solves — Field  v3.10.44
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.44  (Resources: remove/archive a job)
+  ────────────────────────────────────────────────────
+   • pipeline-resource.js: "Remove job" action on both Needs Allocation and
+     Confirmed jobs. Sets tenders.archived_at (reversible soft-remove) — the
+     job disappears from Resources + the Pipeline; roster entries already
+     pushed to schedule are left in place. Confirm via the shared
+     #modal-confirm dialog (BUG-009-safe, not window.confirm).
+   • Confirmed rows with no labour slots now still open a panel so they can
+     be removed (_emptyConfirmedPanel).
+   • Cherry-picked from EQ Field v3.5.53/54 (Royce-directed cross-repo).
 
   CHANGES IN v3.10.43  (Edit Roster: show team filter bar)
   ────────────────────────────────────────────────────
