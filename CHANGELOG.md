@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.53 — Resources: "Supervisor" → "Person in charge"
+
+**Date:** 2026-06-04
+**Scope:** `scripts/pipeline-resource.js`, `scripts/pipeline.js`
+
+- The Resource Allocation panel's **Supervisor** field is renamed **Person in charge** and now lists **Direct employees as well as Supervisors** (grouped). Supervisors come from the `managers` table (`category = 'Supervisor'`); Direct employees come from `STATE.people` (`group = 'Direct'`).
+- The two tables have independent integer id spaces, so a nomination now records the source in `nominations.capacity_tag` (`'people'` for a Direct employee, null for a manager — legacy rows read as managers). Name resolution checks the right table via `_picName`.
+- The Pipeline (Kanban) board's Supervisor picker was widened the same way and resolves either source, so the shared nomination stays consistent across both surfaces (the board keeps the "Supervisor" label). No schema migration — `capacity_tag` already existed on `nominations`.
+
+---
+
 # v3.10.52 — Forecast: a work week is 40 hours, not 38
 
 **Date:** 2026-06-04
