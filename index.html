@@ -632,8 +632,15 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.47
+  EQ Solves — Field  v3.10.48
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.48  (Resources: editing workers/duration rebuilds the labour plan)
+  ────────────────────────────────────────────────────
+   • pipeline-resource.js: saveConfirmedDetails regenerates pending_schedule
+     when start/workers/duration change on a confirmed job, so the Assign-to-
+     Roster tracks/slots reflow. _rebuildLabourPlan is roster-safe (leaves
+     pushed slots alone). Cherry-picked from EQ Field v3.5.58.
 
   CHANGES IN v3.10.47  (Resources: edit confirmed-job details; pipeline shows start date)
   ────────────────────────────────────────────────────
