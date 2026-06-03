@@ -62,6 +62,22 @@
     return 'tracked'; // 0%, 25%, anything below 50%
   }
 
+  // ── Estimator normaliser ──────────────────────────────────
+  // Collapse email-form estimators to a name so the same person doesn't appear
+  // as both "Matthew Miller" and "matthew.miller@sks.com.au". Only touches
+  // values containing '@'; name-form values are left exactly as typed.
+  function normaliseEstimator(raw) {
+    if (raw === null || raw === undefined) return null;
+    var s = String(raw).trim();
+    if (!s) return null;
+    if (s.indexOf('@') === -1) return s;
+    var local = s.split('@')[0].replace(/[._]+/g, ' ').trim();
+    if (!local) return s;
+    return local.replace(/\S+/g, function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    });
+  }
+
   // ── Probability parser ────────────────────────────────────
   // "70% - In Negotiation" → { pct: 70, label: "70% - In Negotiation" }
   // Handles blanks, malformed strings, edge cases.
@@ -211,7 +227,7 @@
         external_ref:      externalRef,
         job_name:          (row['SITE / JOB NAME'] || '').toString().trim() || null,
         client:            (row['Builder/Client Name'] || '').toString().trim() || null,
-        estimator:         (row['SKS Estimator'] || '').toString().trim() || null,
+        estimator:         normaliseEstimator(row['SKS Estimator']),
         vertical:          (row['Market Vertical'] || '').toString().trim() || null,
         department:        (row['SKS Dept'] || '').toString().trim() || null,
         entity:            (row['SKS Entity'] || '').toString().trim() || null,
