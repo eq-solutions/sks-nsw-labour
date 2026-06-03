@@ -632,8 +632,16 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.48
+  EQ Solves — Field  v3.10.49
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.49  (Pipeline import: normalise email-form estimators)
+  ────────────────────────────────────────────────────
+   • tender-parser.js: estimator values arriving as an email are converted
+     to name form on import (matthew.miller@sks.com.au → Matthew Miller) so
+     one person doesn't show as multiple filter options. Name-form values
+     left as typed. Paired with a one-time SQL cleanup of existing rows.
+     Cherry-picked from EQ Field v3.5.59.
 
   CHANGES IN v3.10.48  (Resources: editing workers/duration rebuilds the labour plan)
   ────────────────────────────────────────────────────
