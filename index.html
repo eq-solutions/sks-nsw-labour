@@ -632,8 +632,14 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.51
+  EQ Solves — Field  v3.10.52
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.52  (Forecast: a work week is 40 hours, not 38)
+  ────────────────────────────────────────────────────
+   • Resource allocation panel — the "suggest N workers" hint divided
+     forecast hours by (weeks × 38). A standard work week is 40 hours,
+     so the suggestion ran slightly high. Now uses 40.
 
   CHANGES IN v3.10.51  (Timesheets: stop the jump-to-top on cell entry)
   ────────────────────────────────────────────────────
