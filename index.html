@@ -632,8 +632,20 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.44
+  EQ Solves — Field  v3.10.45
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.45  (Pipeline: value+probability sliders, Keep/Discard triage)
+  ────────────────────────────────────────────────────
+   • pipeline.js: the board's value-filter dropdown is replaced by two range
+     sliders — Min value ($, dynamic max from data) and Min probability (%,
+     uses tenders.probability_pct). Both apply together; live labels on drag,
+     filter on release.
+   • Keep / Discard triage on every card. Discard archives (tenders.archived_at,
+     confirm via shared #modal-confirm). Keep stamps tenders.reviewed_at and the
+     card shows "✓ Reviewed".
+   • Migration: tenders.reviewed_at (timestamptz) added to SKS Supabase.
+   • Cherry-picked from EQ Field v3.5.55.
 
   CHANGES IN v3.10.44  (Resources: remove/archive a job)
   ────────────────────────────────────────────────────
