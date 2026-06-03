@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.52 — Forecast: a work week is 40 hours, not 38
+
+**Date:** 2026-06-04
+**Scope:** `scripts/pipeline-resource.js` (`suggestWorkers`)
+
+- The resource allocation panel's "suggest N workers" hint divided forecast hours by `(weeks × 38)`. A standard work week is 40 hours, so the suggestion ran slightly high.
+- Fix: changed the divisor to `(weeks × 40)`.
+
+---
+
 # v3.10.51 — Timesheets: stop the jump-to-top on cell entry
 
 **Date:** 2026-06-03

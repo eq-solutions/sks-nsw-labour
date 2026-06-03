@@ -759,7 +759,7 @@
     var hours = parseFloat(hEl && hEl.value) || 0;
     var weeks = parseInt(dEl  && dEl.value, 10) || 0;
     if (hours > 0 && weeks > 0) {
-      var s = Math.ceil(hours / (weeks * 38));
+      var s = Math.ceil(hours / (weeks * 40));
       if (sEl) sEl.textContent = '— suggest ' + s;
       if (wEl && !wEl.value) wEl.value = s;
     } else {
