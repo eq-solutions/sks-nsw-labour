@@ -1131,7 +1131,7 @@
     html += '<button class="btn btn-primary btn-sm" id="ra-cdsave-' + id + '" onclick="SKS_PIPELINE_RESOURCE.saveConfirmedDetails(\'' + id + '\')">Save changes</button>';
     html += '<button class="btn btn-ghost btn-sm" onclick="SKS_PIPELINE_RESOURCE.toggleEditDetails(null)">Cancel</button>';
     html += '<div style="flex:1"></div>';
-    html += '<span style="font-size:10px;color:var(--ink-3);text-align:right">Changing workers/duration/start won\'t auto-rebuild the labour plan below.</span>';
+    html += '<span style="font-size:10px;color:var(--ink-3);text-align:right">Changing workers/duration/start rebuilds the labour plan below (unless workers are already on the roster).</span>';
     html += '</div></div>';
     return html;
   }
@@ -1184,14 +1184,39 @@
       ]);
 
       _editingDetails = null;
-      showToast(structural
-        ? '✓ Details saved — labour plan not auto-rebuilt; review it if needed'
-        : '✓ Details saved');
+
+      var msg = '✓ Details saved';
+      if (structural) {
+        var outcome = await _rebuildLabourPlan(id, start, workers, dur);
+        if (outcome === 'rebuilt')      msg = '✓ Saved — labour plan rebuilt to ' + (workers || 0) + ' × ' + (dur || 0) + ' wks';
+        else if (outcome === 'pushed')  msg = '✓ Saved — some workers already on roster; labour plan kept (adjust manually)';
+        else if (outcome === 'cleared') msg = '✓ Saved — set start, workers & duration to build the labour plan';
+      }
+      showToast(msg);
       _render();
     } catch (e) {
       showToast('Save failed — ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
     }
+  }
+
+  // Rebuild the (unpushed) labour plan after a structural change to a confirmed
+  // job. Safe: if any rows were already pushed to the roster, it leaves the plan
+  // alone so live roster entries aren't disturbed. Returns 'rebuilt' | 'pushed' | 'cleared'.
+  async function _rebuildLabourPlan(tenderId, start, workers, dur) {
+    var id = String(tenderId);
+    var pushed = await sbFetch('pending_schedule?tender_id=eq.' + id + '&confirmed_at=not.is.null&select=id&limit=1');
+    if (Array.isArray(pushed) && pushed.length) return 'pushed';
+
+    await sbFetch('pending_schedule?tender_id=eq.' + id + '&confirmed_at=is.null', 'DELETE');
+    delete _ca[id];
+
+    if (start && workers && dur) {
+      await _generatePendingSchedule(id, start, workers, dur);
+      return 'rebuilt';
+    }
+    _pending[id] = [];
+    return 'cleared';
   }
 
   // ── Track assignment state mutations ───────────────────────
