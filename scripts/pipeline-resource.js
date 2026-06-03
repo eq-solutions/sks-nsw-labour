@@ -24,6 +24,7 @@
   var _openPanel          = null;
   var _openConfirmedPanel = null;
   var _addingJob          = false;
+  var _editingDetails     = null;   // tender id whose details are being edited (confirmed panel)
 
   // Phase B: contract assignment state (persists across re-renders within session)
   var _ca        = {};   // tenderId → { tracks: [{label,weekStrs[],rowIds[],segments:[{fromIdx,toIdx,personId}]}] }
@@ -603,8 +604,12 @@
     return html;
   }
 
-  function _allocPanel(t, enr, nom) {
-    var id     = String(t.id);
+  // Shared editable field grid (start / hours / duration / workers / PM / sup / notes).
+  // Used by both the Needs-Allocation panel and the Confirmed-job "Edit details" block,
+  // so saveAlloc + saveConfirmedDetails read the same ra-* input ids.
+  function _detailsFields(id, enr, nom) {
+    enr = enr || {};
+    nom = nom || { pm: null, supervisor: null };
     var pmMgrs = _managers.filter(function (m) { return m.category === 'Project Management'; });
     var spMgrs = _managers.filter(function (m) { return m.category === 'Supervisor'; });
     if (!pmMgrs.length) pmMgrs = _managers;
@@ -613,7 +618,7 @@
     var curPm  = nom.pm  && nom.pm.person_id  ? String(nom.pm.person_id)  : '';
     var curSup = nom.supervisor && nom.supervisor.person_id ? String(nom.supervisor.person_id) : '';
 
-    var html = '<div style="padding:14px 14px 16px;border-top:1px solid var(--border);background:#f8fafc">';
+    var html = '';
     html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">';
 
     html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Start date</label>';
@@ -650,6 +655,14 @@
 
     html += '<div style="margin-bottom:14px"><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Notes</label>';
     html += '<textarea class="form-input" id="ra-notes-' + id + '" rows="2" placeholder="Scope assumptions, conditions, access…" style="resize:vertical">' + _esc(enr.confidence_notes || '') + '</textarea></div>';
+    return html;
+  }
+
+  function _allocPanel(t, enr, nom) {
+    var id     = String(t.id);
+
+    var html = '<div style="padding:14px 14px 16px;border-top:1px solid var(--border);background:#f8fafc">';
+    html += _detailsFields(id, enr, nom);
 
     html += '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:12px">';
     html += '<button class="btn btn-secondary btn-sm" id="ra-save-' + id + '" onclick="SKS_PIPELINE_RESOURCE.saveAlloc(\'' + id + '\',false)">Save</button>';
@@ -920,6 +933,7 @@
         var oRows = _pending[_openConfirmedPanel] || [];
         var oacc  = _tenderColor(_openConfirmedPanel);
         html += '<div style="margin-top:8px;border:1px solid #e2e8f0;border-top:3px solid ' + oacc + ';border-radius:12px;overflow:hidden;background:#fff">';
+        html += _editDetailsSection(ot);
         html += oRows.length ? _labourCurvePanel(ot, oRows) : _emptyConfirmedPanel(ot);
         html += '</div>';
       }
@@ -1081,7 +1095,103 @@
   function openConfirmedPanel(tenderId) {
     _openConfirmedPanel = (_openConfirmedPanel === tenderId) ? null : (tenderId || null);
     _splitOpen = null;
+    _editingDetails = null;
     _render();
+  }
+
+  // ── Edit details on a confirmed job ────────────────────────
+  // Lets start date / hours / duration / peak workers / PM / supervisor / notes
+  // be amended after confirmation. Writes to tender_enrichment (+ nominations) —
+  // the same tables the Pipeline board reads, so changes show there too.
+  function _editDetailsSection(t) {
+    var id  = String(t.id);
+    var enr = _enr[id] || {};
+    var nom = _noms[id] || { pm: null, supervisor: null };
+
+    if (_editingDetails !== id) {
+      var bits = [
+        'Start ' + (enr.start_date_estimated || '—'),
+        (enr.hours_estimated ? enr.hours_estimated + 'h' : '—h'),
+        (enr.duration_weeks || '—') + ' wks',
+        (enr.peak_workers || '—') + ' workers'
+      ];
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">' +
+        '<div style="font-size:11px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          '<strong style="color:var(--ink-3);font-weight:700;letter-spacing:.05em">DETAILS</strong> &nbsp; ' + _esc(bits.join('  ·  ')) +
+        '</div>' +
+        '<div style="flex:1"></div>' +
+        '<button class="btn btn-secondary btn-sm" onclick="SKS_PIPELINE_RESOURCE.toggleEditDetails(\'' + id + '\')">Edit details</button>' +
+      '</div>';
+    }
+
+    var html = '<div style="padding:14px 14px 16px;background:#f8fafc;border-bottom:1px solid var(--border)">';
+    html += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);margin-bottom:10px">EDIT JOB DETAILS</div>';
+    html += _detailsFields(id, enr, nom);
+    html += '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:12px">';
+    html += '<button class="btn btn-primary btn-sm" id="ra-cdsave-' + id + '" onclick="SKS_PIPELINE_RESOURCE.saveConfirmedDetails(\'' + id + '\')">Save changes</button>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="SKS_PIPELINE_RESOURCE.toggleEditDetails(null)">Cancel</button>';
+    html += '<div style="flex:1"></div>';
+    html += '<span style="font-size:10px;color:var(--ink-3);text-align:right">Changing workers/duration/start won\'t auto-rebuild the labour plan below.</span>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function toggleEditDetails(tenderId) {
+    _editingDetails = tenderId ? String(tenderId) : null;
+    _render();
+  }
+
+  async function saveConfirmedDetails(tenderId) {
+    var id  = String(tenderId);
+    var btn = document.getElementById('ra-cdsave-' + id);
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var start   = _strVal('ra-start-'   + id) || null;
+    var hours   = _numVal('ra-hours-'   + id);
+    var dur     = _intVal('ra-dur-'     + id);
+    var workers = _intVal('ra-workers-' + id);
+    var pmId    = _intVal('ra-pm-'      + id);
+    var supId   = _intVal('ra-sup-'     + id);
+    var notes   = _strVal('ra-notes-'   + id);
+
+    var prev = _enr[id] || {};
+    var structural =
+      String(prev.start_date_estimated || '') !== String(start || '') ||
+      Number(prev.duration_weeks || 0)        !== Number(dur || 0)     ||
+      Number(prev.peak_workers || 0)          !== Number(workers || 0);
+
+    try {
+      var enrBase = {
+        tender_id:            id,
+        hours_estimated:      hours,
+        peak_workers:         workers,
+        start_date_estimated: start,
+        duration_weeks:       dur,
+        confidence_notes:     notes
+      };
+      if (_enr[id]) {
+        await sbFetch('tender_enrichment?tender_id=eq.' + id, 'PATCH', enrBase);
+        _enr[id] = Object.assign({}, _enr[id], enrBase);
+      } else {
+        var rows = await sbFetch('tender_enrichment', 'POST', Object.assign({ updated_at: new Date().toISOString() }, enrBase), 'return=representation');
+        _enr[id] = (Array.isArray(rows) && rows[0]) ? rows[0] : enrBase;
+      }
+
+      var nom = _noms[id] || { pm: null, supervisor: null };
+      await Promise.all([
+        _upsertNom(id, 'pm',         pmId, nom.pm),
+        _upsertNom(id, 'supervisor', supId, nom.supervisor)
+      ]);
+
+      _editingDetails = null;
+      showToast(structural
+        ? '✓ Details saved — labour plan not auto-rebuilt; review it if needed'
+        : '✓ Details saved');
+      _render();
+    } catch (e) {
+      showToast('Save failed — ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+    }
   }
 
   // ── Track assignment state mutations ───────────────────────
@@ -1537,6 +1647,8 @@
     refresh:                refresh,
     openPanel:              openPanel,
     openConfirmedPanel:     openConfirmedPanel,
+    toggleEditDetails:      toggleEditDetails,
+    saveConfirmedDetails:   saveConfirmedDetails,
     suggestWorkers:         suggestWorkers,
     saveAlloc:              saveAlloc,
     setSiteCode:            setSiteCode,

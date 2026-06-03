@@ -632,8 +632,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.46
+  EQ Solves — Field  v3.10.47
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.47  (Resources: edit confirmed-job details; pipeline shows start date)
+  ────────────────────────────────────────────────────
+   • pipeline-resource.js: confirmed jobs get an "Edit details" block (start
+     date / est hours / duration / peak workers / PM / supervisor / notes) —
+     saves to tender_enrichment (+ nominations). Shared _detailsFields helper
+     with the Needs-Allocation panel. Structural changes warn that the labour
+     plan isn't auto-rebuilt. Cherry-picked from EQ Field v3.5.57.
+   • pipeline.js: cards now show a Start date tag.
 
   CHANGES IN v3.10.46  (Pipeline: filter by estimator + builder)
   ────────────────────────────────────────────────────

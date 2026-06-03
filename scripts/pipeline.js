@@ -275,6 +275,7 @@
 
     // Tags (enrichment + nominations)
     var tags = [];
+    if (enr.start_date_estimated) tags.push('Start ' + enr.start_date_estimated);
     if (enr.hours_estimated)  tags.push('~' + enr.hours_estimated + 'h');
     if (enr.peak_workers)     tags.push(enr.peak_workers + ' workers');
     if (pmName)               tags.push('PM: ' + pmName.split(' ')[0]);
