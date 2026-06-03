@@ -27,6 +27,7 @@
   var _filterDept  = '';
   var _filterVert  = '';
   var _filterValue = 100000; // default: hide <$100k jobs
+  var _filterProb  = 0;      // default: show all probabilities (min %)
   var _loading    = false;
   var _lastImport = null;  // most recent tender_import_runs row
 
@@ -102,6 +103,7 @@
       if (_filterDept && t.department !== _filterDept) return false;
       if (_filterVert && t.vertical  !== _filterVert)  return false;
       if (_filterValue && (t.quote_value || 0) < _filterValue) return false;
+      if (_filterProb  && (t.probability_pct || 0) < _filterProb) return false;
       return true;
     });
 
@@ -128,19 +130,17 @@
       html += '<option value="' + _esc(v) + '"' + (v === _filterVert ? ' selected' : '') + '>' + _esc(v) + '</option>';
     });
     html +=     '</select>';
-    // Value filter
-    var valueOpts = [
-      { label: 'All values',  val: 0       },
-      { label: '≥$100k',      val: 100000  },
-      { label: '≥$250k',      val: 250000  },
-      { label: '≥$500k',      val: 500000  },
-      { label: '≥$1M',        val: 1000000 }
-    ];
-    html +=     '<select class="form-input" title="Filters cards shown in the board by minimum quote value" style="height:32px;font-size:12px;padding:0 8px;width:auto" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
-    valueOpts.forEach(function (o) {
-      html += '<option value="' + o.val + '"' + (o.val === _filterValue ? ' selected' : '') + '>' + _esc(o.label) + '</option>';
-    });
-    html +=     '</select>';
+    // Value + probability sliders (replace the old preset dropdown — v3.10.45)
+    var _maxVal = _tenders.reduce(function (m, t) { return Math.max(m, t.quote_value || 0); }, 1000000);
+    _maxVal = Math.ceil(_maxVal / 50000) * 50000;
+    html += '<div style="display:flex;flex-direction:column;gap:1px;min-width:150px">';
+    html +=   '<label style="font-size:10px;color:var(--ink-3);white-space:nowrap">Min value: <span id="pl-vallbl" style="font-weight:700;color:var(--navy)">' + (_filterValue ? '$' + _fmtK(_filterValue) : 'All') + '</span></label>';
+    html +=   '<input type="range" min="0" max="' + _maxVal + '" step="25000" value="' + _filterValue + '" title="Minimum quote value" style="width:150px;accent-color:#3DA8D8;cursor:pointer" oninput="SKS_PIPELINE.lblVal(this.value)" onchange="SKS_PIPELINE.setValueFilter(+this.value)">';
+    html += '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:1px;min-width:140px">';
+    html +=   '<label style="font-size:10px;color:var(--ink-3);white-space:nowrap">Min probability: <span id="pl-problbl" style="font-weight:700;color:var(--navy)">' + (_filterProb ? _filterProb + '%' : 'Any') + '</span></label>';
+    html +=   '<input type="range" min="0" max="100" step="5" value="' + _filterProb + '" title="Minimum win probability" style="width:140px;accent-color:#3DA8D8;cursor:pointer" oninput="SKS_PIPELINE.lblProb(this.value)" onchange="SKS_PIPELINE.setProbFilter(+this.value)">';
+    html += '</div>';
     html +=   '</div>';
     html +=   '<div style="display:flex;align-items:center;gap:10px">';
     if (_lastImport) html += '<span style="font-size:11px;color:var(--ink-3)" title="' + _esc(_lastImport.file_name || '') + '">Last import: ' + _timeAgo(_lastImport.imported_at) + '</span>';
@@ -266,6 +266,17 @@
       });
       html += '</div>';
     }
+
+    // ── Keep / Discard triage footer (v3.10.45) ─────────────
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--bg-2)">';
+    if (t.reviewed_at) {
+      html += '<span style="font-size:10px;color:#16a34a;font-weight:600" title="Marked reviewed">✓ Reviewed</span>';
+    } else {
+      html += '<button onclick="event.stopPropagation();SKS_PIPELINE.keepJob(\'' + t.id + '\')" style="background:none;border:1px solid var(--border);color:var(--ink-2);font-size:10px;padding:2px 9px;border-radius:5px;cursor:pointer" title="Mark this job as reviewed/kept">Keep</button>';
+    }
+    html += '<div style="flex:1"></div>';
+    html += '<button onclick="event.stopPropagation();SKS_PIPELINE.discardJob(\'' + t.id + '\')" style="background:none;border:1px solid var(--border);color:#dc2626;font-size:10px;padding:2px 9px;border-radius:5px;cursor:pointer" title="Archive — removes from the pipeline">Discard</button>';
+    html += '</div>';
 
     html += '</div>';
     return html;
@@ -510,6 +521,78 @@
   function setDept(v)         { _filterDept  = v;    renderPipeline(); }
   function setVert(v)         { _filterVert  = v;    renderPipeline(); }
   function setValueFilter(v)  { _filterValue = v;    renderPipeline(); }
+  function setProbFilter(v)   { _filterProb  = v;    renderPipeline(); }
+
+  // Live slider labels (no re-render on drag; onchange does the filtering)
+  function lblVal(v)  { var e = document.getElementById('pl-vallbl');  if (e) e.textContent = (+v ? '$' + _fmtK(+v) : 'All'); }
+  function lblProb(v) { var e = document.getElementById('pl-problbl'); if (e) e.textContent = (+v ? v + '%' : 'Any'); }
+
+  // ── Keep / Discard triage ─────────────────────────────────
+  function _rerender() {
+    var el = document.getElementById('page-pipeline');
+    if (el) el.innerHTML = _buildHtml();
+  }
+
+  // BUG-009-safe confirm via the shared #modal-confirm dialog (window.confirm
+  // is unreliable in iOS PWA standalone). Falls back if markup absent.
+  function _plConfirm(title, msg, confirmLabel) {
+    var titleEl = document.getElementById('confirm-title');
+    var msgEl   = document.getElementById('confirm-msg');
+    var cb      = document.getElementById('confirm-action');
+    var xb      = document.querySelector('#modal-confirm .btn-secondary');
+    if (!titleEl || !msgEl || !cb || !xb || typeof openModal !== 'function') {
+      return Promise.resolve(window.confirm((title ? title + '\n\n' : '') + msg));
+    }
+    return new Promise(function (resolve) {
+      titleEl.textContent = title || 'Confirm';
+      msgEl.textContent   = msg;
+      var origX = xb.onclick, origLabel = cb.textContent;
+      cb.textContent = confirmLabel || 'Confirm';
+      function done(val) { closeModal('modal-confirm'); cb.onclick = null; xb.onclick = origX; cb.textContent = origLabel; resolve(val); }
+      cb.onclick = function () { done(true); };
+      xb.onclick = function () { done(false); };
+      openModal('modal-confirm');
+    });
+  }
+
+  async function keepJob(tenderId) {
+    var id = String(tenderId);
+    var t  = _tenders.find(function (x) { return String(x.id) === id; });
+    if (!t) return;
+    var now = new Date().toISOString();
+    try {
+      await sbFetch('tenders?id=eq.' + id, 'PATCH', { reviewed_at: now, updated_at: now });
+      t.reviewed_at = now;
+      showToast('✓ Marked reviewed — ' + (t.job_name || 'job'));
+      _rerender();
+    } catch (e) {
+      showToast('Keep failed — ' + e.message);
+    }
+  }
+
+  async function discardJob(tenderId) {
+    var id    = String(tenderId);
+    var t     = _tenders.find(function (x) { return String(x.id) === id; });
+    var label = (t && t.job_name) ? t.job_name : 'this job';
+    var ok = await _plConfirm(
+      'Discard job',
+      'Discard "' + label + '"? It gets archived and removed from the pipeline. You can bring it back later.',
+      'Discard'
+    );
+    if (!ok) return;
+    var now = new Date().toISOString();
+    try {
+      await sbFetch('tenders?id=eq.' + id, 'PATCH', { archived_at: now, updated_at: now });
+      _tenders = _tenders.filter(function (x) { return String(x.id) !== id; });
+      delete _enrichment[id];
+      delete _noms[id];
+      if (String(_openId) === id) closePanel();
+      showToast('✓ Discarded — ' + label + ' archived');
+      _rerender();
+    } catch (e) {
+      showToast('Discard failed — ' + e.message);
+    }
+  }
 
   // ── Move a tender to a different stage ────────────────────
   // Called from the pill buttons in the slide-out panel.
@@ -578,6 +661,11 @@
     setDept:         setDept,
     setVert:         setVert,
     setValueFilter:  setValueFilter,
+    setProbFilter:   setProbFilter,
+    lblVal:          lblVal,
+    lblProb:         lblProb,
+    keepJob:         keepJob,
+    discardJob:      discardJob,
     moveStage:       moveStage
   };
 })();
