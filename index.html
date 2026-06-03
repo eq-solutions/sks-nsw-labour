@@ -632,8 +632,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.52
+  EQ Solves — Field  v3.10.53
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.53  (Resources: "Supervisor" → "Person in charge")
+  ────────────────────────────────────────────────────
+   • Resource allocation panel — the "Supervisor" field is now "Person in
+     charge" and lists Direct employees as well as Supervisors. Picks are
+     stored with a source tag (capacity_tag) so the two id spaces (people
+     vs managers) never collide. The Pipeline board's Supervisor picker was
+     widened the same way and resolves either source, so the shared
+     nomination stays consistent across both surfaces.
 
   CHANGES IN v3.10.52  (Forecast: a work week is 40 hours, not 38)
   ────────────────────────────────────────────────────

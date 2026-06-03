@@ -678,12 +678,10 @@
     enr = enr || {};
     nom = nom || { pm: null, supervisor: null };
     var pmMgrs = _managers.filter(function (m) { return m.category === 'Project Management'; });
-    var spMgrs = _managers.filter(function (m) { return m.category === 'Supervisor'; });
     if (!pmMgrs.length) pmMgrs = _managers;
-    if (!spMgrs.length) spMgrs = _managers;
 
     var curPm  = nom.pm  && nom.pm.person_id  ? String(nom.pm.person_id)  : '';
-    var curSup = nom.supervisor && nom.supervisor.person_id ? String(nom.supervisor.person_id) : '';
+    var curSup = _picCurVal(nom.supervisor);
 
     var html = '';
     html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">';
@@ -711,11 +709,9 @@
     });
     html += '</select></div>';
 
-    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Supervisor</label>';
+    html += '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Person in charge</label>';
     html += '<select class="form-input" id="ra-sup-' + id + '"><option value="">— not nominated —</option>';
-    spMgrs.forEach(function (m) {
-      html += '<option value="' + m.id + '"' + (String(m.id) === curSup ? ' selected' : '') + '>' + _esc(m.name) + '</option>';
-    });
+    html += _picOptionsHtml(curSup);
     html += '</select></div>';
 
     html += '</div>';
@@ -780,7 +776,7 @@
     var dur     = _intVal('ra-dur-'     + id);
     var workers = _intVal('ra-workers-' + id);
     var pmId    = _intVal('ra-pm-'      + id);
-    var supId   = _intVal('ra-sup-'     + id);
+    var supPic  = _parsePic(_strVal('ra-sup-' + id));
     var notes   = _strVal('ra-notes-'   + id);
 
     if (andConfirm && (!start || !workers)) {
@@ -811,7 +807,7 @@
       var nom = _noms[id] || { pm: null, supervisor: null };
       await Promise.all([
         _upsertNom(id, 'pm',        pmId,  nom.pm),
-        _upsertNom(id, 'supervisor', supId, nom.supervisor)
+        _upsertNom(id, 'supervisor', supPic.id, nom.supervisor, supPic.source)
       ]);
 
       if (andConfirm) {
@@ -838,16 +834,18 @@
     }
   }
 
-  async function _upsertNom(tenderId, role, newId, existing) {
+  async function _upsertNom(tenderId, role, newId, existing, source) {
     var nom = _noms[String(tenderId)] || (_noms[String(tenderId)] = { pm: null, supervisor: null });
     var key = role === 'pm' ? 'pm' : 'supervisor';
+    // capacity_tag flags a people-table id; null = managers (incl. all PMs + legacy supervisors).
+    var tag = source === 'people' ? 'people' : null;
     if (newId && existing) {
-      if (String(existing.person_id) !== String(newId)) {
-        await sbFetch('nominations?id=eq.' + existing.id, 'PATCH', { person_id: newId });
-        nom[key] = Object.assign({}, existing, { person_id: newId });
+      if (String(existing.person_id) !== String(newId) || (existing.capacity_tag || null) !== tag) {
+        await sbFetch('nominations?id=eq.' + existing.id, 'PATCH', { person_id: newId, capacity_tag: tag });
+        nom[key] = Object.assign({}, existing, { person_id: newId, capacity_tag: tag });
       }
     } else if (newId && !existing) {
-      var row = { tender_id: tenderId, person_id: newId, role: role, status: 'pencilled', is_primary: true };
+      var row = { tender_id: tenderId, person_id: newId, role: role, status: 'pencilled', is_primary: true, capacity_tag: tag };
       var res = await sbFetch('nominations', 'POST', row, 'return=representation');
       nom[key] = (Array.isArray(res) && res[0]) ? res[0] : row;
     } else if (!newId && existing) {
@@ -930,7 +928,7 @@
       var enr      = _enr[id] || {};
       var nom      = _noms[id] || { pm: null, supervisor: null };
       var pmN      = nom.pm         ? _mgrName(nom.pm.person_id)         : null;
-      var spN      = nom.supervisor ? _mgrName(nom.supervisor.person_id) : null;
+      var spN      = nom.supervisor ? _picName(nom.supervisor) : null;
       var rows     = _pending[id] || [];
       var isOpen   = _openConfirmedPanel === id;
       var accent   = _tenderColor(id);
@@ -1218,7 +1216,7 @@
     var dur     = _intVal('ra-dur-'     + id);
     var workers = _intVal('ra-workers-' + id);
     var pmId    = _intVal('ra-pm-'      + id);
-    var supId   = _intVal('ra-sup-'     + id);
+    var supPic  = _parsePic(_strVal('ra-sup-' + id));
     var notes   = _strVal('ra-notes-'   + id);
 
     var prev = _enr[id] || {};
@@ -1247,7 +1245,7 @@
       var nom = _noms[id] || { pm: null, supervisor: null };
       await Promise.all([
         _upsertNom(id, 'pm',         pmId, nom.pm),
-        _upsertNom(id, 'supervisor', supId, nom.supervisor)
+        _upsertNom(id, 'supervisor', supPic.id, nom.supervisor, supPic.source)
       ]);
 
       _editingDetails = null;
@@ -1709,6 +1707,70 @@
     if (!personId) return null;
     var m = _managers.find(function (x) { return String(x.id) === String(personId); });
     return m ? m.name : null;
+  }
+
+  // Person-in-charge can be a Supervisor (managers table) OR a Direct
+  // employee (people table). The two tables have independent id spaces, so a
+  // nomination row carries capacity_tag = 'people' when person_id points at
+  // STATE.people; otherwise it's a manager id (legacy rows have a null tag).
+  function _directPeople() {
+    var ppl = (typeof STATE !== 'undefined' && Array.isArray(STATE.people)) ? STATE.people : [];
+    return ppl.filter(function (p) {
+      return !p.archived && (p.group === 'Direct' || p.group === 'SKS Direct');
+    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+  }
+
+  // Resolve a supervisor/PIC nomination row → display name, from the right table.
+  function _picName(nom) {
+    if (!nom || !nom.person_id) return null;
+    if (nom.capacity_tag === 'people') {
+      var ppl = (typeof STATE !== 'undefined' && Array.isArray(STATE.people)) ? STATE.people : [];
+      var p = ppl.find(function (x) { return String(x.id) === String(nom.person_id); });
+      return p ? p.name : null;
+    }
+    return _mgrName(nom.person_id);
+  }
+
+  // Encoded option value ('p:<id>' | 'm:<id>') → { id, source }.
+  function _parsePic(v) {
+    if (!v) return { id: null, source: null };
+    var i = v.indexOf(':');
+    if (i === -1) return { id: parseInt(v, 10) || null, source: 'manager' }; // legacy plain id
+    return {
+      id:     parseInt(v.slice(i + 1), 10) || null,
+      source: v.slice(0, i) === 'p' ? 'people' : 'manager'
+    };
+  }
+
+  // Encoded current value for a supervisor/PIC nomination row.
+  function _picCurVal(nom) {
+    if (!nom || !nom.person_id) return '';
+    return (nom.capacity_tag === 'people' ? 'p:' : 'm:') + nom.person_id;
+  }
+
+  // <option> markup (sans the leading "— not nominated —") for the PIC picker:
+  // Direct employees + Supervisor-category managers, grouped.
+  function _picOptionsHtml(curVal) {
+    var html = '';
+    var dirs = _directPeople();
+    var sups = _managers.filter(function (m) { return m.category === 'Supervisor'; });
+    if (dirs.length) {
+      html += '<optgroup label="Direct employees">';
+      dirs.forEach(function (p) {
+        var v = 'p:' + p.id;
+        html += '<option value="' + v + '"' + (v === curVal ? ' selected' : '') + '>' + _esc(p.name) + '</option>';
+      });
+      html += '</optgroup>';
+    }
+    if (sups.length) {
+      html += '<optgroup label="Supervisors">';
+      sups.forEach(function (m) {
+        var v = 'm:' + m.id;
+        html += '<option value="' + v + '"' + (v === curVal ? ' selected' : '') + '>' + _esc(m.name) + '</option>';
+      });
+      html += '</optgroup>';
+    }
+    return html;
   }
 
   function _esc(s) {

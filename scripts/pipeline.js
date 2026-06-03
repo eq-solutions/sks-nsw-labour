@@ -245,7 +245,7 @@
     var enr = _enrichment[t.id] || {};
     var nom = _noms[t.id] || {};
     var pmName  = nom.pm  && nom.pm.person_id  ? _mgrName(nom.pm.person_id)  : null;
-    var supName = nom.supervisor && nom.supervisor.person_id ? _mgrName(nom.supervisor.person_id) : null;
+    var supName = nom.supervisor && nom.supervisor.person_id ? _picName(nom.supervisor) : null;
 
     var html = '<div data-tender-id="' + t.id + '" onclick="SKS_PIPELINE.openPanel(\'' + t.id + '\')" style="background:#fff;border-radius:10px;border:1px solid var(--border);padding:12px;margin-bottom:8px;cursor:pointer;transition:box-shadow .12s,transform .12s" onmouseenter="this.style.boxShadow=\'0 3px 10px rgba(0,0,0,.1)\';this.style.transform=\'translateY(-1px)\'" onmouseleave="this.style.boxShadow=\'none\';this.style.transform=\'\'">';
 
@@ -328,9 +328,8 @@
     var enr     = _enrichment[t.id] || {};
     var nom     = _noms[t.id] || {};
     var pmMgrs  = _managers.filter(function (m) { return m.category === 'Project Management'; });
-    var supMgrs = _managers.filter(function (m) { return m.category === 'Supervisor'; });
     var currentPmId  = nom.pm  && nom.pm.person_id  ? String(nom.pm.person_id)  : '';
-    var currentSupId = nom.supervisor && nom.supervisor.person_id ? String(nom.supervisor.person_id) : '';
+    var currentSupVal = _picCurVal(nom.supervisor);
 
     var html = '<div style="padding:20px 22px">';
 
@@ -395,9 +394,7 @@
     html +=   '<div style="margin-bottom:20px"><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:4px">Supervisor</label>';
     html +=     '<select class="form-input" id="nom-sup">';
     html +=       '<option value="">— not nominated —</option>';
-    supMgrs.forEach(function (m) {
-      html += '<option value="' + m.id + '"' + (String(m.id) === currentSupId ? ' selected' : '') + '>' + _esc(m.name) + '</option>';
-    });
+    html +=       _picOptionsHtml(currentSupVal);
     html +=     '</select></div>';
 
     html +=   '<button class="btn btn-primary btn-sm" id="panel-save-btn" style="width:100%" onclick="SKS_PIPELINE.savePanel(\'' + t.id + '\')">Save</button>';
@@ -422,7 +419,7 @@
       updated_at:           new Date().toISOString()
     };
     var pmId  = _intVal('nom-pm');
-    var supId = _intVal('nom-sup');
+    var supPic = _parsePic(_strVal('nom-sup'));
 
     try {
       // Enrichment upsert
@@ -439,7 +436,7 @@
       var nom = _noms[tenderId];
       await Promise.all([
         _upsertNom(tenderId, 'pm',         pmId,  nom.pm),
-        _upsertNom(tenderId, 'supervisor',  supId, nom.supervisor)
+        _upsertNom(tenderId, 'supervisor',  supPic.id, nom.supervisor, supPic.source)
       ]);
       showToast('Saved');
       _refreshCard(tenderId);
@@ -485,7 +482,7 @@
   // ── Save nominations ──────────────────────────────────────
   async function saveNominations(tenderId) {
     var pmId  = _intVal('nom-pm');
-    var supId = _intVal('nom-sup');
+    var supPic = _parsePic(_strVal('nom-sup'));
 
     var btn = document.getElementById('nom-save-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -496,7 +493,7 @@
     try {
       await Promise.all([
         _upsertNom(tenderId, 'pm',         pmId,  nom.pm),
-        _upsertNom(tenderId, 'supervisor',  supId, nom.supervisor)
+        _upsertNom(tenderId, 'supervisor',  supPic.id, nom.supervisor, supPic.source)
       ]);
       showToast('Nominations saved');
       _refreshCard(tenderId);
@@ -507,17 +504,19 @@
     if (btn) { btn.disabled = false; btn.textContent = 'Save nominations'; }
   }
 
-  async function _upsertNom(tenderId, role, newId, existing) {
+  async function _upsertNom(tenderId, role, newId, existing, source) {
     var nom = _noms[tenderId] || (_noms[tenderId] = { pm: null, supervisor: null });
     var key = role === 'pm' ? 'pm' : 'supervisor';
+    // capacity_tag flags a people-table id; null = managers (incl. all PMs + legacy supervisors).
+    var tag = source === 'people' ? 'people' : null;
 
     if (newId && existing) {
-      if (String(existing.person_id) !== String(newId)) {
-        await sbFetch('nominations?id=eq.' + existing.id, 'PATCH', { person_id: newId });
-        nom[key] = Object.assign({}, existing, { person_id: newId });
+      if (String(existing.person_id) !== String(newId) || (existing.capacity_tag || null) !== tag) {
+        await sbFetch('nominations?id=eq.' + existing.id, 'PATCH', { person_id: newId, capacity_tag: tag });
+        nom[key] = Object.assign({}, existing, { person_id: newId, capacity_tag: tag });
       }
     } else if (newId && !existing) {
-      var row = { tender_id: tenderId, person_id: newId, role: role, status: 'pencilled', is_primary: true };
+      var row = { tender_id: tenderId, person_id: newId, role: role, status: 'pencilled', is_primary: true, capacity_tag: tag };
       var res = await sbFetch('nominations', 'POST', row, 'return=representation');
       nom[key] = (Array.isArray(res) && res[0]) ? res[0] : row;
     } else if (!newId && existing) {
@@ -651,6 +650,58 @@
   function _findTender(id)   { return _tenders.find(function (t) { return t.id === id; }) || null; }
   function _mgrName(id)      { var m = _managers.find(function (m) { return String(m.id) === String(id); }); return m ? m.name : ''; }
   function _uniq(a)          { return a.filter(function (v, i, s) { return s.indexOf(v) === i; }); }
+
+  // Supervisor / person-in-charge can be a Supervisor (managers) OR a Direct
+  // employee (people). The nomination row carries capacity_tag = 'people' when
+  // person_id points at STATE.people; null/absent = a manager id (incl. legacy).
+  // Kept consistent with the Resources "Person in charge" picker.
+  function _directPeople() {
+    var ppl = (typeof STATE !== 'undefined' && Array.isArray(STATE.people)) ? STATE.people : [];
+    return ppl.filter(function (p) {
+      return !p.archived && (p.group === 'Direct' || p.group === 'SKS Direct');
+    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+  }
+  function _picName(nom) {
+    if (!nom || !nom.person_id) return '';
+    if (nom.capacity_tag === 'people') {
+      var ppl = (typeof STATE !== 'undefined' && Array.isArray(STATE.people)) ? STATE.people : [];
+      var p = ppl.find(function (x) { return String(x.id) === String(nom.person_id); });
+      return p ? p.name : '';
+    }
+    return _mgrName(nom.person_id);
+  }
+  function _parsePic(v) {
+    if (!v) return { id: null, source: null };
+    var i = v.indexOf(':');
+    if (i === -1) return { id: parseInt(v, 10) || null, source: 'manager' };
+    return { id: parseInt(v.slice(i + 1), 10) || null, source: v.slice(0, i) === 'p' ? 'people' : 'manager' };
+  }
+  function _picCurVal(nom) {
+    if (!nom || !nom.person_id) return '';
+    return (nom.capacity_tag === 'people' ? 'p:' : 'm:') + nom.person_id;
+  }
+  function _picOptionsHtml(curVal) {
+    var html = '';
+    var dirs = _directPeople();
+    var sups = _managers.filter(function (m) { return m.category === 'Supervisor'; });
+    if (dirs.length) {
+      html += '<optgroup label="Direct employees">';
+      dirs.forEach(function (p) {
+        var v = 'p:' + p.id;
+        html += '<option value="' + v + '"' + (v === curVal ? ' selected' : '') + '>' + _esc(p.name) + '</option>';
+      });
+      html += '</optgroup>';
+    }
+    if (sups.length) {
+      html += '<optgroup label="Supervisors">';
+      sups.forEach(function (m) {
+        var v = 'm:' + m.id;
+        html += '<option value="' + v + '"' + (v === curVal ? ' selected' : '') + '>' + _esc(m.name) + '</option>';
+      });
+      html += '</optgroup>';
+    }
+    return html;
+  }
 
   function _numVal(id) { var e = document.getElementById(id); return (e && e.value !== '') ? parseFloat(e.value) : null; }
   function _intVal(id) { var e = document.getElementById(id); return (e && e.value !== '') ? parseInt(e.value, 10) : null; }
