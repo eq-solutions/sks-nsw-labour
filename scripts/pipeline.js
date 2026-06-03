@@ -26,6 +26,8 @@
   var _openId     = null;
   var _filterDept  = '';
   var _filterVert  = '';
+  var _filterEst     = '';   // estimator filter
+  var _filterBuilder = '';   // builder (= client) filter
   var _filterValue = 100000; // default: hide <$100k jobs
   var _filterProb  = 0;      // default: show all probabilities (min %)
   var _loading    = false;
@@ -102,13 +104,17 @@
       if (t.stage === 'confirmed') return false; // handled separately below
       if (_filterDept && t.department !== _filterDept) return false;
       if (_filterVert && t.vertical  !== _filterVert)  return false;
+      if (_filterEst && t.estimator !== _filterEst) return false;
+      if (_filterBuilder && t.client !== _filterBuilder) return false;
       if (_filterValue && (t.quote_value || 0) < _filterValue) return false;
       if (_filterProb  && (t.probability_pct || 0) < _filterProb) return false;
       return true;
     });
 
-    var depts     = _uniq(_tenders.map(function (t) { return t.department; }).filter(Boolean)).sort();
-    var verticals = _uniq(_tenders.map(function (t) { return t.vertical;   }).filter(Boolean)).sort();
+    var depts      = _uniq(_tenders.map(function (t) { return t.department; }).filter(Boolean)).sort();
+    var verticals  = _uniq(_tenders.map(function (t) { return t.vertical;   }).filter(Boolean)).sort();
+    var estimators = _uniq(_tenders.map(function (t) { return t.estimator;  }).filter(Boolean)).sort();
+    var builders   = _uniq(_tenders.map(function (t) { return t.client;     }).filter(Boolean)).sort();
     var confirmed = _tenders.filter(function (t) { return t.stage === 'confirmed'; });
 
     var html = '';
@@ -128,6 +134,20 @@
     html +=       '<option value="">All verticals</option>';
     verticals.forEach(function (v) {
       html += '<option value="' + _esc(v) + '"' + (v === _filterVert ? ' selected' : '') + '>' + _esc(v) + '</option>';
+    });
+    html +=     '</select>';
+    // Estimator filter
+    html +=     '<select class="form-input" title="Filter by estimator" style="height:32px;font-size:12px;padding:0 8px;width:auto;max-width:170px" onchange="SKS_PIPELINE.setEst(this.value)">';
+    html +=       '<option value="">All estimators</option>';
+    estimators.forEach(function (e) {
+      html += '<option value="' + _esc(e) + '"' + (e === _filterEst ? ' selected' : '') + '>' + _esc(e) + '</option>';
+    });
+    html +=     '</select>';
+    // Builder (client) filter
+    html +=     '<select class="form-input" title="Filter by builder (client)" style="height:32px;font-size:12px;padding:0 8px;width:auto;max-width:170px" onchange="SKS_PIPELINE.setBuilder(this.value)">';
+    html +=       '<option value="">All builders</option>';
+    builders.forEach(function (b) {
+      html += '<option value="' + _esc(b) + '"' + (b === _filterBuilder ? ' selected' : '') + '>' + _esc(b) + '</option>';
     });
     html +=     '</select>';
     // Value + probability sliders (replace the old preset dropdown — v3.10.45)
@@ -255,6 +275,7 @@
 
     // Tags (enrichment + nominations)
     var tags = [];
+    if (enr.start_date_estimated) tags.push('Start ' + enr.start_date_estimated);
     if (enr.hours_estimated)  tags.push('~' + enr.hours_estimated + 'h');
     if (enr.peak_workers)     tags.push(enr.peak_workers + ' workers');
     if (pmName)               tags.push('PM: ' + pmName.split(' ')[0]);
@@ -520,6 +541,8 @@
   // ── Filter setters (called from inline onchange) ──────────
   function setDept(v)         { _filterDept  = v;    renderPipeline(); }
   function setVert(v)         { _filterVert  = v;    renderPipeline(); }
+  function setEst(v)          { _filterEst     = v;  renderPipeline(); }
+  function setBuilder(v)      { _filterBuilder = v;  renderPipeline(); }
   function setValueFilter(v)  { _filterValue = v;    renderPipeline(); }
   function setProbFilter(v)   { _filterProb  = v;    renderPipeline(); }
 
@@ -660,6 +683,8 @@
     savePanel:       savePanel,
     setDept:         setDept,
     setVert:         setVert,
+    setEst:          setEst,
+    setBuilder:      setBuilder,
     setValueFilter:  setValueFilter,
     setProbFilter:   setProbFilter,
     lblVal:          lblVal,
