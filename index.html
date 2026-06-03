@@ -632,8 +632,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.50
+  EQ Solves — Field  v3.10.51
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.51  (Timesheets: stop the jump-to-top on cell entry)
+  ────────────────────────────────────────────────────
+   • renderCurrentPage() rebuilds the active page on every realtime echo /
+     poll / post-write refresh. It preserved nothing, so a background update
+     mid-entry dropped focus to <body> — and the next Tab jumped to the top
+     of the document. Now wrapped to capture + restore scroll position, the
+     focused cell (by its data-* identity), and the caret across the rebuild.
+     Focus restore is best-effort (try/catch). Fixes Timesheets entry and
+     benefits every data-entry page.
 
   CHANGES IN v3.10.50  (Resources: "This week" strip — plan vs roster reality)
   ────────────────────────────────────────────────────
@@ -3830,7 +3840,7 @@ function showPage(id) {
   } catch (e) { /* analytics must never break navigation */ }
 }
 
-function renderCurrentPage() {
+function _renderCurrentPageDispatch() {
   if      (currentPage === 'dashboard')  renderDashboard();
   else if (currentPage === 'roster')     { renderRosterWeekNav(); renderRoster(); }
   else if (currentPage === 'schedule')   renderSchedule();
@@ -3851,6 +3861,47 @@ function renderCurrentPage() {
   else if (currentPage === 'home')              { if (typeof renderHomeScreen === 'function') renderHomeScreen(); }
   else if (currentPage === 'safety')            { if (typeof loadSafety === 'function') loadSafety(); }
   else if (currentPage === 'safety-dashboard')  { if (typeof loadSafetyDashboard === 'function') loadSafetyDashboard(); }
+}
+
+// renderCurrentPage rebuilds the active page's innerHTML. It's called not just
+// on navigation but on every realtime echo / poll / post-write refresh — so a
+// background update while someone is entering timesheets would clamp the scroll
+// to the top and drop their focus mid-row. Preserve scroll + focus + caret
+// across the rebuild so live updates never disturb data entry.
+function renderCurrentPage() {
+  const scroller = document.querySelector('.page:not(.hidden)');
+  const top      = scroller ? scroller.scrollTop : 0;
+  const hsEl     = document.querySelector('.ts-table-scroll');
+  const left     = hsEl ? hsEl.scrollLeft : 0;
+
+  // Capture focused cell by its stable data-* identity (survives the rebuild)
+  const af = document.activeElement;
+  let focusKey = null, caret = null;
+  if (af && af.dataset && af.dataset.name && af.dataset.day && af.dataset.type) {
+    focusKey = { name: af.dataset.name, group: af.dataset.group, week: af.dataset.week,
+                 day: af.dataset.day, type: af.dataset.type, slot: af.dataset.slot || '0' };
+    if (typeof af.selectionStart === 'number') caret = af.selectionStart;
+  }
+
+  _renderCurrentPageDispatch();
+
+  // Restore focus first (preventScroll), then scroll — so focus() can't re-jump
+  if (focusKey) {
+    try {
+      const esc = (window.CSS && CSS.escape) ? CSS.escape : (s) => String(s).replace(/["\\]/g, '\\$&');
+      let sel = '[data-name="' + esc(focusKey.name) + '"][data-day="' + focusKey.day +
+                '"][data-type="' + focusKey.type + '"][data-slot="' + focusKey.slot + '"]';
+      if (focusKey.week) sel += '[data-week="' + esc(focusKey.week) + '"]';
+      const tgt = document.querySelector(sel);
+      if (tgt) {
+        tgt.focus({ preventScroll: true });
+        if (caret != null && tgt.setSelectionRange) { try { tgt.setSelectionRange(caret, caret); } catch (e) {} }
+      }
+    } catch (e) { /* focus restore is best-effort — never break the render */ }
+  }
+  if (scroller && top) scroller.scrollTop = top;
+  const hsEl2 = document.querySelector('.ts-table-scroll');
+  if (hsEl2 && left) hsEl2.scrollLeft = left;
 }
 
 // ── Week controls ─────────────────────────────────────────────

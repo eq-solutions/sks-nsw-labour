@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.51 — Timesheets: stop the jump-to-top on cell entry
+
+**Date:** 2026-06-03
+**Scope:** `index.html` (`renderCurrentPage`)
+
+- Filling a timesheet cell jumped the page to the top. Cause: `renderCurrentPage()` rebuilds the active page's innerHTML and is called on every realtime echo, poll, and post-write refresh — preserving nothing. A background update mid-entry dropped focus to `<body>`, and the next Tab started from the top of the document (the "jump").
+- Fix: split the dispatch into `_renderCurrentPageDispatch()` and wrap `renderCurrentPage()` to capture + restore, across the rebuild: the active `.page` scroll position (and any `.ts-table-scroll` horizontal scroll), the focused cell (re-found by its `data-name`/`-group`/`-week`/`-day`/`-type`/`-slot`), and the caret (`selectionStart`). Focus restore uses `focus({preventScroll:true})` and is wrapped in try/catch so it can never break a render.
+- Applies to all data-entry pages, not just Timesheets.
+
+---
+
 # v3.10.50 — Resources: "This week" strip — plan vs roster reality
 
 **Date:** 2026-06-03
