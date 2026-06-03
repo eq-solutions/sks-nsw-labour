@@ -20,6 +20,8 @@
   var _managers           = [];
   var _people             = [];
   var _pending            = {};   // tenderId → [pending_schedule rows] (includes pushed rows in-session)
+  var _deployedWk         = 0;    // distinct people actually deployed on the live roster THIS week
+  var _thisWeekStr        = '';   // current Mon-snapped week string
   var _headcount          = 0;
   var _openPanel          = null;
   var _openConfirmedPanel = null;
@@ -99,13 +101,35 @@
   // ── Data load ─────────────────────────────────────────────
   async function _load() {
     try {
+      // Current week, Monday-snapped — matches how the schedule weeks are keyed
+      var nowD = new Date(); nowD.setHours(0, 0, 0, 0);
+      var back = nowD.getDay() === 0 ? 6 : nowD.getDay() - 1;
+      nowD.setDate(nowD.getDate() - back);
+      _thisWeekStr = _toWeekStr(nowD);
+
       var results = await Promise.all([
         sbFetch('tenders?stage=in.(won,confirmed)&archived_at=is.null&below_threshold=eq.false&order=quote_value.desc.nullslast&limit=500'),
         sbFetch('tender_enrichment?select=*&limit=1000'),
         sbFetch('nominations?select=*&limit=2000'),
         sbFetch('people?select=id,name&archived=eq.false&order=name&limit=1000'),
-        sbFetch('pending_schedule?select=*&confirmed_at=is.null&limit=5000')
+        sbFetch('pending_schedule?select=*&confirmed_at=is.null&limit=5000'),
+        // Non-fatal: a roster-fetch failure must not blank the whole planning page —
+        // degrade to "0 on the roster" rather than killing the load.
+        sbFetch('schedule?week=eq.' + _thisWeekStr + '&select=name,mon,tue,wed,thu,fri&limit=5000')
+          .catch(function () { return []; })
       ]);
+
+      // People actually DEPLOYED on the live roster this week — distinct names with a
+      // site on any weekday. Same source the Dashboard "Site Breakdown" reads. This is
+      // the real headcount on the board; per-job attribution waits for site codes (B).
+      var _depSeen = {};
+      _deployedWk = 0;
+      (Array.isArray(results[5]) ? results[5] : []).forEach(function (row) {
+        if (_depSeen[row.name]) return;
+        if (!(row.mon || row.tue || row.wed || row.thu || row.fri)) return;
+        _depSeen[row.name] = true;
+        _deployedWk++;
+      });
 
       _tenders = Array.isArray(results[0]) ? results[0] : [];
 
@@ -385,10 +409,50 @@
           totals[w] += e.peak_workers;
         }
       }
-      bands.push({ name: t.job_name || ('Job ' + t.id), weeks: weeks });
+      var weeksLeft = Math.max(0, Math.ceil((end - NOW) / WEEK));
+      bands.push({
+        id:        t.id,
+        ref:       t.external_ref || '',
+        name:      t.job_name || ('Job ' + t.id),
+        client:    t.client || '',
+        start:     start,
+        end:       end,
+        peak:      e.peak_workers,
+        weeksLeft: weeksLeft,
+        weeks:     weeks
+      });
     });
 
     return { bands: bands, totals: totals, labels: labels };
+  }
+
+  // ── "This week" strip — plan (allocated) vs reality (deployed on the roster) ──
+  // Aggregate only. Per-job attribution waits for site codes on jobs (phase B);
+  // until then we don't pretend to know which roster rows belong to which job.
+  function _rightNowBlock(data) {
+    var NOW   = new Date(); NOW.setHours(0, 0, 0, 0);
+    var bands = data.bands;
+
+    // Started = actually running now (not bucket-overlap with a near-future start)
+    var started   = bands.filter(function (b) { return b.start <= NOW && b.end > NOW; });
+    var allocated = started.reduce(function (s, b) { return s + b.peak; }, 0);
+    var free      = _headcount > 0 ? Math.max(0, _headcount - _deployedWk) : null;
+
+    var cells = [];
+    cells.push(['#86efac', started.length, started.length === 1 ? 'job live' : 'jobs live']);
+    cells.push(['#93c5fd', allocated, 'allocated']);
+    cells.push(['#e2e8f0', _deployedWk, 'on the roster']);
+    if (free !== null) cells.push(['#e2e8f0', free, 'free']);
+
+    var html = '<div style="margin-bottom:24px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px">';
+    html += '<span style="font-size:10px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,0.4)">THIS WEEK</span>';
+    cells.forEach(function (c) {
+      html += '<span style="white-space:nowrap;font-size:13px;color:rgba(255,255,255,0.55)">' +
+        '<b style="color:' + c[0] + ';font-size:15px;font-weight:700">' + _esc(String(c[1])) + '</b> ' + _esc(c[2]) +
+        '</span>';
+    });
+    html += '</div>';
+    return html;
   }
 
   function _capacitySection() {
@@ -460,6 +524,9 @@
       html += '</div>';
     });
     html += '</div>';
+
+    // ── "Right now" block — this-week strip + current-projects table
+    html += _rightNowBlock(data);
 
     // ── Chart directly on dark background
     html += '<div style="display:flex;gap:8px;align-items:flex-end">';

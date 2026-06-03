@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.50 — Resources: "This week" strip — plan vs roster reality
+
+**Date:** 2026-06-03
+**Scope:** `scripts/pipeline-resource.js`
+
+- The capacity-planning hero now opens with a **THIS WEEK** strip: `jobs live` · `allocated` (planned peak demand of started jobs) · `on the roster` (real headcount deployed this week, read from the live `schedule` table — the same source the Dashboard "Site Breakdown" uses) · `free` (headcount − deployed).
+- Aggregate only by design. Per-job "allocated vs on-site" attribution is deferred (phase B) — it needs a site code persisted on each job; the pipeline→roster push flow isn't used here, so there's no reliable job↔roster link yet.
+- The new roster fetch is non-fatal (`.catch → []`): a roster-query failure degrades to "0 on the roster" instead of blanking the planning page.
+
+---
+
 # v3.10.43 — Edit Roster: show team filter bar
 
 **Date:** 2026-06-01

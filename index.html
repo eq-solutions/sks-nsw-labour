@@ -632,8 +632,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.49
+  EQ Solves — Field  v3.10.50
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.50  (Resources: "This week" strip — plan vs roster reality)
+  ────────────────────────────────────────────────────
+   • Capacity hero now opens with a THIS WEEK line: jobs live · allocated
+     (planned demand of started jobs) · on the roster (real headcount deployed
+     this week, read from the live schedule — same source as the Dashboard) ·
+     free (headcount − deployed). Aggregate only; per-job allocated-vs-on-site
+     attribution waits on site codes per job (phase B). Roster fetch is
+     non-fatal — degrades to "0 on the roster" rather than blanking the page.
 
   CHANGES IN v3.10.49  (Pipeline import: normalise email-form estimators)
   ────────────────────────────────────────────────────
