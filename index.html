@@ -632,19 +632,23 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.56
+  EQ Solves — Field  v3.10.57
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.10.56  (My Schedule: job numbers done this week)
+  CHANGES IN v3.10.57  (My Schedule: per-day job number on each card)
   ────────────────────────────────────────────────────
-   • My Schedule gains a footer under the day cards — "Job numbers done
-     this week" — so the team (direct, apprentice, labour hire) can see
-     which jobs got booked, without timesheet access. Shared visibility:
-     every job with hours logged that week, regardless of who entered it.
-   • Collapsed by default (reads as a quiet summary); tap to expand. Each
-     row shows the job number, its description, head-count, and total
-     hours. Scoped to the week you're viewing; open/closed state persists
-     as you step weeks. Hidden entirely when no jobs are booked.
+   • Each day card on My Schedule now shows a 🔧 chip with the job number
+     YOU booked that day — pulled from your own timesheet. Split days
+     (e.g. D5384:4|D5385:4) show as separate chips, each with its hours.
+     This is the per-day detail the individual actually wants.
+   • Removed the v3.10.56 "Job numbers done this week" crew-total footer —
+     a whole-week crew aggregate wasn't useful at the individual level.
+     The per-day chips replace it.
+
+  CHANGES IN v3.10.56  (My Schedule: job numbers done this week — superseded)
+  ────────────────────────────────────────────────────
+   • Added a crew-total footer under the day cards; replaced in v3.10.57
+     by the per-day job chip on each card.
 
   CHANGES IN v3.10.55  (Mobile: Team week button + crew on My Schedule)
   ────────────────────────────────────────────────────

@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.57 — My Schedule: per-day job number on each card
+
+**Date:** 2026-06-05
+**Scope:** `scripts/roster.js`
+
+**The refinement.** v3.10.56's crew-total footer answered "what jobs did the whole crew book this week" — but the individual looking at their own schedule wants "what job did *I* work each day." This puts that on each day card.
+
+**What's new.** Each day card on My Schedule now shows a 🔧 chip with the job number **you** booked that day, read from your own timesheet (`getTsEntry(name, week)`). Split cells like `D5384:4|D5385:4` render as separate chips, each tagged with its hours. Only shows on working days where a job is booked.
+
+**Removed.** The v3.10.56 "Job numbers done this week" crew-total footer (`_scheduleCrewJobs`, `_scheduleJobsSection`, `toggleScheduleJobs`) — a whole-week crew aggregate wasn't useful at the individual level. The per-day chips replace it.
+
+---
+
 # v3.10.56 — My Schedule: job numbers done this week
 
 **Date:** 2026-06-05
