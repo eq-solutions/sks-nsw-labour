@@ -705,13 +705,28 @@ function renderSchedule() {
     const isOff = !s || isLeave(s);
     const st    = STATE.sites.find(x => x.abbr === s);
 
-    // Co-workers at same site this day — show only when total crew ≤ 3
+    // Co-workers at same site this day. v3.10.55: was capped to ≤2 (bigger
+    // crews showed nobody). Now lists the crew — first 4 names, then a tappable
+    // "+N more" that reveals the rest inline.
     const coworkers = (!isOff && s)
       ? (STATE.schedule || [])
           .filter(r => r.name !== name && r.week === week && r[d] === s)
           .map(r => r.name)
+          .sort((a, b) => a.localeCompare(b))
       : [];
-    const showCoworkers = coworkers.length >= 1 && coworkers.length <= 2;
+    let coworkerHtml = '';
+    if (coworkers.length) {
+      const _CW_CAP = 4;
+      const shown = coworkers.slice(0, _CW_CAP).map(n => esc(n)).join(', ');
+      const extra = coworkers.slice(_CW_CAP);
+      const moreId = 'cw-' + i;
+      const moreHtml = extra.length
+        ? `<span id="${moreId}" style="display:none">, ${extra.map(n => esc(n)).join(', ')}</span>`
+          + `<button onclick="var x=document.getElementById('${moreId}');x.style.display='inline';this.style.display='none'" `
+          + `style="margin-left:6px;border:none;background:none;padding:0;color:var(--navy);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">+${extra.length} more</button>`
+        : '';
+      coworkerHtml = `<div style="font-size:11px;color:var(--ink-3);margin-top:3px;display:flex;align-items:flex-start;gap:5px"><span>🤝</span><span>${shown}${moreHtml}</span></div>`;
+    }
 
     const wrapExtra = isToday ? 'border-left:3px solid #1F335C;' : isPast ? 'opacity:0.5;' : '';
 
@@ -728,7 +743,7 @@ function renderSchedule() {
           : `<div style="font-size:13.5px;font-weight:700;color:${color}">${esc(fullN)}</div>
              ${addr ? `<div style="font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:5px"><span>📍</span>${esc(addr)}</div>` : ''}
              ${fullN !== s && s ? `<div style="font-size:10px;color:var(--ink-4);font-family:monospace;margin-top:1px">${esc(s)}</div>` : ''}
-             ${showCoworkers ? `<div style="font-size:11px;color:var(--ink-3);margin-top:3px;display:flex;align-items:center;gap:5px"><span>🤝</span>${coworkers.map(n => esc(n)).join(', ')}</div>` : ''}`
+             ${coworkerHtml}`
         }
       </div>
       ${!isOff && addr
@@ -959,4 +974,80 @@ function _preloadAdjacentWeeks(opts, currIdx) {
   // Just ensures schedule entries for adjacent weeks are in STATE.schedule
   // For demo tenant this is a no-op. For live tenants, data is already loaded globally.
   // Future: could lazy-load specific weeks here.
+}
+
+// ── Team Week overlay (mobile) ────────────────────────────────
+// v3.10.55: read-only "who's on each job this week" view for staff, opened
+// from the home split button. Self-contained full-screen overlay — no nav
+// page to register or gate. Shows Mon–Fri grouped site → crew for one week,
+// with ‹ › to step weeks (using the global week list).
+function openTeamWeek(weekArg) {
+  closeTeamWeek();
+  const week      = weekArg || STATE.currentWeek;
+  const days      = ['mon','tue','wed','thu','fri'];
+  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  const colorMap  = { blue:'#2563EB', green:'#16A34A', amber:'#D97706', red:'#DC2626', grey:'#94A3B8', purple:'#7C77B9', empty:'#CBD5E1' };
+  const weekDates = (typeof getWeekDates === 'function') ? getWeekDates(week) : ['','','','',''];
+  const rows      = (STATE.schedule || []).filter(r => r.week === week);
+
+  let bodyHtml = '';
+  days.forEach((d, i) => {
+    const bySite = {};
+    rows.forEach(r => {
+      const code = (r[d] || '').trim();
+      if (!code || (typeof isLeave === 'function' && isLeave(code))) return; // skip off / leave
+      (bySite[code] = bySite[code] || []).push(r.name);
+    });
+    const codes = Object.keys(bySite).sort((a, b) => getSiteName(a).localeCompare(getSiteName(b)));
+    bodyHtml += `<div style="margin-top:16px;display:flex;align-items:baseline;gap:8px">
+        <span style="font-size:13px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px">${dayLabels[i]}</span>
+        <span style="font-size:11px;color:var(--ink-4)">${weekDates[i] || ''}</span>
+      </div>`;
+    if (!codes.length) {
+      bodyHtml += `<div style="font-size:12px;color:var(--ink-4);padding:6px 2px">No-one rostered</div>`;
+    } else {
+      codes.forEach(code => {
+        const names = bySite[code].slice().sort((a, b) => a.localeCompare(b));
+        const color = colorMap[siteColor(code)] || '#94A3B8';
+        bodyHtml += `<div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid ${color};border-radius:var(--radius);padding:10px 12px;margin-top:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <span style="font-size:13px;font-weight:700;color:var(--navy)">${esc(getSiteName(code))}</span>
+              <span style="font-size:11px;font-weight:700;color:var(--ink-3);background:var(--surface-2);border-radius:10px;padding:1px 9px">${names.length}</span>
+            </div>
+            <div style="font-size:12px;color:var(--ink-2);margin-top:5px;line-height:1.5">${names.map(n => esc(n)).join(', ')}</div>
+          </div>`;
+      });
+    }
+  });
+
+  // Week nav from the global week list
+  const sel   = document.getElementById('globalWeek');
+  const opts  = sel ? [...sel.options].map(o => o.value) : [];
+  const idx   = opts.indexOf(week);
+  const prevW = idx > 0 ? opts[idx - 1] : null;
+  const nextW = (idx > -1 && idx < opts.length - 1) ? opts[idx + 1] : null;
+  const label = (typeof formatWeekLabel === 'function') ? formatWeekLabel(week) : week;
+  const navBtn = (target, glyph) =>
+    `<button onclick="${target ? `openTeamWeek('${target}')` : ''}" ${target ? '' : 'disabled'} ` +
+    `style="border:none;background:rgba(255,255,255,${target ? '.15' : '.05'});color:#fff;width:32px;height:32px;border-radius:8px;font-size:16px;flex-shrink:0;cursor:${target ? 'pointer' : 'default'}">${glyph}</button>`;
+
+  const ov = document.createElement('div');
+  ov.id = 'teamweek-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:var(--surface-2);display:flex;flex-direction:column';
+  ov.innerHTML =
+    `<div style="flex-shrink:0;background:var(--navy);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:8px">
+       <button onclick="closeTeamWeek()" aria-label="Close" style="border:none;background:rgba(255,255,255,.15);color:#fff;width:32px;height:32px;border-radius:8px;font-size:17px;cursor:pointer;flex-shrink:0">✕</button>
+       <div style="flex:1;min-width:0">
+         <div style="font-size:15px;font-weight:800">Team week</div>
+         <div style="font-size:11px;opacity:.8">${esc(label)}</div>
+       </div>
+       ${navBtn(prevW, '‹')}${navBtn(nextW, '›')}
+     </div>
+     <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 16px 36px">${bodyHtml}</div>`;
+  document.body.appendChild(ov);
+}
+
+function closeTeamWeek() {
+  const o = document.getElementById('teamweek-overlay');
+  if (o) o.remove();
 }
