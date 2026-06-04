@@ -1,5 +1,19 @@
 # EQ Solves Field — Changelog
 
+# v3.10.54 — Timesheets: stop the jump-to-top + Direct-employee TAFE
+
+**Date:** 2026-06-04
+**Scope:** `scripts/timesheets.js`
+
+**Jump-to-top on data entry (real fix).** `onTsCellChange()` committed each cell then called `renderTimesheets()`, rebuilding the entire `#ts-content` table. That destroyed the input the user was in — focus dropped to `<body>`, so the next Tab started from the top of the page. The v3.10.51 fix only covered re-renders routed through `renderCurrentPage()` (realtime/poll/week-change), not this direct path.
+- Now the single-cell path updates **in place** and never rebuilds: `saveTsCell()` already refreshed the row total via `updateTsRowTotal()`, which now *also* syncs the row's left-stripe and uses the same completion test as the full render. `onTsCellChange()` drops `renderTimesheets()` and just calls `updateTsStats()`.
+- Trade-off: the per-day ↻ repeat chip and the "Fill Week" banner now refresh on the next full render (navigation / week change) rather than instantly. Neither is focus-critical during entry.
+
+**Direct employees showing "TAFE".** Education codes (`TAFE`/`TRAINING`) auto-muted the timesheet cell for everyone and labelled it "🎓 TAFE". Direct / Labour-Hire staff never attend TAFE — a training course is logged against a job code by the supervisor.
+- `_tsDayStatus()` now only mutes education days for `group === 'Apprentice'`. For everyone else the day stays a normal workable cell. (Surfaced by Yura Kovakov, a Direct employee with a `TRAINING` roster day.)
+
+---
+
 # v3.10.53 — Resources: "Supervisor" → "Person in charge"
 
 **Date:** 2026-06-04

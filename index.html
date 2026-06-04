@@ -632,8 +632,21 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.53
+  EQ Solves — Field  v3.10.54
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.54  (Timesheets: stop the jump + Direct-employee TAFE)
+  ────────────────────────────────────────────────────
+   • Entry no longer jumps to the top after each field. onTsCellChange()
+     used to rebuild the whole table on every committed cell, destroying the
+     focused input — focus fell to <body>, so the next Tab started from the
+     top. Now the row total + left-stripe update IN PLACE (updateTsRowTotal)
+     and the table isn't rebuilt, so focus/caret/scroll stay put. The ↻
+     repeat chip + Fill-Week banner refresh on the next full render.
+   • Direct/Labour-Hire staff no longer auto-show "TAFE". Education codes
+     (TAFE/TRAINING) only mute the timesheet for apprentices now; for direct
+     employees a training day stays a normal workable cell — the supervisor
+     logs it against a job code (e.g. Yura, who had a TRAINING roster day).
 
   CHANGES IN v3.10.53  (Resources: "Supervisor" → "Person in charge")
   ────────────────────────────────────────────────────
