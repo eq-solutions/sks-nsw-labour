@@ -760,7 +760,8 @@ function renderSchedule() {
     ${weekNav}
     ${allSameBanner}
     <div id="schedule-day-cards" style="max-width:600px;display:flex;flex-direction:column;gap:8px">${dayRows}</div>
-    ${person && person.phone ? `<div style="margin-top:14px;max-width:600px"><a class="contact-phone" href="tel:${person.phone}" style="display:inline-flex">📞 ${person.phone}</a></div>` : ''}`;
+    ${person && person.phone ? `<div style="margin-top:14px;max-width:600px"><a class="contact-phone" href="tel:${person.phone}" style="display:inline-flex">📞 ${person.phone}</a></div>` : ''}
+    ${_scheduleJobsSection(week)}`;
 
   // ── Swipe to change week (mobile) ─────────────────────────
   const cards = document.getElementById('schedule-day-cards');
@@ -772,6 +773,84 @@ function renderSchedule() {
       if (Math.abs(dx) > 60) slideScheduleWeek(dx < 0 ? 1 : -1);
     }, { passive: true });
   }
+}
+
+// ── Crew jobs done this week (My Schedule footer) ──────────────
+// v3.10.56: the team (direct, apprentice, labour hire) can't see the
+// timesheets supervisors fill in — this surfaces which job numbers got
+// booked across the crew for the week being viewed. Shared visibility:
+// every job with hours logged that week, regardless of who logged it.
+// Collapsed by default so it reads as a quiet summary footer under the
+// day cards; the open/closed state persists across week navigation.
+let _scheduleJobsOpen = false;
+
+// Aggregate every timesheet for `week` into per-job totals. Mirrors the
+// parsing in exportTsByJob() — handles split cells like "J1:4|J2:4".
+function _scheduleCrewJobs(week) {
+  const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const byJob = {};
+  const add = (name, code, hrs) => {
+    code = String(code || '').trim();
+    if (!code) return;
+    const j = byJob[code] || (byJob[code] = { job: code, hrs: 0, people: new Set() });
+    j.hrs += hrs;
+    if (name) j.people.add(name);
+  };
+  (STATE.timesheets || []).filter(r => r.week === week).forEach(r => {
+    DAYS.forEach(d => {
+      const raw = r[d + '_job'];
+      if (!raw) return;
+      if (String(raw).includes('|')) {
+        String(raw).split('|').forEach(part => {
+          const seg = part.split(':');
+          add(r.name, seg[0], parseFloat(seg[1]) || 0);
+        });
+      } else {
+        add(r.name, raw, parseFloat(r[d + '_hrs']) || 0);
+      }
+    });
+  });
+  return Object.values(byJob).sort((a, b) => b.hrs - a.hrs || a.job.localeCompare(b.job));
+}
+
+function _scheduleJobsSection(week) {
+  const jobs = _scheduleCrewJobs(week);
+  if (!jobs.length) return '';            // nothing booked yet → no footer
+  const rows = jobs.map((j, idx) => {
+    const meta = (typeof jobNumbers !== 'undefined' ? jobNumbers : []).find(x => x.number === j.job);
+    const desc = meta && meta.description ? meta.description : '';
+    const ppl  = j.people.size;
+    const hrs  = +j.hrs.toFixed(2);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;${idx ? 'border-top:1px solid var(--border);' : ''}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--navy);font-family:monospace">${esc(j.job)}</div>
+        ${desc ? `<div style="font-size:11px;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(desc)}</div>` : ''}
+        <div style="font-size:10px;color:var(--ink-4);margin-top:2px">${ppl} ${ppl === 1 ? 'person' : 'people'}</div>
+      </div>
+      <div style="flex-shrink:0;font-size:13px;font-weight:700;color:var(--navy);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:4px 9px">${hrs}h</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div style="max-width:600px;margin-top:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)">
+      <button onclick="toggleScheduleJobs()" style="width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--surface-2);border:none;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:16px;flex-shrink:0">🔧</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--navy)">Job numbers done this week</div>
+          <div style="font-size:10.5px;color:var(--ink-3);margin-top:1px">${jobs.length} job${jobs.length === 1 ? '' : 's'} booked across the crew · tap to ${_scheduleJobsOpen ? 'hide' : 'view'}</div>
+        </div>
+        <span id="sched-jobs-chev" style="font-size:12px;color:var(--ink-3);transition:transform .15s;flex-shrink:0;${_scheduleJobsOpen ? 'transform:rotate(180deg)' : ''}">▾</span>
+      </button>
+      <div id="sched-jobs-body" style="display:${_scheduleJobsOpen ? 'block' : 'none'};border-top:1px solid var(--border)">${rows}</div>
+    </div>`;
+}
+
+function toggleScheduleJobs() {
+  _scheduleJobsOpen = !_scheduleJobsOpen;
+  const body = document.getElementById('sched-jobs-body');
+  const chev = document.getElementById('sched-jobs-chev');
+  if (body) body.style.display = _scheduleJobsOpen ? 'block' : 'none';
+  if (chev) chev.style.transform = _scheduleJobsOpen ? 'rotate(180deg)' : 'none';
 }
 
 // ── Staff jobs panel (for staff TS self-entry) ─────────────────
