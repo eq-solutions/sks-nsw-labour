@@ -285,6 +285,13 @@
           '<div><div class="eqh-tile-title">Toolbox Talk</div><div class="eqh-tile-sub">Log a talk</div></div>' +
         '</button>' +
       '</div>' +
+      // v3.10.55: split button — Team week (whole crew per job) | Who's with me (own week).
+      '<div style="display:flex;margin-top:12px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">' +
+        '<button onclick="eqhTeamWeekTap()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:14px 10px;border:none;border-right:1px solid var(--border);background:var(--surface);color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">' +
+          '<span style="font-size:16px">👥</span> Team week</button>' +
+        '<button onclick="eqhTileTap(\'schedule\')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:14px 10px;border:none;background:var(--surface);color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">' +
+          '<span style="font-size:16px">🤝</span> Who\'s with me</button>' +
+      '</div>' +
       '<div class="eqh-footer">EQ Field · v' + esc(version) + '</div>';
 
     try {
@@ -398,6 +405,14 @@
     if (typeof window.openLeaveRequest === 'function') window.openLeaveRequest();
   }
 
+  function eqhTeamWeekTap() {
+    try {
+      if (window.EQ_ANALYTICS && EQ_ANALYTICS.capture) EQ_ANALYTICS.capture('home_tile_tapped', { tile: 'team-week' });
+    } catch (e) {}
+    if (typeof window.openTeamWeek === 'function') window.openTeamWeek();
+    else if (typeof window.mobileNav === 'function') window.mobileNav('schedule');
+  }
+
   // ── Tile tap router ──────────────────────────────────────────
 
   function eqhTileTap(target) {
@@ -483,6 +498,7 @@
   // ── Expose ───────────────────────────────────────────────────
   window.renderHomeScreen   = renderHomeScreen;
   window.eqhTileTap         = eqhTileTap;
+  window.eqhTeamWeekTap     = eqhTeamWeekTap;
   window.eqhSafetyTap       = eqhSafetyTap;
   window.eqhLeaveTap        = eqhLeaveTap;
   window.eqhSetWeek         = eqhSetWeek;

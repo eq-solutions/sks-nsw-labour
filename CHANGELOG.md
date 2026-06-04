@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.55 — Mobile: Team week button + crew on My Schedule
+
+**Date:** 2026-06-04
+**Scope:** `scripts/home.js`, `scripts/roster.js`
+
+**Team week (new).** The staff mobile home gets a split button below the tiles:
+- **👥 Team week** → `openTeamWeek()` — a self-contained full-screen overlay listing who's on each job, day by day, for the week (grouped site → crew, with a head-count per site). ‹ › step through weeks via the global week list. Read-only; no nav page registered/gated (overlay appended to `<body>`, closed via ✕).
+- **🤝 Who's with me** → opens the existing My Schedule page.
+
+**Crew on My Schedule.** The per-day co-worker line was capped to ≤2 names — crews of 4+ showed *nobody*. It now lists the crew on your site that day: first 4 names, then a tappable **"+N more"** that reveals the rest inline (`roster.js`).
+
+---
+
 # v3.10.54 — Timesheets: stop the jump-to-top + Direct-employee TAFE
 
 **Date:** 2026-06-04
