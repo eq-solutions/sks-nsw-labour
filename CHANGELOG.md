@@ -1,5 +1,22 @@
 # EQ Solves Field — Changelog
 
+# v3.10.56 — My Schedule: job numbers done this week
+
+**Date:** 2026-06-05
+**Scope:** `scripts/roster.js`
+
+**The gap.** Supervisors fill the timesheets; the team (direct, apprentice, labour hire) had no way to see which job numbers were being booked. This adds that visibility on the surface they already use — My Schedule.
+
+**What's new.** A collapsible footer sits under the day cards: **"Job numbers done this week"**. It aggregates every timesheet for the week being viewed into per-job totals — handling split cells like `J1:4|J2:4` (same parsing as `exportTsByJob()`). Each row shows the job number, its description (from `job_numbers`), a head-count, and total hours, sorted by hours.
+
+- **Shared visibility** — every job with hours logged that week, regardless of who entered it.
+- **Quiet by default** — collapsed so it doesn't compete with the day cards; tap to expand. Open/closed state persists as you step weeks (`_scheduleJobsOpen`).
+- **Scoped to the viewed week** and hidden entirely when nothing is booked.
+
+New in `roster.js`: `_scheduleCrewJobs(week)`, `_scheduleJobsSection(week)`, `toggleScheduleJobs()`.
+
+---
+
 # v3.10.55 — Mobile: Team week button + crew on My Schedule
 
 **Date:** 2026-06-04
