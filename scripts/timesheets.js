@@ -236,8 +236,36 @@ function updateTsRowTotal(name, week) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = total > 0 ? total + 'h' : '—';
-  // v3.4.26: red if any hours but week incomplete, else green/empty.
-  el.className   = 'ts-total-col ' + (total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-red' : 'ts-total-empty');
+  // v3.10.54: mirror renderTimesheets()'s completion test exactly (every
+  // workable day ≥8h AND total ≥40h) so the in-place update and a full
+  // re-render agree — previously this used a looser `total >= 40` and the
+  // colour flipped on the next navigation.
+  const _wd          = ['mon','tue','wed','thu','fri'];
+  const _ds          = _wd.map(d => _tsDayStatus(name, week, d));
+  const _workableHrs = _wd.filter((_, i) => _ds[i].workable)
+                          .map(d => Number((entry && entry[d + '_hrs']) || 0));
+  const _hasAnyHrs   = _workableHrs.some(h => h > 0);
+  const _isComplete  = _hasAnyHrs && _workableHrs.every(h => h >= 8) && total >= 40;
+  el.className   = 'ts-total-col ' + (_isComplete ? 'ts-total-green' : _hasAnyHrs ? 'ts-total-red' : 'ts-total-empty');
+
+  // v3.10.54: keep the row's left-stripe in sync IN PLACE. The entry handler
+  // used to call renderTimesheets() on every committed cell, which rebuilt the
+  // whole table and destroyed the focused input — focus fell to <body> so the
+  // next Tab jumped to the top of the page. Updating the stripe here (and the
+  // total above) lets us skip that rebuild entirely. Mirrors the stripe logic
+  // in renderTimesheets().
+  if (person) {
+    const rowEl = el.closest('tr');
+    if (rowEl) {
+      const rs = _tsRowStatus(person, week, entry);
+      const stripe =
+          rs.kind === 'complete'                         ? 'box-shadow:inset 4px 0 0 0 var(--green);'
+        : (rs.kind === 'on-leave' || rs.kind === 'tafe') ? 'box-shadow:inset 4px 0 0 0 var(--purple);background:rgba(124,119,185,.04);'
+        : rs.kind === 'empty'                            ? 'box-shadow:inset 4px 0 0 0 var(--ink-4);'
+        :                                                  'box-shadow:inset 4px 0 0 0 var(--red);background:rgba(220,38,38,.025);';
+      rowEl.setAttribute('style', stripe);
+    }
+  }
 }
 
 // ── Save cell ─────────────────────────────────────────────────
@@ -324,21 +352,17 @@ function onTsCellChange(el) {
   updateLastUpdated();
   auditLog(`${day.toUpperCase()} → ${combinedJob || 'cleared'} / ${combinedHrs || '—'}h`, 'Timesheet', name, week);
 
-  // Preserve scroll position — renderTimesheets() rebuilds the entire
-  // #ts-content table, which momentarily shrinks the page and clamps the
-  // scroll back to the top. v3.10.41: the vertical scroll lives on the
-  // `.page` container (#page-timesheets, overflow-y:auto), NOT window —
-  // so the v3.10.40 fix that restored window.scrollY did nothing and the
-  // jump-to-top persisted. Capture/restore the real scroller.
-  const _pageEl = document.getElementById('page-timesheets');
-  const _pst    = _pageEl ? _pageEl.scrollTop : 0;
-  const _sy     = window.scrollY;
-  const _sx     = document.querySelector('.ts-table-scroll')?.scrollLeft ?? 0;
-  renderTimesheets();
-  if (_pageEl) _pageEl.scrollTop = _pst;
-  window.scrollTo(0, _sy);
-  const _tss = document.querySelector('.ts-table-scroll');
-  if (_tss) _tss.scrollLeft = _sx;
+  // v3.10.54: update derived display IN PLACE — do NOT rebuild the table.
+  // saveTsCell() already refreshed this row's total + left-stripe via
+  // updateTsRowTotal(); here we only refresh the weekly stats. Previously this
+  // called renderTimesheets() on every committed field, rebuilding the whole
+  // #ts-content table and destroying the focused input — focus dropped to
+  // <body>, so the next Tab jumped to the top of the page (the long-standing
+  // "window keeps jumping" complaint). Leaving the inputs untouched keeps
+  // focus, caret and scroll exactly where the user is. The per-day ↻ repeat
+  // chip and the "Fill Week" banner refresh on the next full render
+  // (navigation / week change) — neither is focus-critical mid-entry.
+  updateTsStats();
 }
 
 // ── Split row toggle ──────────────────────────────────────────
@@ -978,7 +1002,15 @@ function _tsDayStatus(name, week, day) {
   const code = (s && s[day] ? s[day] : '').trim().toUpperCase();
   if (!code) return { workable: true };
   if (typeof isEducation === 'function' && isEducation(code)) {
-    return { workable: false, tafeLabel: code };
+    // v3.10.54: education (TAFE/TRAINING) only mutes the timesheet for
+    // APPRENTICES — their course days are logged on the employer portal, not
+    // here. Direct / Labour-Hire staff never go to TAFE; a training course is
+    // entered against a job code by the supervisor, so the day stays a normal
+    // workable cell (don't auto-mute it as "TAFE").
+    const _grp = (typeof STATE !== 'undefined' && Array.isArray(STATE.people))
+      ? (STATE.people.find(pp => pp.name === name) || {}).group : null;
+    if (_grp === 'Apprentice') return { workable: false, tafeLabel: code };
+    return { workable: true };
   }
   if (typeof isLeave === 'function' && isLeave(code)) {
     return { workable: false, leaveLabel: code };
