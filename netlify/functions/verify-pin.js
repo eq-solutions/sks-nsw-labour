@@ -10,15 +10,17 @@
 const crypto = require('crypto');
 
 // ── Config from env vars (no fallbacks — fail explicitly) ────
-const SECRET_SALT = process.env.EQ_SECRET_SALT;
-const SB_URL      = process.env.AUDIT_SB_URL;
-const SB_KEY      = process.env.AUDIT_SB_KEY;
+const SECRET_SALT         = process.env.EQ_SECRET_SALT;
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET; // Shell-minted JWT verification (Phase 3)
+const SB_URL              = process.env.AUDIT_SB_URL;
+const SB_KEY              = process.env.AUDIT_SB_KEY;
 
 if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
 
 // ── Allowed origins for CORS ─────────────────────────────────
 const ALLOWED_ORIGINS = [
   'https://sks-nsw-labour.netlify.app',
+  'https://sks-field.netlify.app',
   'https://eq-solves-field.netlify.app',
   'http://localhost:8888',
   'http://localhost:3000',
@@ -26,7 +28,12 @@ const ALLOWED_ORIGINS = [
 
 function corsHeaders(event) {
   const origin = event.headers['origin'] || event.headers['Origin'] || '';
-  const allowed = ALLOWED_ORIGINS.some(o => origin === o || origin.endsWith('--sks-nsw-labour.netlify.app') || origin.endsWith('--eq-solves-field.netlify.app'));
+  const allowed = ALLOWED_ORIGINS.some(o =>
+    origin === o ||
+    origin.endsWith('--sks-nsw-labour.netlify.app') ||
+    origin.endsWith('--sks-field.netlify.app') ||
+    origin.endsWith('--eq-solves-field.netlify.app')
+  );
   return {
     'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Headers': 'Content-Type, x-eq-token',
@@ -66,6 +73,51 @@ async function logAttempt(name, success, ip, detail) {
       })
     });
   } catch (e) { /* non-blocking */ }
+}
+
+// ── Canonical role helpers ────────────────────────────────────
+const EQ_ROLE_KEYS       = ['manager', 'supervisor', 'employee', 'apprentice', 'labour_hire'];
+const FIELD_DISPATCH_ROLES = new Set(['manager', 'supervisor']);
+
+// ── Supabase JWT helpers (Phase 3 — Shell token-exchange path) ─
+// token-exchange.ts mints a 3-part HS256 JWT; the 2-part HMAC shell token
+// is the legacy path. Auto-detect so both work during the transition.
+function isSupabaseJwt(token) {
+  if (typeof token !== 'string') return false;
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const header = JSON.parse(
+      Buffer.from(parts[0].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString()
+    );
+    return header.alg === 'HS256' && header.typ === 'JWT';
+  } catch (e) { return false; }
+}
+
+// Verifies a Shell-minted Supabase HS256 JWT against SUPABASE_JWT_SECRET.
+// Returns the decoded claims on success, null on any failure.
+function verifySupabaseJwt(token) {
+  try {
+    const secret = SUPABASE_JWT_SECRET;
+    if (!secret) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const signingInput = headerB64 + '.' + payloadB64;
+    const expectedSig = crypto
+      .createHmac('sha256', secret)
+      .update(signingInput)
+      .digest('base64')
+      .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    if (expectedSig.length !== sigB64.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sigB64))) return null;
+    const payloadJson = Buffer.from(
+      payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64'
+    ).toString();
+    const claims = JSON.parse(payloadJson);
+    if (typeof claims.exp !== 'number' || claims.exp * 1000 < Date.now()) return null;
+    return claims;
+  } catch (e) { return null; }
 }
 
 // ── Token signing & verification ─────────────────────────────
@@ -140,7 +192,28 @@ exports.handler = async (event) => {
     }
 
     // ── EQ Shell iframe handoff ──────────────────────────────
+    // Phase 3: auto-detect Supabase JWT (3-part, from token-exchange) vs
+    // legacy HMAC shell token (2-part, from mint-iframe-token).
     if (body.action === 'verify-shell-token') {
+      if (isSupabaseJwt(body.token)) {
+        const claims = verifySupabaseJwt(body.token);
+        if (claims) {
+          const emailClaim = (claims.app_metadata && claims.app_metadata.email) || '';
+          const name = emailClaim ? emailClaim.split('@')[0] : (claims.sub || 'unknown');
+          const rawRole = (claims.app_metadata && claims.app_metadata.eq_role) || 'employee';
+          const eq_role = EQ_ROLE_KEYS.includes(rawRole) ? rawRole : 'employee';
+          const isPlatformAdmin = !!(claims.app_metadata && claims.app_metadata.is_platform_admin);
+          const role = (FIELD_DISPATCH_ROLES.has(eq_role) || isPlatformAdmin) ? 'supervisor' : 'staff';
+          const sessionToken = signToken(name, role, Date.now() + (7 * 24 * 60 * 60 * 1000));
+          await logAttempt(name, true, ip, 'supabase-jwt:shell');
+          return {
+            statusCode: 200, headers,
+            body: JSON.stringify({ valid: true, name, role, eq_role, tenant_slug: null, sessionToken })
+          };
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
+      }
+
       const data = verifyShellToken(body.token);
       if (data) {
         const detail = 'shell-token' + (data.tenant_slug ? (':' + data.tenant_slug) : '');
