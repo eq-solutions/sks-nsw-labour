@@ -93,16 +93,22 @@ Honestly scoped: sks-canonical today has **no Field schema** — it hosts `sks_q
 
 ---
 
-## Build status (sks-labour slice)
+## Build status
 
 | Item | Repo | State |
 |---|---|---|
-| A2 verify-pin canonical_id passthrough | this app | built |
-| C1 capture eq_canonical_id | this app | built |
-| C2 resolver overwrites eq_logged_in_name | this app | built |
-| C3 fallback to code gate | this app | built (resolver no-ops) |
-| Gate 0 env parity check | Netlify | **pending — manual** |
-| A1 shell-token mint carries canonical_user_id | eq-shell | **pending — other repo** |
-| B1/B2 provisioning + dedupe | eq-shell + eq-canonical | **pending — other repo** |
+| A2 verify-pin carries canonical_id + phone | this app | ✅ done (v3.10.58/59) |
+| C1 capture eq_canonical_id + eq_canonical_phone | this app | ✅ done |
+| C2 resolver by canonical_id → phone → name | this app | ✅ done, verified live |
+| C3 fallback to code gate | this app | ✅ done (resolver no-ops) |
+| Re-sync people.canonical_id := workers.id (28, by phone) | sks-labour data | ✅ done 2026-06-06 (snapshotted, idempotent) |
+| verify-pin deployed on SKS site | Netlify | ✅ confirmed live |
+| Gate 0 — EQ_SECRET_SALT parity (+ rotating-salt check) | Netlify | **pending — human (secret value)** |
+| A1 shell-token mint carries workers.id + phone | eq-shell | **ready — drop-in: `eq-shell-A1-token-mint.md`** |
+| B1/B2 provisioning + dedupe at approval time | eq-shell + eq-canonical | **pending — other repo** |
+| Triage 11 (10 not-in-pipeline + 1 no-phone) | ops/data | **pending — manual identity** |
+| Deploy v3.10.59 to SKS site | this app | **held — explicit instruction required** |
 
-The slice is **forward-compatible and inert** until eq-shell A1 lands: with no `canonical_user_id` in the token, `eq_canonical_id` is never set, the resolver no-ops, and the shared-code gate behaves exactly as before.
+**Coverage after re-sync:** 28 bridge by UUID now; ~20 invite-only by phone (as their workers/invite exists); 11 need manual identity.
+
+The committed slice is **forward-compatible and inert** until eq-shell A1 lands AND Gate 0 passes: with no `canonical_id`/`phone` in the token, the resolver no-ops and the shared-code gate is unchanged.
