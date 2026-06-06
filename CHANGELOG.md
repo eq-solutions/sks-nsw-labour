@@ -1,5 +1,40 @@
 # EQ Solves Field — Changelog
 
+# v3.10.59 — Cards→Field SSO: phone fallback + canonical_id re-sync
+
+**Date:** 2026-06-06
+**Scope:** `index.html`, `scripts/auth.js`, `netlify/functions/verify-pin.js`, `docs/merge/*` + sks-labour data
+
+**The completion.** v3.10.58 made `canonical_id` the join key but a live audit found two problems: `people.canonical_id` was **orphaned** (matched no identity row anywhere), and the real canonical identity is eq-canonical `public.workers`, linked by **phone**. This release fixes both and adds a phone fallback so the bridge covers more of the crew.
+
+**Data fix.** `people.canonical_id` re-synced to the real `workers.id` for the **28** active people whose phone uniquely matches exactly one eq-canonical worker (collision-guarded, snapshotted, idempotent). Orphaned values on non-matching rows left untouched. Forward + rollback: `docs/merge/canonical_id_resync_2026-06-06.sql`.
+
+**Code.**
+- `_resolveCanonicalPerson()` now resolves by `canonical_id` first, then **phone (last-9)** — covering the ~20 invite-only workers who have a canonical identity but no `people.canonical_id` yet.
+- `verify-pin` carries `phone` through the `verify-shell-token`/`verify-token` paths and into the session token; `auth.js` stores/clears `eq_canonical_phone`.
+
+**Coverage.** 28 bridge immediately by UUID; ~20 more by phone as/when invited-workers exist; 11 (10 not-in-pipeline + 1 no-phone) need manual identity. Still inert until eq-shell mints `#sh=` tokens carrying `workers.id` or `phone` (see `docs/merge/cards-field-sso-runbook.md`). Not deployed.
+
+---
+
+# v3.10.58 — Cards→Field SSO: resolve login by canonical_id
+
+**Date:** 2026-06-06
+**Scope:** `index.html`, `scripts/auth.js`, `netlify/functions/verify-pin.js`, `docs/merge/cards-field-sso-runbook.md`
+
+**The bridge.** Cards onboards SKS workers into a shared canonical identity (eq-canonical `shell_control.users`, phone-OTP). This app, by contrast, has no per-user auth — login is a shared code plus a name pick, and a person is resolved by **name string**. The two never met: `people.canonical_id` was synced (49/60) but unread. This is Phase C of the bridge — the sks-labour slice that makes `canonical_id` the deterministic join key.
+
+**What's new.**
+- **Resolve by canonical_id.** When a worker arrives via an EQ Shell `#sh=` handoff carrying a canonical identity id, `initApp` resolves their `people` row by `people.canonical_id` and adopts that row's exact `name` as `eq_logged_in_name`. This bridges the canonical id onto the existing name-keyed roster/timesheet layer — **no rewrite of that layer.**
+- **Token plumbing.** `verify-pin` carries `canonical_id` through the `verify-shell-token` and `verify-token` (remember-me) paths, and bakes it into the 7-day session token so a reload re-resolves the same person.
+- **Capture + clear.** `auth.js` stores `eq_canonical_id` on both server-token paths and clears it on logout.
+
+**Backwards-compatible.** With no `canonical_id` (the shared-code gate), the resolver no-ops and name-based login is exactly as before. The slice is **inert until the eq-shell token mint (Phase A1) ships** — until then no token carries a canonical id, so nothing changes for current users.
+
+**Verified.** Against live sks-labour data: a session with a wrong name + a real `canonical_id` self-corrected to the right person; a session with no `canonical_id` left the name untouched; console clean. Full plan + cross-repo specs (eq-shell A1, eq-canonical provisioning, the later sks-canonical migration): `docs/merge/cards-field-sso-runbook.md`.
+
+---
+
 # v3.10.57 — My Schedule: per-day job number on each card
 
 **Date:** 2026-06-05
