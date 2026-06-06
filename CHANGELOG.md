@@ -1,5 +1,22 @@
 # EQ Solves Field — Changelog
 
+# v3.10.59 — Cards→Field SSO: phone fallback + canonical_id re-sync
+
+**Date:** 2026-06-06
+**Scope:** `index.html`, `scripts/auth.js`, `netlify/functions/verify-pin.js`, `docs/merge/*` + sks-labour data
+
+**The completion.** v3.10.58 made `canonical_id` the join key but a live audit found two problems: `people.canonical_id` was **orphaned** (matched no identity row anywhere), and the real canonical identity is eq-canonical `public.workers`, linked by **phone**. This release fixes both and adds a phone fallback so the bridge covers more of the crew.
+
+**Data fix.** `people.canonical_id` re-synced to the real `workers.id` for the **28** active people whose phone uniquely matches exactly one eq-canonical worker (collision-guarded, snapshotted, idempotent). Orphaned values on non-matching rows left untouched. Forward + rollback: `docs/merge/canonical_id_resync_2026-06-06.sql`.
+
+**Code.**
+- `_resolveCanonicalPerson()` now resolves by `canonical_id` first, then **phone (last-9)** — covering the ~20 invite-only workers who have a canonical identity but no `people.canonical_id` yet.
+- `verify-pin` carries `phone` through the `verify-shell-token`/`verify-token` paths and into the session token; `auth.js` stores/clears `eq_canonical_phone`.
+
+**Coverage.** 28 bridge immediately by UUID; ~20 more by phone as/when invited-workers exist; 11 (10 not-in-pipeline + 1 no-phone) need manual identity. Still inert until eq-shell mints `#sh=` tokens carrying `workers.id` or `phone` (see `docs/merge/cards-field-sso-runbook.md`). Not deployed.
+
+---
+
 # v3.10.58 — Cards→Field SSO: resolve login by canonical_id
 
 **Date:** 2026-06-06

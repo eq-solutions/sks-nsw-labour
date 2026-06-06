@@ -137,9 +137,9 @@ exports.handler = async (event) => {
     if (body.action === 'verify-token') {
       const data = verifyToken(body.token);
       if (data) {
-        const extra = data.canonical_id ? { canonical_id: data.canonical_id } : null;
+        const extra = (data.canonical_id || data.phone) ? { canonical_id: data.canonical_id || null, phone: data.phone || null } : null;
         const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000), extra);
-        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, canonical_id: data.canonical_id || null, sessionToken }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, canonical_id: data.canonical_id || null, phone: data.phone || null, sessionToken }) };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }
@@ -156,11 +156,14 @@ exports.handler = async (event) => {
         // the same person without another Shell handoff. Absent on legacy
         // tokens — the client just falls back to name-based resolution.
         const canonicalId = data.canonical_user_id || data.canonical_id || null;
-        const extra = canonicalId ? { canonical_id: canonicalId } : null;
+        // phone is the fallback join key for workers who have a canonical
+        // identity but no people.canonical_id yet (invite-only / pre-claim).
+        const canonicalPhone = data.phone || null;
+        const extra = (canonicalId || canonicalPhone) ? { canonical_id: canonicalId, phone: canonicalPhone } : null;
         const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000), extra);
         return {
           statusCode: 200, headers,
-          body: JSON.stringify({ valid: true, name: data.name, role: data.role, tenant_slug: data.tenant_slug || null, canonical_id: canonicalId, sessionToken })
+          body: JSON.stringify({ valid: true, name: data.name, role: data.role, tenant_slug: data.tenant_slug || null, canonical_id: canonicalId, phone: canonicalPhone, sessionToken })
         };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };

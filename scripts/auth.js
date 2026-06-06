@@ -77,6 +77,7 @@ async function _consumeShellToken() {
     // Absent on legacy shell tokens — resolver no-ops and name resolution
     // remains the fallback.
     if (data.canonical_id) sessionStorage.setItem('eq_canonical_id', data.canonical_id);
+    if (data.phone) sessionStorage.setItem('eq_canonical_phone', data.phone);
     if (data.role === 'supervisor') {
       sessionStorage.setItem('eq_auto_admin', '1');
       // Pre-set supervisor state so sidebar paints unlocked from first frame,
@@ -520,6 +521,7 @@ async function checkAccess() {
           // Phase C1: preserve the canonical identity across remember-me
           // restores so SSO users keep deterministic person resolution.
           if (data.canonical_id) sessionStorage.setItem('eq_canonical_id', data.canonical_id);
+          if (data.phone) sessionStorage.setItem('eq_canonical_phone', data.phone);
           if (data.sessionToken) {
             sessionStorage.setItem('eq_session_token', data.sessionToken);
             localStorage.setItem('eq_agent_token',     data.sessionToken);
@@ -539,6 +541,7 @@ function logoutUser() {
   sessionStorage.removeItem(ACCESS_KEY);
   sessionStorage.removeItem('eq_logged_in_name');
   sessionStorage.removeItem('eq_canonical_id');
+  sessionStorage.removeItem('eq_canonical_phone');
   sessionStorage.removeItem('eq_auto_admin');
   sessionStorage.removeItem('eq_agency');
   sessionStorage.removeItem('eq_session_token');
