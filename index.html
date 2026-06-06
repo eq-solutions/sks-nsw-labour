@@ -632,8 +632,21 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.57
+  EQ Solves — Field  v3.10.58
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.58  (Cards→Field SSO: resolve login by canonical_id)
+  ────────────────────────────────────────────────────
+   • Phase C of the Cards→Field SSO bridge (sks-labour slice). When a worker
+     arrives via an EQ Shell #sh= handoff carrying a canonical identity id,
+     initApp now resolves their people row by people.canonical_id and adopts
+     that row's exact name as eq_logged_in_name — so the existing name-keyed
+     roster/timesheet layer needs no rewrite.
+   • verify-pin carries canonical_id through the shell-token + remember-me
+     paths and into the 7-day session token (survives reload).
+   • Fully backwards-compatible: with no canonical_id (shared-code gate),
+     the resolver no-ops and name-based login is unchanged. Inert until the
+     eq-shell token mint (A1) ships. Runbook: docs/merge/cards-field-sso-runbook.md
 
   CHANGES IN v3.10.57  (My Schedule: per-day job number on each card)
   ────────────────────────────────────────────────────
@@ -4203,8 +4216,37 @@ window.addEventListener('beforeprint', function() {
 });
 
 // ── Init ──────────────────────────────────────────────────────
+// Phase C2 (Cards→Field SSO): resolve the canonical identity carried by a
+// Shell #sh= login to its people row, and adopt that row's exact name as
+// eq_logged_in_name. This bridges the canonical_id join key onto the existing
+// name-keyed roster/timesheet layer with no rewrite. No-ops when there's no
+// canonical_id (shared-code gate users) so name-based resolution is unchanged.
+// Forward-compatible: inert until eq-shell mints tokens carrying canonical_id.
+async function _resolveCanonicalPerson() {
+  let cid = null;
+  try { cid = sessionStorage.getItem('eq_canonical_id'); } catch (e) { return; }
+  if (!cid) return;
+  try {
+    // STATE.people is loaded with select=* so canonical_id is present.
+    let row = (STATE.people || []).find(p => p.canonical_id === cid);
+    if (!row) {
+      const rows = await sbFetch('people?canonical_id=eq.' + encodeURIComponent(cid) + '&select=id,name&limit=1');
+      row = rows && rows[0];
+    }
+    if (row && row.name) {
+      sessionStorage.setItem('eq_logged_in_name', row.name);
+      console.info('EQ[auth] resolved canonical identity → ' + row.name);
+    } else {
+      console.warn('EQ[auth] canonical_id has no matching people row — using name fallback');
+    }
+  } catch (e) {
+    console.warn('EQ[auth] canonical person resolve failed:', e && e.message || e);
+  }
+}
+
 async function initApp() {
   await loadFromSupabase();
+  await _resolveCanonicalPerson();   // Phase C2 — before any name-keyed render
 
   // For mobile staff: show the home screen immediately after schedule data
   // is ready — don't make them wait for supervisor-only loads (leave queue,

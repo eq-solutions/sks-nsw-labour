@@ -69,8 +69,12 @@ async function logAttempt(name, success, ip, detail) {
 }
 
 // ── Token signing & verification ─────────────────────────────
-function signToken(name, role, expiresAt) {
-  const payload = JSON.stringify({ name, role, exp: expiresAt });
+function signToken(name, role, expiresAt, extra) {
+  // `extra` carries optional claims (e.g. { canonical_id }) so the 7-day
+  // session token preserves the canonical identity across reloads. Older
+  // tokens without it stay valid — verifyToken just returns undefined for
+  // the missing field and the client falls back to name-based resolution.
+  const payload = JSON.stringify(Object.assign({ name, role, exp: expiresAt }, extra || {}));
   const sig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
   return Buffer.from(payload).toString('base64') + '.' + sig;
 }
@@ -133,8 +137,9 @@ exports.handler = async (event) => {
     if (body.action === 'verify-token') {
       const data = verifyToken(body.token);
       if (data) {
-        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
-        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
+        const extra = data.canonical_id ? { canonical_id: data.canonical_id } : null;
+        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000), extra);
+        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, canonical_id: data.canonical_id || null, sessionToken }) };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }
@@ -145,10 +150,17 @@ exports.handler = async (event) => {
       if (data) {
         const detail = 'shell-token' + (data.tenant_slug ? (':' + data.tenant_slug) : '');
         await logAttempt(data.name, true, ip, detail);
-        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
+        // canonical_user_id (eq-canonical shell_control.users.id) is the
+        // deterministic join key into Field's people.canonical_id. Pass it
+        // through and persist it in the session token so a reload re-resolves
+        // the same person without another Shell handoff. Absent on legacy
+        // tokens — the client just falls back to name-based resolution.
+        const canonicalId = data.canonical_user_id || data.canonical_id || null;
+        const extra = canonicalId ? { canonical_id: canonicalId } : null;
+        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000), extra);
         return {
           statusCode: 200, headers,
-          body: JSON.stringify({ valid: true, name: data.name, role: data.role, tenant_slug: data.tenant_slug || null, sessionToken })
+          body: JSON.stringify({ valid: true, name: data.name, role: data.role, tenant_slug: data.tenant_slug || null, canonical_id: canonicalId, sessionToken })
         };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
