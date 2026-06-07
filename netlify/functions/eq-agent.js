@@ -53,7 +53,10 @@ function verifyToken(token) {
     if (!payloadB64 || !sig) return null;
     const payload = Buffer.from(payloadB64, 'base64').toString();
     const expectedSig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
-    if (sig !== expectedSig) return null;
+    // Constant-time compare — match verify-pin.js / approve-leave.js so an
+    // attacker can't deduce expectedSig byte-by-byte via response timing.
+    if (sig.length !== expectedSig.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return null;
     const data = JSON.parse(payload);
     if (data.exp < Date.now()) return null;
     return data;
