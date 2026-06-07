@@ -6,12 +6,11 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.57';
+const APP_VERSION = '3.10.59';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
   'sks-nsw-labour.netlify.app': 'sks',
-  'sks-field.netlify.app': 'sks',  // Shell-integrated EQ Field deploy (parallel to standalone)
   'eq-solves-field.netlify.app': 'eq',
   'localhost': 'eq',
   '127.0.0.1': 'eq',
