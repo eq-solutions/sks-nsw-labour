@@ -19,6 +19,55 @@ const _writeQueue = [];
 const _sbPendingRows = {}; // lock: concurrent POSTs for same name+week
 const MAX_WRITE_RETRIES = 5;
 
+// ── Stage-1 org-JWT cache (nspbmir anon-lockdown prep) ───────
+// When ORG_JWT_ENABLED=on the server mints a 15-min Supabase JWT that sbFetch
+// uses instead of the public anon SB_KEY. When dark (flag off) _orgJwt stays
+// null and every call falls back to SB_KEY — ZERO behaviour change.
+let _orgJwt    = null; // current JWT string, or null
+let _orgJwtExp = 0;    // ms timestamp when it expires (0 = not yet minted)
+let _orgJwtPending = null; // in-flight mint promise (avoids parallel mints)
+
+// Ensure we have a valid org JWT, re-minting if absent or near expiry.
+// forceRefresh=true skips the expiry check (used after a 401 write failure).
+// Always resolves (never throws) — returns the token string or null on failure.
+async function ensureOrgJwt(forceRefresh) {
+  const REFRESH_BEFORE_MS = 60 * 1000; // re-mint 60s before expiry
+  if (!forceRefresh && _orgJwt && Date.now() < _orgJwtExp - REFRESH_BEFORE_MS) {
+    return _orgJwt; // still valid
+  }
+  if (_orgJwtPending) return _orgJwtPending; // dedupe concurrent callers
+
+  // Only active for the sks org — all other tenants stay on the anon key.
+  if (typeof TENANT === 'undefined' || TENANT.ORG_SLUG !== 'sks') return null;
+
+  const sessionToken =
+    sessionStorage.getItem('eq_session_token') ||
+    localStorage.getItem('eq_agent_token');
+  if (!sessionToken) return null; // not yet logged in
+
+  _orgJwtPending = (async () => {
+    try {
+      const res = await fetch('/.netlify/functions/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mint-org-jwt', sessionToken }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.enabled) return null; // dark — fall back to SB_KEY
+      if (!data.valid || !data.supabase_jwt) return null;
+      _orgJwt    = data.supabase_jwt;
+      _orgJwtExp = data.exp;
+      return _orgJwt;
+    } catch (e) {
+      return null; // network/parse failure — fall back to SB_KEY
+    } finally {
+      _orgJwtPending = null;
+    }
+  })();
+  return _orgJwtPending;
+}
+
 function _baseTable(path) {
   return path.split('?')[0];
 }
@@ -472,9 +521,15 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
     }
   }
 
+  // Use an authenticated org JWT when available (Stage-1 nspbmir lockdown).
+  // Falls back to the public anon SB_KEY when dark or not yet minted — zero
+  // behaviour change until ORG_JWT_ENABLED=on and ensureOrgJwt() is called.
+  await ensureOrgJwt(false);
+  const authToken = (_orgJwt && Date.now() < _orgJwtExp) ? _orgJwt : SB_KEY;
+
   const headers = {
     'apikey':        SB_KEY,
-    'Authorization': 'Bearer ' + SB_KEY,
+    'Authorization': 'Bearer ' + authToken,
     'Content-Type':  'application/json',
     'Prefer':        prefer
   };
@@ -495,6 +550,25 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
   try {
     const res = await fetch(SB_URL + '/rest/v1/' + resolvedPath, fetchOpts);
     if (!res.ok) {
+      // On a 401 with an org JWT, the token may have expired (clock skew).
+      // Re-mint once and retry before surfacing the error.
+      if (res.status === 401 && authToken !== SB_KEY) {
+        _orgJwt    = null;
+        _orgJwtExp = 0;
+        const retryToken = await ensureOrgJwt(true);
+        if (retryToken) {
+          const retryHeaders = { ...headers, 'Authorization': 'Bearer ' + retryToken };
+          const retryOpts = { ...fetchOpts, headers: retryHeaders };
+          const retryRes = await fetch(SB_URL + '/rest/v1/' + resolvedPath, retryOpts);
+          if (retryRes.ok) {
+            // retry succeeded — continue as normal response
+            _sbOnline = true; _sbHealthFails = 0; _sbWriteFails = 0;
+            const retryData = retryRes.status === 204 ? null : await retryRes.json();
+            if (method !== 'GET' && !isDemo) { _pendingWriteCount--; _setSaveIndicator(_pendingWriteCount > 0 ? 'saving' : 'saved'); }
+            return retryData;
+          }
+        }
+      }
       const err = await res.text();
       _sbLog('error', method + ' ' + resolvedPath, res.status + ' ' + err);
       throw new Error(res.status + ': ' + err);

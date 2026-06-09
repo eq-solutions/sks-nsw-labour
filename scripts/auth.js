@@ -89,6 +89,10 @@ async function _consumeShellToken() {
     if (data.sessionToken) {
       sessionStorage.setItem('eq_session_token', data.sessionToken);
       localStorage.setItem('eq_agent_token', data.sessionToken);
+      // Stage-1 org-JWT: pre-mint the nspbmir data-plane JWT immediately
+      // after shell handoff so the first sbFetch already has an authed token.
+      // ensureOrgJwt is a no-op when ORG_JWT_ENABLED is off (dark mode).
+      if (typeof ensureOrgJwt === 'function') ensureOrgJwt(true).catch(() => {});
     }
     _postHandoffStatus({ kind: 'accepted', name: data.name, role: data.role });
     return true;
@@ -339,6 +343,9 @@ async function checkPin() {
       // protected fetches have a token. Was IIFE fire-and-forget which
       // raced fast-clicker leave submissions on slow connections.
       await _mintAndStoreEqToken(val, name);
+      // Stage-1 org-JWT: pre-mint immediately after PIN success so the
+      // first data fetch uses the authenticated token. No-op when dark.
+      if (typeof ensureOrgJwt === 'function') ensureOrgJwt(true).catch(() => {});
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();

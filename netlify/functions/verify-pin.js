@@ -14,6 +14,19 @@ const SECRET_SALT = process.env.EQ_SECRET_SALT;
 const SB_URL      = process.env.AUDIT_SB_URL;
 const SB_KEY      = process.env.AUDIT_SB_KEY;
 
+// Stage-1 org-JWT minter — nspbmir anon-CRUD lockdown prep (ships DARK).
+// Set ORG_JWT_ENABLED=on + NSPBMIR_JWT_SECRET + ORG_IDS_JSON to activate.
+// Royce action: get JWT Secret from Supabase → nspbmir → Settings → API
+//   and set NSPBMIR_JWT_SECRET as a secret env var on sks-nsw-labour.netlify.app.
+//   ORG_IDS_JSON example: '{"sks":"<organisations.id uuid for the sks org>"}'
+const NSPBMIR_JWT_SECRET = process.env.NSPBMIR_JWT_SECRET;
+const ORG_JWT_ENABLED    = (process.env.ORG_JWT_ENABLED || '').trim().toLowerCase() === 'on';
+let ORG_IDS = {};
+try {
+  const raw = process.env.ORG_IDS_JSON;
+  if (raw) ORG_IDS = JSON.parse(raw);
+} catch (e) { console.error('WARN: ORG_IDS_JSON parse failed:', e.message); }
+
 if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
 
 // ── Allowed origins for CORS ─────────────────────────────────
@@ -119,7 +132,43 @@ function verifyShellToken(token) {
   } catch (e) { return null; }
 }
 
-// ── Handler ────────────────────────────────────────���─────────
+// ── Org-JWT minter (Stage-1 nspbmir lockdown) ───────────────
+// Mints a short-lived (15 min) Supabase HS256 JWT for the nspbmir data plane
+// (project nspbmirochztcjijmcrx). The client swaps its anon SB_KEY for this
+// token so Supabase receives `role: 'authenticated'` on all data-plane calls,
+// enabling org-scoped RLS policies to gate rows instead of the current
+// wide-open `org_id IS NOT NULL` anon policies.
+//
+// Claims mirror the Supabase GoTrue JWT shape so PostgREST recognises it:
+//   { sub, role:'authenticated', aud:'authenticated', iat, exp,
+//     app_metadata:{ org_id, source_app:'sks-field' } }
+//
+// Only active when ORG_JWT_ENABLED=on; returns null when dark so callers can
+// fall back gracefully to the existing anon path without breaking anything.
+function mintOrgJwt(orgSlug) {
+  if (!ORG_JWT_ENABLED || !NSPBMIR_JWT_SECRET) return null;
+  const orgId = ORG_IDS[orgSlug];
+  if (!orgId) return null;
+  const now  = Math.floor(Date.now() / 1000);
+  const exp  = now + (15 * 60); // 15-min TTL — short enough to limit blast radius
+  const header  = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    sub:          'sks-field:' + orgSlug,
+    role:         'authenticated',
+    aud:          'authenticated',
+    iat:          now,
+    exp,
+    app_metadata: { org_id: orgId, source_app: 'sks-field' },
+  })).toString('base64url');
+  const sigInput = header + '.' + payload;
+  const sig = crypto
+    .createHmac('sha256', NSPBMIR_JWT_SECRET)
+    .update(sigInput)
+    .digest('base64url');
+  return { token: sigInput + '.' + sig, exp_ms: exp * 1000, org_id: orgId };
+}
+
+// ── Handler ────────────────────────────────────────────────
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers };
@@ -142,6 +191,41 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, canonical_id: data.canonical_id || null, phone: data.phone || null, sessionToken }) };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
+    }
+
+    // ── Org-JWT minter (Stage-1 nspbmir lockdown — dark until ORG_JWT_ENABLED=on)
+    // Client calls this after a successful PIN/shell login to obtain a short-lived
+    // Supabase JWT for the nspbmir data plane. Returns { enabled: false } when dark
+    // so callers can degrade gracefully to the anon path without any error.
+    if (body.action === 'mint-org-jwt') {
+      if (!ORG_JWT_ENABLED) {
+        // Dark mode — feature not yet active. Client falls back to anon SB_KEY.
+        return { statusCode: 200, headers, body: JSON.stringify({ enabled: false }) };
+      }
+      if (!NSPBMIR_JWT_SECRET) {
+        console.error('FATAL: ORG_JWT_ENABLED=on but NSPBMIR_JWT_SECRET is not set');
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server misconfigured — missing NSPBMIR_JWT_SECRET' }) };
+      }
+      // Require a valid session token — caller must already be past the PIN/shell gate.
+      const session = verifyToken(body.sessionToken);
+      if (!session) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'invalid_session' }) };
+      }
+      // org_id is resolved SERVER-SIDE from the fixed slug — never trust client input.
+      const minted = mintOrgJwt('sks');
+      if (!minted) {
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'mint_failed', detail: 'org slug not found in ORG_IDS_JSON' }) };
+      }
+      return {
+        statusCode: 200, headers,
+        body: JSON.stringify({
+          enabled:       true,
+          valid:         true,
+          supabase_jwt:  minted.token,
+          exp:           minted.exp_ms, // ms timestamp; client re-mints 60s before this
+          org_id:        minted.org_id,
+        }),
+      };
     }
 
     // ── EQ Shell iframe handoff ──────────────────────────────
