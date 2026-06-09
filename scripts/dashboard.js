@@ -60,15 +60,16 @@ function renderDashboard() {
   const passGroup = (name) => !groupFilt || personGroup[name] === groupFilt;
 
   // Build per-site per-day counts
+  // Use a Set per [site][day] to deduplicate — duplicate schedule rows for
+  // the same person (or a person in both people + managers tables) only count once.
   const siteData = {};
   sched.forEach(r => days.forEach(d => {
     const s = r[d];
     if (s && !isLeave(s) && s.trim()) {
       if (!passGroup(r.name)) return;
-      if (!siteData[s]) siteData[s] = { total: 0, days: {} };
-      if (!siteData[s].days[d]) siteData[s].days[d] = [];
-      siteData[s].days[d].push(r.name);
-      siteData[s].total++;
+      if (!siteData[s]) siteData[s] = { days: {} };
+      if (!siteData[s].days[d]) siteData[s].days[d] = new Set();
+      siteData[s].days[d].add(r.name);
     }
   }));
 
@@ -100,8 +101,8 @@ function renderDashboard() {
       va = uA.size; vb = uB.size;
     } else {
       // day column
-      va = (dA.days[dashSort.col] || []).length;
-      vb = (dB.days[dashSort.col] || []).length;
+      va = (dA.days[dashSort.col] || new Set()).size;
+      vb = (dB.days[dashSort.col] || new Set()).size;
     }
     if (va < vb) return -1 * dir;
     if (va > vb) return  1 * dir;
@@ -135,7 +136,7 @@ function renderDashboard() {
       const lead         = siteObj && siteObj.site_lead ? siteObj.site_lead.split(' ')[0] : '—';
       const bg           = idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)';
       const uniquePeople = new Set();
-      days.forEach(d => (data.days[d] || []).forEach(n => uniquePeople.add(n)));
+      days.forEach(d => (data.days[d] || new Set()).forEach(n => uniquePeople.add(n)));
 
       sitesHtml += `<tr style="background:${bg};border-bottom:1px solid var(--border)">`;
       sitesHtml += `<td style="padding:8px 12px;font-weight:600;color:var(--ink)">
@@ -144,9 +145,9 @@ function renderDashboard() {
       </td>`;
       sitesHtml += `<td style="padding:8px 6px;font-size:11px;color:var(--ink-2)">${esc(lead)}</td>`;
       days.forEach(d => {
-        const names  = data.days[d] || [];
+        const names  = [...(data.days[d] || new Set())].sort();
         const count  = names.length;
-        const title  = names.sort().join(', ');
+        const title  = names.join(', ');
         const cellBg = count === 0 ? '' : count <= 2 ? 'background:var(--blue-lt)' : count <= 4 ? 'background:var(--green-lt)' : 'background:var(--amber-lt)';
         sitesHtml += `<td style="padding:8px 10px;text-align:center;font-weight:700;${cellBg};cursor:default" title="${esc(title)}">${count || '<span style=color:var(--ink-4)>—</span>'}</td>`;
       });

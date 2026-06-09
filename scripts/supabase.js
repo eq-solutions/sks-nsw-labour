@@ -966,8 +966,12 @@ async function saveRowToSB(name, week, dayVals) {
       if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
     }
   } else {
-    // No server row — POST the full row
-    const row = { name, week, mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null };
+    // No server row — POST the full row.
+    // Start from the existing in-memory state so partial saves (e.g. fillWeek
+    // only passes tue–fri) don't lose other day values like Monday.
+    const allDays = ['mon','tue','wed','thu','fri','sat','sun'];
+    const row = { name, week };
+    allDays.forEach(d => { row[d] = (existing && existing[d]) || null; });
     Object.assign(row, dayVals);
     const lockKey = `${name}||${week}`;
     const res = await sbFetch('schedule', 'POST', row, 'return=representation');
