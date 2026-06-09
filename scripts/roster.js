@@ -172,7 +172,7 @@ function stepRosterDay(dir) {
 
 // ── Roster render ─────────────────────────────────────────────
 function getRosterPeopleForGroup(group) {
-  const people = STATE.people.filter(p => p.group === group);
+  const people = STATE.people.filter(p => p.group === group && !p.archived);
   const siteFilter   = document.getElementById('roster-site')   ? document.getElementById('roster-site').value   : '';
   const searchFilter = document.getElementById('roster-search') ? document.getElementById('roster-search').value.toLowerCase() : '';
   const week = STATE.currentWeek;
@@ -340,9 +340,12 @@ function fillWeek(name, week) {
   }
   const val = entry.mon;
   if (!val) { showToast('No Monday value to fill from'); return; }
+  // Skip days that already have a TAFE/education code — fill should never
+  // overwrite a scheduled TAFE day even if Monday is a work site.
   // v3.4.76: capture per-day before-values before mutating so undo can
   // restore the exact pre-fill state cell-by-cell.
-  const fillDays  = ['tue','wed','thu','fri'];
+  const fillDays  = ['tue','wed','thu','fri'].filter(d => !isEducation(entry[d] || ''));
+  if (!fillDays.length) { showToast('All days already set (TAFE days skipped)'); return; }
   const undoChanges = fillDays
     .map(d => ({ table: 'schedule', recordId: entry.id, field: d, before: entry[d] || '', after: val, name }))
     .filter(c => c.before !== c.after);
@@ -353,7 +356,9 @@ function fillWeek(name, week) {
   updateTopStats();
   if (currentPage === 'roster') renderRoster();
   if (currentPage === 'dashboard') renderDashboard();
-  saveRowToSB(name, week, { tue: val, wed: val, thu: val, fri: val }).catch(() => {});
+  const saveVals = {};
+  fillDays.forEach(d => { saveVals[d] = val; });
+  saveRowToSB(name, week, saveVals).catch(() => {});
   showToast(`Filled Mon–Fri with ${val}`);
   auditLog(`Filled Mon–Fri with "${val}"`, 'Roster', name, week);
   updateLastUpdated();
@@ -529,7 +534,7 @@ function renderEditor() {
 
   let html = dayHeaderHtml;
   groups.forEach(g => {
-    let people = STATE.people.filter(p => p.group === g);
+    let people = STATE.people.filter(p => p.group === g && !p.archived);
     // v3.4.78: apply the team filter from the topbar pill row.
     if (typeof personInActiveTeam === 'function') {
       people = people.filter(p => personInActiveTeam(p.id));

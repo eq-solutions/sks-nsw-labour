@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.60 — Bug fixes: dashboard dedup, archive roster, TAFE fill, name overflow
+
+**Date:** 2026-06-10
+**Scope:** `scripts/dashboard.js`, `scripts/roster.js`, `scripts/supabase.js`, `styles/base.css`
+
+- **Dashboard double-count** — site/day counts now use a `Set` per cell so the same person (e.g. duplicate schedule rows, or someone in both `people` + `managers` tables) is only counted once. Total column was already correct; per-day cells were double-counting.
+- **Archive doesn't remove from roster** — `getRosterPeopleForGroup()` and `renderEditor()` now filter `!p.archived`, so archiving a contact removes them from the roster view and editor immediately.
+- **TAFE day overwrite** — `fillWeek()` (⇒wk button) now skips any day that already has a TAFE/education code. Apprentices on TAFE Wednesday, for example, will no longer have it overwritten.
+- **Fill week save bug** — `saveRowToSB` POST path (new schedule row) now seeds from the full in-memory entry before applying the partial dayVals, so Monday's value is included in the DB write and isn't silently nulled out.
+- **Long names overflow** — `.editor-name` and `td.name-col` now have `max-width` + `text-overflow: ellipsis` so long names (e.g. Cicero) no longer blow out the table layout.
+
+---
+
 # v3.10.59 — Cards→Field SSO: phone fallback + canonical_id re-sync
 
 **Date:** 2026-06-06
