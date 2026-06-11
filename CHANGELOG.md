@@ -1,5 +1,19 @@
 # EQ Solves Field — Changelog
 
+# v3.10.61 — Fill Week race-condition fix
+
+**Date:** 2026-06-11
+**Scope:** `scripts/supabase.js`
+
+**Bug.** Fill Week (⇒wk button in the roster editor) was silently losing all Tue–Fri values when the user typed Monday's value and immediately clicked Fill. The `onchange` on the Monday input fires `saveCellToSB` (async POST for a new row), then the Fill click fires `saveRowToSB` synchronously. Since the POST hadn't returned, `existing.id` was still unset — `saveRowToSB` fell into its POST branch and issued a second POST with `{ mon: null, tue: val, … }`, racing the first. The DB's UNIQUE(name, week) constraint meant only one POST won; the loser was silently swallowed. Monday's POST (started first) tended to win, so the user saw only Monday.
+
+**Fix.** `saveRowToSB`'s POST branch now:
+1. Checks `_sbPendingRows[lockKey]` and awaits any in-flight row-creation POST before deciding PATCH vs POST — eliminating the race entirely.
+2. After the await, re-reads `current.id`; if now set, PATCHes instead of re-POSTing.
+3. If a POST is still genuinely needed, snapshots the full current `existing` STATE for all days (not just the fill-week `dayVals`) so no already-set value (e.g. Monday) is lost.
+
+---
+
 # v3.10.59 — Cards→Field SSO: phone fallback + canonical_id re-sync
 
 **Date:** 2026-06-06

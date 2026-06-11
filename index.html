@@ -632,8 +632,16 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.59
+  EQ Solves — Field  v3.10.61
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.61  (Fill Week race-condition fix)
+  ────────────────────────────────────────────────────
+   • Fix: Fill Week (⇒wk) was silently losing data when Monday was typed and
+     Fill clicked before the async POST completed. saveRowToSB now awaits any
+     in-flight saveCellToSB POST for the same row before deciding PATCH vs POST,
+     and snapshots the full current STATE when a POST is still required — so no
+     day value is dropped regardless of click timing.
 
   CHANGES IN v3.10.59  (Cards→Field SSO: phone fallback + canonical_id re-sync)
   ────────────────────────────────────────────────────

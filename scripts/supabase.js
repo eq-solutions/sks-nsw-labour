@@ -966,17 +966,44 @@ async function saveRowToSB(name, week, dayVals) {
       if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
     }
   } else {
-    // No server row — POST the full row
-    const row = { name, week, mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null };
-    Object.assign(row, dayVals);
+    // No server row yet — if saveCellToSB has a concurrent POST in-flight for
+    // this row (e.g. user typed Monday then immediately clicked Fill Week),
+    // wait for it to complete so we get the real id before deciding PATCH vs POST.
     const lockKey = `${name}||${week}`;
-    const res = await sbFetch('schedule', 'POST', row, 'return=representation');
-    if (existing && res && res[0]) {
-      existing.id = res[0].id;
-      existing.updated_at = res[0].updated_at;
-      if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
+    if (_sbPendingRows[lockKey]) {
+      await _sbPendingRows[lockKey];
     }
-    if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = existing || res[0];
+    // Re-read after possible await — id may now be set by the resolved POST.
+    const current = STATE.schedule.find(r => r.name === name && r.week === week);
+    if (current && _isRealDbId(current.id)) {
+      try {
+        const res = await sbFetch(`schedule?id=eq.${current.id}`, 'PATCH', patch, 'return=representation');
+        if (Array.isArray(res) && res[0]) {
+          current.updated_at = res[0].updated_at;
+          if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(current.id);
+        }
+      } catch (e) { /* non-blocking */ }
+      return;
+    }
+    // Still no row — POST the full row, snapshotting all current STATE days
+    // so cells already set (e.g. Monday) aren't lost in a multi-day fill POST.
+    const row = { name, week, mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null };
+    if (current) {
+      Object.assign(row, {
+        mon: current.mon || null, tue: current.tue || null,
+        wed: current.wed || null, thu: current.thu || null,
+        fri: current.fri || null, sat: current.sat || null,
+        sun: current.sun || null
+      });
+    }
+    Object.assign(row, patch);
+    const res = await sbFetch('schedule', 'POST', row, 'return=representation');
+    if (current && res && res[0]) {
+      current.id = res[0].id;
+      current.updated_at = res[0].updated_at;
+      if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(current.id);
+    }
+    if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = current || res[0];
   }
 }
 
