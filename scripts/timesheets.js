@@ -333,14 +333,21 @@ function onTsCellChange(el) {
   const hrs0El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="0"]`);
   const job1El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="job"][data-slot="1"]`);
   const hrs1El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="1"]`);
+  const job2El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="job"][data-slot="2"]`);
+  const hrs2El = row.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="2"]`);
 
   const job0 = job0El ? job0El.value.trim() : '';
   const hrs0 = hrs0El ? parseFloat(hrs0El.value) || 0 : 0;
   const job1 = job1El ? job1El.value.trim() : '';
   const hrs1 = hrs1El ? parseFloat(hrs1El.value) || 0 : 0;
+  const job2 = job2El ? job2El.value.trim() : '';
+  const hrs2 = hrs2El ? parseFloat(hrs2El.value) || 0 : 0;
 
   let combinedJob, combinedHrs;
-  if (job1) {
+  if (job2) {
+    combinedJob = `${job0}:${hrs0}|${job1}:${hrs1}|${job2}:${hrs2}`;
+    combinedHrs = hrs0 + hrs1 + hrs2;
+  } else if (job1) {
     combinedJob = `${job0}:${hrs0}|${job1}:${hrs1}`;
     combinedHrs = hrs0 + hrs1;
   } else {
@@ -369,6 +376,24 @@ function onTsCellChange(el) {
 
 function toggleTsSplit(pid, btn) {
   const row = document.getElementById('split-' + pid);
+  if (!row) return;
+  const show = row.style.display === 'none';
+  row.style.display = show ? 'flex' : 'none';
+  btn.classList.toggle('active', show);
+  if (!show) {
+    const row2 = document.getElementById('split2-' + pid);
+    if (row2) {
+      row2.style.display = 'none';
+      row2.querySelectorAll('input').forEach(el => { el.value = ''; });
+      const btn2 = row.querySelector('.ts-split2-btn');
+      if (btn2) btn2.classList.remove('active');
+    }
+    row.querySelectorAll('input').forEach(el => { el.value = ''; onTsCellChange(el); });
+  }
+}
+
+function toggleTsSplit2(pid, btn) {
+  const row = document.getElementById('split2-' + pid);
   if (!row) return;
   const show = row.style.display === 'none';
   row.style.display = show ? 'flex' : 'none';
@@ -1419,11 +1444,12 @@ function renderTimesheets() {
         const todayClass = isTodayCol ? ' ts-cell-today' : '';
         const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
         const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
-        let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
+        let job1 = '', hrs1 = '', job2 = '', hrs2 = '', job3 = '', hrs3 = '', isSplit = false, isSplit2 = false;
         if (rawJob.includes('|')) {
           const parts = rawJob.split('|');
-          const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
+          const p0 = parts[0].split(':'), p1 = parts[1].split(':');
           job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
+          if (parts[2]) { const p2 = parts[2].split(':'); job3 = p2[0] || ''; hrs3 = p2[1] || ''; isSplit2 = true; }
         } else {
           job1 = rawJob; hrs1 = rawHrs;
         }
@@ -1459,8 +1485,18 @@ function renderTimesheets() {
             <input class="ts-job" type="text" value="${esc(String(job2))}" placeholder="Job 2"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs2}" placeholder="8" min="0" max="24" step="0.5"${disabled}
+            <input class="ts-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
+              onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
+              onchange="onTsCellChange(this)">
+            <button class="ts-split2-btn${isSplit2 ? ' active' : ''}" title="Add third job" aria-label="Split day into three jobs" onclick="toggleTsSplit2('${pid2}',this)"${disabled ? ' disabled' : ''}>＋</button>
+          </div>
+          <div class="ts-cell ts-split-row" id="split2-${pid2}" style="display:${isSplit2 ? 'flex' : 'none'};margin-top:3px">
+            <input class="ts-job" type="text" value="${esc(String(job3))}" placeholder="Job 3"${disabled}
+              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="2"
+              oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
+            <input class="ts-hrs" type="number" value="${hrs3}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="2"
               onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
               onchange="onTsCellChange(this)">
           </div>
@@ -2320,7 +2356,24 @@ function toggleMTsSplit(rid, btn) {
   if (!row) return;
   const show = row.style.display === 'none';
   row.style.display = show ? 'flex' : 'none';
-  btn.textContent  = show ? '✕ Remove second job' : '＋ Split — add second job';
+  btn.textContent = show ? '✕ Remove split' : '＋ Split — add second job';
+  if (show) btn.classList.add('active'); else btn.classList.remove('active');
+  if (!show) {
+    const row2 = document.getElementById('msplit2-' + rid);
+    if (row2) {
+      row2.style.display = 'none';
+      row2.querySelectorAll('input').forEach(el => { el.value = ''; });
+    }
+    row.querySelectorAll('input').forEach(el => { el.value = ''; onTsCellChange(el); });
+  }
+}
+
+function toggleMTsSplit2(rid, btn) {
+  const row = document.getElementById('msplit2-' + rid);
+  if (!row) return;
+  const show = row.style.display === 'none';
+  row.style.display = show ? 'flex' : 'none';
+  btn.textContent = show ? '✕ Remove third job' : '＋ Add third job';
   if (show) btn.classList.add('active'); else btn.classList.remove('active');
   if (!show) row.querySelectorAll('input').forEach(el => { el.value = ''; onTsCellChange(el); });
 }
@@ -2429,11 +2482,12 @@ function _renderTimesheetsMobile(opts) {
 
       const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
       const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
-      let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
+      let job1 = '', hrs1 = '', job2 = '', hrs2 = '', job3 = '', hrs3 = '', isSplit = false, isSplit2 = false;
       if (rawJob.includes('|')) {
         const parts = rawJob.split('|');
-        const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
+        const p0 = parts[0].split(':'), p1 = parts[1].split(':');
         job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
+        if (parts[2]) { const p2 = parts[2].split(':'); job3 = p2[0] || ''; hrs3 = p2[1] || ''; isSplit2 = true; }
       } else { job1 = rawJob; hrs1 = rawHrs; }
 
       const bubble    = _tsScheduleBubble(p.name, week, d);
@@ -2496,9 +2550,26 @@ function _renderTimesheetsMobile(opts) {
                 onchange="onTsCellChange(this)">
             </div>
           </div>
+          <div class="ts-minput-row ts-msplit-row" id="msplit2-${rid}" style="display:${isSplit2 ? 'flex' : 'none'}">
+            <div class="ts-minput-jobwrap">
+              <label class="ts-minput-label">Job 3</label>
+              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job3))}" placeholder="Third job"${disabled}
+                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="2"
+                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
+            </div>
+            <div class="ts-minput-hrswrap">
+              <label class="ts-minput-label">Hrs 3</label>
+              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs3}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+                data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="2"
+                onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
+                onchange="onTsCellChange(this)">
+            </div>
+          </div>
           <div class="ts-mday-actions">
             <button class="ts-msplit-btn${isSplit ? ' active' : ''}" title="Split: add second job"
-              onclick="toggleMTsSplit('${rid}',this)"${disabled ? ' disabled' : ''}>${isSplit ? '✕ Remove second job' : '＋ Split — add second job'}</button>
+              onclick="toggleMTsSplit('${rid}',this)"${disabled ? ' disabled' : ''}>${isSplit ? '✕ Remove split' : '＋ Split — add second job'}</button>
+            ${isSplit ? `<button class="ts-msplit2-btn${isSplit2 ? ' active' : ''}" title="Add third job"
+              onclick="toggleMTsSplit2('${rid}',this)"${disabled ? ' disabled' : ''}>${isSplit2 ? '✕ Remove third job' : '＋ Add third job'}</button>` : ''}
             ${repeatChip}
           </div>
         </div>
