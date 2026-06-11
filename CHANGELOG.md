@@ -1,5 +1,21 @@
 # EQ Solves Field — Changelog
 
+# v3.10.63 — Timesheets: 3-job split per day
+
+**Date:** 2026-06-12
+**Scope:** `scripts/timesheets.js`
+
+Extended the split-day feature from 2 jobs to 3 jobs per day. Storage format unchanged (pipe notation `JOB1:h|JOB2:h|JOB3:h`). No schema migration required.
+
+- Desktop: `＋` button on the slot-1 row reveals slot 2 (`toggleTsSplit2`); hiding slot 1 also clears slot 2
+- Mobile: "＋ Add third job" button appears in the day actions when slot 1 is open (`toggleMTsSplit2`)
+- `onTsCellChange` reads slot 2 and combines into 3-part pipe string when slot 2 is filled
+- Parse logic in both desktop and mobile render extended to handle `parts[2]`
+
+**Version stamps:** `APP_VERSION = '3.10.63'`, SW cache `eq-field-v3.10.63`.
+
+---
+
 # v3.10.62 — Dashboard top-stats: leave + archived headcount fixes
 
 **Date:** 2026-06-11
