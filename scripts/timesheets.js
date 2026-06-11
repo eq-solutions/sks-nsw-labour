@@ -515,7 +515,7 @@ function _getTsFilteredPeople() {
   const search    = searchRaw.toLowerCase().trim();
 
   let people = [...STATE.people]
-    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct');
+    .filter(p => !p.archived && (p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct'));
 
   if (typeof agencyMode !== 'undefined' && agencyMode && typeof agencyName !== 'undefined') {
     people = people.filter(p => p.agency === agencyName);
@@ -1619,6 +1619,7 @@ async function sendTsReminder(personName, week, btn) {
 
 function updateTsStats() {
   const allTs = [...STATE.people].filter(p =>
+    !p.archived &&
     (p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct') &&
     (typeof personInActiveTeam !== 'function' || personInActiveTeam(p.id))
   );

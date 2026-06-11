@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.64 — Timesheets: hide archived contacts
+
+**Date:** 2026-06-12
+**Scope:** `scripts/timesheets.js`
+
+Archived contacts were still appearing in the timesheets list. Added `!p.archived` to both the people list filter and the stats counter (`updateTsStats`). Matches the filter already in roster, dashboard, and all other pages.
+
+**Version stamps:** `APP_VERSION = '3.10.64'`, SW cache `eq-field-v3.10.64`.
+
+---
+
 # v3.10.63 — Timesheets: 3-job split per day
 
 **Date:** 2026-06-12
