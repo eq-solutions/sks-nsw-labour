@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.62 — Dashboard top-stats: leave + archived headcount fixes
+
+**Date:** 2026-06-11
+**Scope:** `index.html` (`updateTopStats`)
+
+**Bug 1 — On-leave pill always showed 0.** The `peopleOnLeave` check used `days.every()` across all 7 days (Mon–Sun). Since sat/sun are blank, `isLeave('')` returns false, so no one ever passed. Fixed to check Mon–Fri only.
+
+**Bug 2 — Archived workers inflating all counts.** `stat-total`, `stat-active`, and the three group stat cards (Direct / Apprentice / Labour Hire) included archived workers. DB confirmed 2 archived workers. Now filters `!p.archived` at the display layer.
+
+**DB confirmed (2026-06-11):** SKS people table has 61 rows total — 59 active (35 SKS Direct, 13 Apprentice, 11 Labour Hire) + 2 archived (1 SKS Direct, 1 Labour Hire). All groups normalise correctly; no missing-group drift.
+
+---
+
 # v3.10.61 — Fill Week race-condition fix (complete)
 
 **Date:** 2026-06-11
