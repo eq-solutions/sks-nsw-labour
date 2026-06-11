@@ -632,8 +632,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.61
+  EQ Solves — Field  v3.10.62
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.62  (Dashboard top-stats: leave + archived headcount fixes)
+  ────────────────────────────────────────────────────
+  • Fix: "on leave" pill always showed 0 — the check required ALL 7 days
+    (including sat/sun) to be a leave code; since sat/sun are blank isLeave('')
+    returns false so nobody ever passed. Now checks Mon–Fri only.
+  • Fix: stat-total, stat-active, and the three group stat cards (Direct /
+    Apprentice / Labour Hire) now exclude archived workers. Previously the
+    Supabase query loaded all people (no archived=eq.false filter) and the
+    counts included 2 archived workers, inflating every figure by 2.
 
   CHANGES IN v3.10.61  (Fill Week race-condition fix — complete)
   ────────────────────────────────────────────────────
@@ -4012,19 +4022,23 @@ function updateWeekLabel() {
 
 // ── Top stats ─────────────────────────────────────────────────
 function updateTopStats() {
-  const week  = STATE.currentWeek;
-  const sched = getWeekSchedule(week);
-  const days  = ['mon','tue','wed','thu','fri','sat','sun'];
-  const peopleOnLeave = new Set(sched.filter(r => days.every(d => isLeave(r[d]))).map(r => r.name));
-  const active = STATE.people.filter(p => !peopleOnLeave.has(p.name)).length;
+  const week     = STATE.currentWeek;
+  const sched    = getWeekSchedule(week);
+  const workDays = ['mon','tue','wed','thu','fri'];
+  const allDays  = ['mon','tue','wed','thu','fri','sat','sun'];
+  // Only check Mon–Fri: sat/sun are usually blank so isLeave('') = false,
+  // which caused everyone to fail the every() test and show 0 on leave.
+  const peopleOnLeave = new Set(sched.filter(r => workDays.every(d => isLeave(r[d]))).map(r => r.name));
+  const activePeople  = STATE.people.filter(p => !p.archived);
+  const active = activePeople.filter(p => !peopleOnLeave.has(p.name)).length;
   document.getElementById('stat-active').textContent = `${active} active`;
   document.getElementById('stat-leave').textContent  = `${peopleOnLeave.size} on leave`;
-  document.getElementById('stat-total').textContent  = `${STATE.people.length} total`;
+  document.getElementById('stat-total').textContent  = `${activePeople.length} total`;
   const bySite = {};
-  sched.forEach(r => days.forEach(d => { const s = r[d]; if (s && !isLeave(s) && s.trim()) bySite[s] = (bySite[s]||0)+1; }));
-  document.getElementById('sc-direct').textContent = STATE.people.filter(p => p.group==='Direct').length;
-  document.getElementById('sc-app').textContent    = STATE.people.filter(p => p.group==='Apprentice').length;
-  document.getElementById('sc-lh').textContent     = STATE.people.filter(p => p.group==='Labour Hire').length;
+  sched.forEach(r => allDays.forEach(d => { const s = r[d]; if (s && !isLeave(s) && s.trim()) bySite[s] = (bySite[s]||0)+1; }));
+  document.getElementById('sc-direct').textContent = activePeople.filter(p => p.group==='Direct').length;
+  document.getElementById('sc-app').textContent    = activePeople.filter(p => p.group==='Apprentice').length;
+  document.getElementById('sc-lh').textContent     = activePeople.filter(p => p.group==='Labour Hire').length;
   document.getElementById('sc-sites').textContent  = Object.keys(bySite).length;
 }
 
