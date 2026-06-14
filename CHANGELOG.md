@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.65 — Leave CC: fix iOS double-fire on supervisor chips
+
+**Date:** 2026-06-14
+**Scope:** `scripts/leave.js`
+
+Leave CC supervisor chips used `onclick`, which on iOS fires twice per tap — once from the pointer event and once from the synthesized click that fires after the DOM is replaced. The net effect was that each tap toggled the chip on then immediately off, so supervisors could never be selected. Changed both the supervisor chips (`renderLeaveCCSupervisors`) and the ✕ remove buttons (`renderLeaveCCList`) to `onpointerdown="event.preventDefault();handler()"` — the same pattern used for the hours chip popover in `timesheets.js`.
+
+**Version stamps:** `APP_VERSION = '3.10.65'`, SW cache `eq-field-v3.10.65`.
+
+---
+
 # v3.10.64 — Timesheets: hide archived contacts
 
 **Date:** 2026-06-12

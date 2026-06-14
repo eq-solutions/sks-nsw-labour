@@ -98,7 +98,7 @@ function renderLeaveCCSupervisors() {
     const icon   = inList ? '✓' : '+';
     const safeEmail = email.replace(/'/g, '&#39;');
     const tip = `${m.name}${m.role ? ' — ' + m.role : ''} · ${m.email}`;
-    return `<button onclick="toggleLeaveCCSupervisor('${safeEmail}')" title="${esc(tip)}" style="background:${bg};color:${col};border:1px solid ${border};padding:4px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><span style="font-weight:800">${icon}</span>${esc(m.name)}</button>`;
+    return `<button onpointerdown="event.preventDefault();toggleLeaveCCSupervisor('${safeEmail}')" title="${esc(tip)}" style="background:${bg};color:${col};border:1px solid ${border};padding:4px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><span style="font-weight:800">${icon}</span>${esc(m.name)}</button>`;
   }).join('');
 }
 
@@ -127,7 +127,7 @@ function renderLeaveCCList() {
   el.innerHTML = leaveCCList.map((email, i) =>
     `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;margin-bottom:4px">
       <span style="flex:1;font-size:12px;color:var(--ink)">${esc(email)}</span>
-      <button onclick="removeLeaveCC(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0">✕</button>
+      <button onpointerdown="event.preventDefault();removeLeaveCC(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0">✕</button>
     </div>`
   ).join('');
 }
