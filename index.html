@@ -632,8 +632,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.64
+  EQ Solves — Field  v3.10.65
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.65  (Leave CC: fix iOS double-fire on supervisor chips)
+  ────────────────────────────────────────────────────
+  • Fix: Leave CC supervisor chips used onclick, causing iOS to fire the
+    toggle twice per tap (pointer + synthesized click). Each tap would add
+    then immediately remove the supervisor, leaving the chip deselected.
+    Changed to onpointerdown + event.preventDefault() — same pattern as
+    the hours chip in timesheets.js. Also applied to the ✕ remove buttons
+    in the CC list (same double-fire risk, could remove the wrong email).
 
   CHANGES IN v3.10.64  (Timesheets: hide archived contacts)
   ────────────────────────────────────────────────────
