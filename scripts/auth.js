@@ -583,7 +583,7 @@ function toggleManagerMode() {
   // Spotted on SKS where Royce (Executive) tried to unlock and his own
   // name was missing from the picker. Long-term fix: extract to a shared
   // constant. Short-term: mirror managers.js exactly.
-  const SUPERVISOR_CATEGORIES = ['Executive','Operations','Project Management','Construction','Supervisor','Internal','Other'];
+  const SUPERVISOR_CATEGORIES = ['Executive','Management','Operations','Project Management','Construction','Supervisor','Internal','Other'];
   const mgrs = (STATE.managers || []).filter(m =>
     SUPERVISOR_CATEGORIES.includes(m.category)
   );

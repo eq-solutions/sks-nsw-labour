@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.66 — Supervision: simplified category list
+
+**Date:** 2026-06-18
+**Scope:** `scripts/managers.js`, `scripts/auth.js`, `index.html`
+
+Collapsed 7 supervision categories down to 5: **Executive, Management, Supervisor, Internal, Other**. Operations / Project Management / Construction merged into Management — people being promoted to management aren't necessarily project managers. Existing records with old category values still render (in an ungrouped section at the bottom) until re-categorised via the edit modal.
+
+`auth.js` `SUPERVISOR_CATEGORIES` updated to include Management while retaining the old values for backward compatibility — existing staff with Operations/PM/Construction categories can still unlock supervisor mode.
+
+**Version stamps:** `APP_VERSION = '3.10.66'`, SW cache `eq-field-v3.10.66`.
+
+---
+
 # v3.10.65 — Leave CC: fix iOS double-fire on supervisor chips
 
 **Date:** 2026-06-14
