@@ -258,12 +258,14 @@ function updateTsRowTotal(name, week) {
     const rowEl = el.closest('tr');
     if (rowEl) {
       const rs = _tsRowStatus(person, week, entry);
-      const stripe =
-          rs.kind === 'complete'                         ? 'box-shadow:inset 4px 0 0 0 var(--green);'
-        : (rs.kind === 'on-leave' || rs.kind === 'tafe') ? 'box-shadow:inset 4px 0 0 0 var(--purple);background:rgba(124,119,185,.04);'
-        : rs.kind === 'empty'                            ? 'box-shadow:inset 4px 0 0 0 var(--ink-4);'
-        :                                                  'box-shadow:inset 4px 0 0 0 var(--red);background:rgba(220,38,38,.025);';
-      rowEl.setAttribute('style', stripe);
+      const _sc = rs.kind === 'complete' ? 'var(--green)'
+        : (rs.kind === 'on-leave' || rs.kind === 'tafe') ? 'var(--purple)'
+        : rs.kind === 'empty' ? 'var(--ink-4)' : 'var(--red)';
+      rowEl.setAttribute('style', `box-shadow:inset 6px 0 0 0 ${_sc};`);
+      rowEl.classList.remove('ts-row-complete','ts-row-leave','ts-row-partial');
+      if (rs.kind === 'complete') rowEl.classList.add('ts-row-complete');
+      else if (rs.kind === 'on-leave' || rs.kind === 'tafe') rowEl.classList.add('ts-row-leave');
+      else if (rs.kind !== 'empty') rowEl.classList.add('ts-row-partial');
     }
   }
 }
@@ -1343,6 +1345,7 @@ function renderTimesheets() {
 
   // ── Data rows ───────────────────────────────────────────────
   let lastGroup = '';
+  let _tsRowIdx = 0;
   people.forEach(p => {
     // v3.4.79: more prominent group separator — wider band, brand
     // colour stripe, larger label. Matches the Roster page's group
@@ -1377,21 +1380,15 @@ function renderTimesheets() {
     // v3.4.79: roster-aware row status (drives the pill in the name col).
     const rowStatus       = _tsRowStatus(p, week, entry);
     const totalClass      = _isComplete ? 'ts-total-green' : (_hasAnyHrs ? 'ts-total-red' : 'ts-total-empty');
-    // v3.4.79: thinner left-stripe instead of full red-background.
-    // The full bg was the loudest thing on the page; users had to
-    // scan around it. A 4px coloured stripe carries the same signal
-    // without drowning the actual data.
-    let rowStripeStyle;
-    if (rowStatus.kind === 'complete') {
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--green);';
-    } else if (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') {
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--purple);background:rgba(124,119,185,.04);';
-    } else if (rowStatus.kind === 'empty') {
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--ink-4);';
-    } else {
-      // partial — still attention-getting but no full-red wash
-      rowStripeStyle = 'box-shadow:inset 4px 0 0 0 var(--red);background:rgba(220,38,38,.025);';
-    }
+    const _stripeColor = rowStatus.kind === 'complete' ? 'var(--green)'
+      : (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') ? 'var(--purple)'
+      : rowStatus.kind === 'empty' ? 'var(--ink-4)' : 'var(--red)';
+    const rowStripeStyle = `box-shadow:inset 6px 0 0 0 ${_stripeColor};`;
+    const _zebraClass    = _tsRowIdx % 2 === 0 ? 'ts-row-even' : '';
+    const _statusClass   = rowStatus.kind === 'complete' ? 'ts-row-complete'
+      : (rowStatus.kind === 'on-leave' || rowStatus.kind === 'tafe') ? 'ts-row-leave'
+      : rowStatus.kind !== 'empty' ? 'ts-row-partial' : '';
+    _tsRowIdx++;
     const pid        = p.name.replace(/\W/g, '_');
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
@@ -1419,7 +1416,7 @@ function renderTimesheets() {
       ? `<span class="ts-variance-chip ts-variance-${_variance.tone}" title="This week ${_variance.thisHrs}h vs 4-week avg ${_variance.avg}h">⚠</span>`
       : '';
 
-    html += `<tr class="ts-data-row" style="${rowStripeStyle}">
+    html += `<tr class="ts-data-row ${_zebraClass} ${_statusClass}" style="${rowStripeStyle}">
       <td class="ts-name-col" style="font-weight:600;color:var(--navy)">
         <div class="ts-name-line">
           <span class="ts-name-text">${esc(p.name)}${varianceChip}</span>
