@@ -7,7 +7,9 @@
 // ─────────────────────────────────────────────────────────────
 
 let jobNumbers = [];
-let jnSort = { col: 'number', dir: 'asc' };
+let jnSort     = { col: 'number', dir: 'asc' };
+let jnSelected = new Set();
+let _jnArmTimer = null;
 
 // ── Load ──────────────────────────────────────────────────────
 
@@ -59,6 +61,7 @@ function renderJobNumbers() {
   if (!items.length) {
     document.getElementById('jobnumbers-content').innerHTML =
       `<div class="empty"><div class="empty-icon">🔢</div><p>${search ? 'No matching job numbers' : 'No job numbers added yet'}</p></div>`;
+    _jnUpdateBulkBar();
     return;
   }
 
@@ -70,6 +73,7 @@ function renderJobNumbers() {
 
   let html = '<div class="roster-card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
   html += '<thead><tr style="background:var(--navy);color:white">';
+  if (isManager) html += `<th style="padding:8px 10px;width:36px;text-align:center"><input type="checkbox" id="jn-select-all" onchange="_jnToggleAll(this.checked)" title="Select all" style="cursor:pointer;accent-color:var(--sky)"></th>`;
   html += `<th style="${thStyle}" onclick="setJNSort('number')">Job #${sortArrow('number')}</th>`;
   html += `<th style="${thStyle}" onclick="setJNSort('description')">Project / Description${sortArrow('description')}</th>`;
   html += `<th style="${thStyle}" onclick="setJNSort('client')">Client${sortArrow('client')}</th>`;
@@ -79,10 +83,13 @@ function renderJobNumbers() {
   html += '</tr></thead><tbody>';
 
   items.forEach((j, idx) => {
-    const bg  = idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)';
-    const sc  = statusColors[j.status] || 'var(--ink-3)';
-    const sb  = statusBg[j.status]     || 'var(--surface-2)';
-    html += `<tr style="background:${bg};border-bottom:1px solid var(--border)">
+    const bg      = idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)';
+    const sc      = statusColors[j.status] || 'var(--ink-3)';
+    const sb      = statusBg[j.status]     || 'var(--surface-2)';
+    const checked = jnSelected.has(String(j.id)) ? ' checked' : '';
+    html += `<tr style="background:${bg};border-bottom:1px solid var(--border)">`;
+    if (isManager) html += `<td style="padding:8px 10px;text-align:center"><input type="checkbox" class="jn-row-cb" data-jid="${j.id}"${checked} onchange="_jnToggleRow('${j.id}')" style="cursor:pointer;accent-color:var(--sky)"></td>`;
+    html += `
       <td style="padding:8px 12px;font-weight:700;color:var(--navy);font-size:13px">${esc(j.number || '')}</td>
       <td style="padding:8px 12px;color:var(--ink)">${esc(j.description || '')}${j.notes ? `<div style="font-size:10px;color:var(--ink-4);margin-top:2px">${esc(j.notes)}</div>` : ''}</td>
       <td style="padding:8px 12px;color:var(--ink-2)">${esc(j.client    || '')}</td>
@@ -101,6 +108,8 @@ function renderJobNumbers() {
 
   html += '</tbody></table></div>';
   document.getElementById('jobnumbers-content').innerHTML = html;
+  _jnSyncSelectAll();
+  _jnUpdateBulkBar();
 }
 
 // ── CRUD ──────────────────────────────────────────────────────
@@ -189,6 +198,7 @@ function confirmDeleteJobNumber(id, number) {
     try {
       await sbFetch('job_numbers?id=eq.' + id, 'DELETE');
       jobNumbers = jobNumbers.filter(j => j.id !== id);
+      jnSelected.delete(String(id));
       closeModal('modal-confirm');
       renderJobNumbers();
       populateJobNumberDatalist();
@@ -199,6 +209,86 @@ function confirmDeleteJobNumber(id, number) {
     }
   };
   openModal('modal-confirm');
+}
+
+// ── Bulk selection ────────────────────────────────────────────
+
+function _jnToggleRow(id) {
+  const sid = String(id);
+  if (jnSelected.has(sid)) jnSelected.delete(sid);
+  else jnSelected.add(sid);
+  _jnSyncSelectAll();
+  _jnUpdateBulkBar();
+}
+
+function _jnToggleAll(checked) {
+  document.querySelectorAll('.jn-row-cb').forEach(cb => {
+    cb.checked = checked;
+    if (checked) jnSelected.add(cb.dataset.jid);
+    else         jnSelected.delete(cb.dataset.jid);
+  });
+  _jnUpdateBulkBar();
+}
+
+function _jnSyncSelectAll() {
+  const all = document.querySelectorAll('.jn-row-cb');
+  const el  = document.getElementById('jn-select-all');
+  if (el) el.checked = all.length > 0 && [...all].every(cb => jnSelected.has(cb.dataset.jid));
+}
+
+function _jnUpdateBulkBar() {
+  const bar     = document.getElementById('jobnumbers-bulk-bar');
+  const countEl = document.getElementById('jobnumbers-bulk-count');
+  if (!bar) return;
+  const n = jnSelected.size;
+  if (n === 0) { bar.style.display = 'none'; _jnDisarm(); return; }
+  bar.style.display = 'flex';
+  countEl.textContent = n + ' selected';
+  _jnDisarm();
+}
+
+function _jnDisarm() {
+  clearTimeout(_jnArmTimer);
+  _jnArmTimer = null;
+  const btn = document.getElementById('jobnumbers-bulk-delete-btn');
+  if (!btn) return;
+  btn.dataset.armed = '';
+  btn.textContent   = 'Delete selected';
+  btn.style.background = 'var(--red-lt)';
+  btn.style.color      = 'var(--red)';
+  btn.style.fontWeight = '';
+}
+
+function _jnArmBulkDelete(btn) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  if (btn.dataset.armed === '1') { _jnBulkDelete(); return; }
+  btn.dataset.armed   = '1';
+  const n = jnSelected.size;
+  btn.textContent     = `Confirm delete ${n}?`;
+  btn.style.background = 'var(--red)';
+  btn.style.color      = 'white';
+  btn.style.fontWeight = '700';
+  clearTimeout(_jnArmTimer);
+  _jnArmTimer = setTimeout(() => _jnDisarm(), 3000);
+}
+
+async function _jnBulkDelete() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const ids  = [...jnSelected];
+  if (!ids.length) return;
+  const nums = ids.map(id => { const j = jobNumbers.find(x => String(x.id) === id); return j ? j.number : id; }).join(', ');
+  try {
+    await sbFetch(`job_numbers?id=in.(${ids.join(',')})`, 'DELETE');
+    jobNumbers = jobNumbers.filter(j => !jnSelected.has(String(j.id)));
+    jnSelected.clear();
+    renderJobNumbers();
+    populateJobNumberDatalist();
+    showToast(`${ids.length} job number${ids.length > 1 ? 's' : ''} deleted`);
+    auditLog(`Deleted ${ids.length} job number${ids.length > 1 ? 's' : ''}: ${nums}`, 'Job Numbers', '', null);
+  } catch (e) {
+    showToast('Delete failed — check connection');
+    _jnDisarm();
+  }
 }
 
 // ── CSV import/export ─────────────────────────────────────────
