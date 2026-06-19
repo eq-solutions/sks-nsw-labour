@@ -632,8 +632,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.68
+  EQ Solves — Field  v3.10.69
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.69  (Timesheets: visual readability)
+  ────────────────────────────────────────────────────
+  • Zebra row striping on timesheets table — alternating surface-2 background
+    on even rows so the eye tracks across a row without slipping.
+  • Row status tint widened from a 4px left stripe to a full row wash:
+    green (complete), red (partial/incomplete), purple (on leave / TAFE).
+    Empty rows show no tint and let the zebra show through.
+  • Left stripe widened from 4px to 6px for both stripe and tint rows.
+  • In-place update (onTsCellChange) mirrors the same class logic so the
+    tint updates live as cells are filled without a full table re-render.
 
   CHANGES IN v3.10.68  (Job Numbers: compact table layout)
   ────────────────────────────────────────────────────

@@ -668,6 +668,11 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
 .ts-total-green { color: var(--green); }
 .ts-total-amber { color: var(--amber); }
 .ts-total-empty { color: var(--ink-4); }
+.ts-table .ts-data-row td     { background: transparent; }
+.ts-table .ts-row-even td     { background: var(--surface-2); }
+.ts-table .ts-row-complete td { background: rgba(22,163,74,.07); }
+.ts-table .ts-row-leave td    { background: rgba(124,119,185,.06); }
+.ts-table .ts-row-partial td  { background: rgba(220,38,38,.06); }
 .group-tabs   { display: flex; gap: 4px; }
 .group-tab    { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; background: white; color: var(--ink-3); }
 .group-tab.active { background: var(--navy); color: white; border-color: var(--navy); }
