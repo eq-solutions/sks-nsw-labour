@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.67 — Job Numbers: bulk delete
+
+**Date:** 2026-06-19
+**Scope:** `scripts/jobnumbers.js`, `index.html`
+
+Checkbox column added to the Job Numbers table (manager-only). Select individual rows or use the header checkbox to select all visible rows (respects the search filter). A bulk bar appears above the table showing the count of selected items. Two-tap arming on delete: first tap changes the button to red "Confirm delete N?", second tap within 3s fires. Auto-disarms on selection change or timeout. Bulk delete uses a single PostgREST `in.()` call — one DB round-trip regardless of count. Audit-logged. Datalist refreshed after delete. Single-delete (✕ per row) still works and clears the deleted ID from selection state.
+
+**Version stamps:** `APP_VERSION = '3.10.67'`, SW cache `eq-field-v3.10.67`.
+
+---
+
 # v3.10.66 — Supervision: simplified category list
 
 **Date:** 2026-06-18

@@ -632,8 +632,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.66
+  EQ Solves — Field  v3.10.67
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.67  (Job Numbers: bulk delete with checkboxes)
+  ────────────────────────────────────────────────────
+  • Job Numbers page: checkbox column added (manager-only). Select individual
+    rows or use the header checkbox to select all visible (respects search filter).
+  • Bulk bar appears above the table when any row is selected, showing count.
+  • Two-tap delete: first tap arms the button (red, "Confirm delete N?"), second
+    tap within 3s fires. Auto-disarms on selection change or timeout.
+  • Bulk delete uses PostgREST in.() filter — single DB round-trip regardless
+    of count. Audit-logged. Datalist refreshed after delete.
+  • Single-delete (✕ per row) still works and cleans up any selection state.
 
   CHANGES IN v3.10.66  (Supervision: collapse categories to Executive/Management/Supervisor/Internal)
   ────────────────────────────────────────────────────
@@ -3375,6 +3386,11 @@
       </div>
       <div id="jobnumbers-search-bar" style="margin-bottom:12px">
         <input type="text" id="jobnumbers-search" placeholder="Search job number or project name…" oninput="renderJobNumbers()" class="filter-select" style="min-width:240px;width:100%">
+      </div>
+      <div id="jobnumbers-bulk-bar" style="display:none;margin-bottom:8px;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;align-items:center;gap:12px">
+        <span id="jobnumbers-bulk-count" style="font-size:12px;font-weight:700;color:var(--ink)">0 selected</span>
+        <span style="flex:1"></span>
+        <button id="jobnumbers-bulk-delete-btn" class="btn btn-sm" style="background:var(--red-lt);color:var(--red);border:1px solid color-mix(in srgb,var(--red) 30%,transparent)" onclick="_jnArmBulkDelete(this)">Delete selected</button>
       </div>
       <div id="jobnumbers-content"><div class="empty"><div class="empty-icon">🔢</div><p>No job numbers added yet</p></div></div>
     </div>
