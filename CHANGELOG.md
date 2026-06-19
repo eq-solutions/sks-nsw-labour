@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.68 — Job Numbers: compact table layout
+
+**Date:** 2026-06-19
+**Scope:** `scripts/jobnumbers.js`
+
+Tightened the Job Numbers table to fit more rows on screen. Row padding reduced from 8px to 4px vertical. Font size 12.5px → 12px, header labels 11px. Notes now render inline after the description (same line) instead of a block below. Column widths fixed for Job #, Client, Site, Status. Edit/delete buttons forced inline with `white-space:nowrap` — no more two-line stacking on narrower viewports.
+
+**Version stamps:** `APP_VERSION = '3.10.68'`, SW cache `eq-field-v3.10.68`.
+
+---
+
 # v3.10.67 — Job Numbers: bulk delete
 
 **Date:** 2026-06-19

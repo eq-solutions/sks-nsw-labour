@@ -69,17 +69,17 @@ function renderJobNumbers() {
   const statusBg     = { Active: 'var(--green-lt)', Complete: 'var(--surface-2)', 'On Hold': 'var(--amber-lt)' };
 
   const sortArrow = (col) => jnSort.col === col ? (jnSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
-  const thStyle = 'padding:8px 12px;text-align:left;font-weight:700;cursor:pointer;user-select:none';
+  const thStyle = 'padding:5px 10px;text-align:left;font-weight:700;cursor:pointer;user-select:none;font-size:11px';
 
-  let html = '<div class="roster-card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+  let html = '<div class="roster-card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
   html += '<thead><tr style="background:var(--navy);color:white">';
-  if (isManager) html += `<th style="padding:8px 10px;width:36px;text-align:center"><input type="checkbox" id="jn-select-all" onchange="_jnToggleAll(this.checked)" title="Select all" style="cursor:pointer;accent-color:var(--sky)"></th>`;
-  html += `<th style="${thStyle}" onclick="setJNSort('number')">Job #${sortArrow('number')}</th>`;
+  if (isManager) html += `<th style="padding:5px 8px;width:32px;text-align:center"><input type="checkbox" id="jn-select-all" onchange="_jnToggleAll(this.checked)" title="Select all" style="cursor:pointer;accent-color:var(--sky)"></th>`;
+  html += `<th style="${thStyle};width:90px" onclick="setJNSort('number')">Job #${sortArrow('number')}</th>`;
   html += `<th style="${thStyle}" onclick="setJNSort('description')">Project / Description${sortArrow('description')}</th>`;
-  html += `<th style="${thStyle}" onclick="setJNSort('client')">Client${sortArrow('client')}</th>`;
-  html += `<th style="${thStyle}" onclick="setJNSort('site')">Site${sortArrow('site')}</th>`;
-  html += `<th style="${thStyle}" onclick="setJNSort('status')">Status${sortArrow('status')}</th>`;
-  if (isManager) html += '<th style="padding:8px 10px;text-align:center;font-weight:700;width:70px"></th>';
+  html += `<th style="${thStyle};width:120px" onclick="setJNSort('client')">Client${sortArrow('client')}</th>`;
+  html += `<th style="${thStyle};width:150px" onclick="setJNSort('site')">Site${sortArrow('site')}</th>`;
+  html += `<th style="${thStyle};width:80px;text-align:center" onclick="setJNSort('status')">Status${sortArrow('status')}</th>`;
+  if (isManager) html += '<th style="padding:5px 8px;width:52px"></th>';
   html += '</tr></thead><tbody>';
 
   items.forEach((j, idx) => {
@@ -88,19 +88,16 @@ function renderJobNumbers() {
     const sb      = statusBg[j.status]     || 'var(--surface-2)';
     const checked = jnSelected.has(String(j.id)) ? ' checked' : '';
     html += `<tr style="background:${bg};border-bottom:1px solid var(--border)">`;
-    if (isManager) html += `<td style="padding:8px 10px;text-align:center"><input type="checkbox" class="jn-row-cb" data-jid="${j.id}"${checked} onchange="_jnToggleRow('${j.id}')" style="cursor:pointer;accent-color:var(--sky)"></td>`;
+    if (isManager) html += `<td style="padding:4px 8px;text-align:center"><input type="checkbox" class="jn-row-cb" data-jid="${j.id}"${checked} onchange="_jnToggleRow('${j.id}')" style="cursor:pointer;accent-color:var(--sky)"></td>`;
     html += `
-      <td style="padding:8px 12px;font-weight:700;color:var(--navy);font-size:13px">${esc(j.number || '')}</td>
-      <td style="padding:8px 12px;color:var(--ink)">${esc(j.description || '')}${j.notes ? `<div style="font-size:10px;color:var(--ink-4);margin-top:2px">${esc(j.notes)}</div>` : ''}</td>
-      <td style="padding:8px 12px;color:var(--ink-2)">${esc(j.client    || '')}</td>
-      <td style="padding:8px 12px;color:var(--ink-2)">${esc(j.site_name || '')}</td>
-      <td style="padding:8px 10px;text-align:center"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${sb};color:${sc}">${esc(j.status || '')}</span></td>`;
+      <td style="padding:4px 10px;font-weight:700;color:var(--navy);font-size:12px;white-space:nowrap">${esc(j.number || '')}</td>
+      <td style="padding:4px 10px;color:var(--ink)">${esc(j.description || '')}${j.notes ? `<span style="font-size:10px;color:var(--ink-4);margin-left:6px">${esc(j.notes)}</span>` : ''}</td>
+      <td style="padding:4px 10px;color:var(--ink-2);font-size:11.5px">${esc(j.client    || '')}</td>
+      <td style="padding:4px 10px;color:var(--ink-2);font-size:11.5px">${esc(j.site_name || '')}</td>
+      <td style="padding:4px 8px;text-align:center"><span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:${sb};color:${sc}">${esc(j.status || '')}</span></td>`;
     if (isManager) {
-      html += `<td style="padding:8px 10px;text-align:center">
-        <button class="btn-icon btn-sm" title="Edit" onclick="editJobNumber('${j.id}')">✎</button>
-        <button class="btn-icon btn-sm" style="color:var(--red)" title="Delete"
-          data-jid="${j.id}" data-jnum="${esc(j.number || '')}"
-          onclick="confirmDeleteJobNumber(this.dataset.jid, this.dataset.jnum)">✕</button>
+      html += `<td style="padding:4px 8px;text-align:center;white-space:nowrap">
+        <button class="btn-icon btn-sm" title="Edit" onclick="editJobNumber('${j.id}')">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" title="Delete" data-jid="${j.id}" data-jnum="${esc(j.number || '')}" onclick="confirmDeleteJobNumber(this.dataset.jid,this.dataset.jnum)">✕</button>
       </td>`;
     }
     html += '</tr>';
