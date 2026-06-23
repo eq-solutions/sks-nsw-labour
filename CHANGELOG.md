@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.80 — Batch: filter archived workers from people list
+
+**Date:** 2026-06-23
+**Scope:** `scripts/batch.js`
+
+- Archived workers no longer appear in the batch selector people list.
+
+---
+
 # v3.10.79 — Safety: prestart Word export — 12-hour AM/PM time format
 
 **Date:** 2026-06-23

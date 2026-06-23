@@ -22,7 +22,7 @@ function buildBatchPeopleList() {
   const gIcon  = { 'Direct': '⚡',     'Apprentice': '🎓',         'Labour Hire': '🔧' };
   let html = '';
   groups.forEach(g => {
-    const people = [...STATE.people.filter(p => p.group === g)].sort((a, b) => a.name.localeCompare(b.name));
+    const people = [...STATE.people.filter(p => p.group === g && !p.archived)].sort((a, b) => a.name.localeCompare(b.name));
     if (!people.length) return;
     html += `<div class="batch-group-hdr ${gClass[g]}">${gIcon[g]} ${g} <span style="opacity:.6;font-weight:500">(${people.length})</span></div>`;
     people.forEach(p => {
