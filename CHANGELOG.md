@@ -1,5 +1,28 @@
 # EQ Solves Field — Changelog
 
+# v3.10.75 — Safety: fix iOS auto-zoom on prestart + toolbox inputs
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- **Bug fix**: All prestart and toolbox text inputs were `font-size:13px` (via `_I` constant). iOS Safari auto-zooms the viewport on any input below 16px. Fixed by adding a `@media(max-width:640px)` rule in `_injectSafetyStyle()` that forces `font-size:16px` on all inputs and textareas inside `#prestart-form-body` and `#toolbox-form-body`. Desktop rendering unchanged (stays 13px).
+
+**Version stamps:** `APP_VERSION = '3.10.75'`, SW cache `eq-field-v3.10.75`.
+
+---
+
+# v3.10.74 — Safety: Word export — drawing ID fix + logo perf
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- **Bug fix**: `wp:docPr` and `pic:cNvPr` IDs in signature image runs were set to the relationship string (`rId2` etc.) rather than a unique integer. OOXML requires unique non-negative integers across the document — duplicate IDs caused Word to show repair warnings on any document with multiple signatures. Signatures now use a counter starting at 100 (well clear of the header logo at 1/0).
+- **Perf fix**: Logo binary-to-base64 conversion replaced 400K+ `forEach`/string-concat iterations with chunked `String.fromCharCode.apply` (8192 bytes per call, ~49 iterations total). Eliminates UI freeze on low-end Android.
+
+**Version stamps:** `APP_VERSION = '3.10.74'`, SW cache `eq-field-v3.10.74`.
+
+---
+
 # v3.10.73 — Safety: Word export polish — sig table + footer + hoisting fix
 
 **Date:** 2026-06-23

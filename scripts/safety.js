@@ -428,6 +428,7 @@ function _injectSafetyStyle() {
     + '#modal-prestart-sig .modal,#modal-toolbox-sig .modal{max-width:100vw!important;width:100vw!important}'
     + '#modal-prestart-sig canvas,#modal-toolbox-sig canvas{height:260px!important}'
     + '#prestart-form-body .grid2,#toolbox-form-body .grid2{grid-template-columns:1fr!important}'
+    + '#prestart-form-body input,#prestart-form-body textarea,#toolbox-form-body input,#toolbox-form-body textarea{font-size:16px!important}'
     + '}';
   document.head.appendChild(s);
 }
@@ -793,9 +794,11 @@ async function _psExportDocx() {
     if (logoResp.ok) {
       var logoBuf = await logoResp.arrayBuffer();
       var logoBin = new Uint8Array(logoBuf);
-      var logoStr = '';
-      logoBin.forEach(function(b) { logoStr += String.fromCharCode(b); });
-      logoBase64 = btoa(logoStr);
+      var logoChunks = [];
+      for (var lci = 0; lci < logoBin.length; lci += 8192) {
+        logoChunks.push(String.fromCharCode.apply(null, logoBin.subarray(lci, lci + 8192)));
+      }
+      logoBase64 = btoa(logoChunks.join(''));
     }
   } catch(e) { console.warn('EQ[safety] logo fetch failed:', e); }
 
@@ -910,18 +913,23 @@ async function _psExportDocx() {
   function spacer() { return '<w:p><w:pPr><w:spacing w:before="200" w:after="0"/></w:pPr></w:p>'; }
   function spacerSm() { return '<w:p><w:pPr><w:spacing w:before="100" w:after="0"/></w:pPr></w:p>'; }
 
+  // Drawing IDs must be unique positive integers across the whole document.
+  // Header logo uses docPr id=1 / cNvPr id=0.
+  // Signatures start at id=100 to avoid any collision.
+  var _drawingId = 100;
   function imgRun(sig) {
     if (!sig) return '';
     var cx = 1371600, cy = 457200;
+    var did = _drawingId++;
     return '<w:r><w:drawing>'
       + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
       + '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
-      + '<wp:docPr id="' + sig.rId + '" name="' + xe(sig.fileName) + '"/>'
+      + '<wp:docPr id="' + did + '" name="' + xe(sig.fileName) + '"/>'
       + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
       + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
       + '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
       + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<pic:nvPicPr><pic:cNvPr id="1" name="' + xe(sig.fileName) + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:nvPicPr><pic:cNvPr id="' + did + '" name="' + xe(sig.fileName) + '"/><pic:cNvPicPr/></pic:nvPicPr>'
       + '<pic:blipFill><a:blip r:embed="' + sig.rId + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
       + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
       + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>'
