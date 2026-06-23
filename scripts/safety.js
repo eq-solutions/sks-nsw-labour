@@ -521,9 +521,7 @@ function openPrestartForm(id) {
       site_abbr:        ((typeof STATE !== 'undefined' && STATE.sites || [])[0] || {}).abbr || '',
       sks_rep:          _currentUser(),
       subcontractor:    '',
-      project_name:     '',
       project_number:   '',
-      project_address:  '',
       prev_day_issues:  '',
       works_scope:      '',
       crew:             [],
@@ -552,20 +550,16 @@ function renderPrestartForm() {
   let h = '<div style="padding:14px 16px">';
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Project Name', '<input type="text" value="' + esc(d.project_name || '') + '" oninput="_psField(\'project_name\',this.value)" placeholder="e.g. Arncliffe Central" style="' + _I + '">');
+  h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('ps-site-dl'));
   h += _fld('Project Number', '<input type="text" value="' + esc(d.project_number || '') + '" oninput="_psField(\'project_number\',this.value)" placeholder="e.g. 26184" style="' + _I + '">');
   h += '</div>';
-  h += _fld('Project Address', '<input type="text" value="' + esc(d.project_address || '') + '" oninput="_psField(\'project_address\',this.value)" placeholder="e.g. 26 Eden St, Arncliffe NSW 2205" style="' + _I + '">');
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('ps-site-dl'));
   h += _fld('Date', '<input type="date" value="' + esc(d.briefing_date || '') + '" onchange="_psField(\'briefing_date\',this.value)" style="' + _I + '">');
+  h += _fld('Time', '<input type="time" value="' + esc(d.briefing_time || '') + '" onchange="_psField(\'briefing_time\',this.value)" style="' + _I + '">');
   h += '</div>';
 
-  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Time', '<input type="time" value="' + esc(d.briefing_time || '') + '" onchange="_psField(\'briefing_time\',this.value)" style="' + _I + '">');
   h += _fld('Rep / Supervisor', '<input type="text" value="' + esc(d.sks_rep || '') + '" oninput="_psField(\'sks_rep\',this.value)" placeholder="Name" style="' + _I + '">');
-  h += '</div>';
 
   h += _fld('Principal Contractor / Customer', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_psField(\'subcontractor\',this.value)" placeholder="Company or site controller" style="' + _I + '">');
   h += _fld('Scope of works', _taWithMic('ps', 'works_scope', d.works_scope, 'What work is being done today?'));
@@ -766,8 +760,9 @@ async function _psExportDocx() {
   if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
 
   const d = _prestartDraft;
-  const siteObj = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
-  const siteName = siteObj ? siteObj.name : (d.site_abbr || '');
+  const siteObj    = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
+  const siteName   = siteObj ? siteObj.name    : (d.site_abbr || '');
+  const siteAddress = siteObj ? (siteObj.address || '') : '';
 
   function xe(s) {
     if (s == null) return '';
@@ -948,8 +943,8 @@ async function _psExportDocx() {
 
   // Info table — 4-column (2340×4): label cells navy, value cells light blue
   body += tblOpen4();
-  body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,d.project_name) + tcN(2340,'Project Number:') + tcL(2340,d.project_number) + '</w:tr>';
-  body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,d.project_address,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,siteName) + tcN(2340,'Project Number:') + tcL(2340,d.project_number) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,siteAddress,3) + '</w:tr>';
   body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.briefing_date)) + tcN(2340,'Time:') + tcL(2340,d.briefing_time ? d.briefing_time.slice(0,5) : '') + '</w:tr>';
   body += '<w:tr>' + tcN(2340,'SKS Representative:') + tcL(7020,d.sks_rep,3) + '</w:tr>';
   body += '<w:tr>' + tcN(2340,'Sub-Contractor:') + tcL(7020,d.subcontractor,3) + '</w:tr>';

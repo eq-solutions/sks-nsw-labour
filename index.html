@@ -633,8 +633,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.75
+  EQ Solves — Field  v3.10.76
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
+  ────────────────────────────────────────────────────
+  • Removed Project Name and Project Address inputs from the prestart form.
+    These are already in the sites table (site.name, site.address) — resolved
+    at runtime from the selected site_abbr. No duplicate entry needed.
+  • Docx export now uses siteName and siteAddress from the site record for
+    the Project Name and Project Address rows in the Word document.
+  • Simplified migration: now adds only project_number, permits_categories,
+    affects_other_trades (3 columns, not 5).
+  • Form layout: Site + Project Number in one grid row; Date + Time together.
 
   CHANGES IN v3.10.75  (Safety: fix iOS auto-zoom on prestart + toolbox inputs)
   ────────────────────────────────────────────────────

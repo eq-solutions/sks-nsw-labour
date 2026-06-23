@@ -1,5 +1,19 @@
 # EQ Solves Field — Changelog
 
+# v3.10.76 — Safety: prestart form — remove redundant project fields
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`, `migrations/2026-06-23_prestarts_project_fields.sql`
+
+- **Removed** `project_name` and `project_address` form inputs — these are already held in the sites table (`site.name`, `site.address`) and resolved from the selected `site_abbr`. Entering them separately was redundant duplication.
+- **Docx export** now reads `siteName` and `siteAddress` from the site record for the Project Name and Project Address rows.
+- **Migration simplified** to 3 columns: `project_number`, `permits_categories`, `affects_other_trades`.
+- **Form layout**: Site + Project Number grouped in one row; Date + Time in the next.
+
+**Version stamps:** `APP_VERSION = '3.10.76'`, SW cache `eq-field-v3.10.76`.
+
+---
+
 # v3.10.75 — Safety: fix iOS auto-zoom on prestart + toolbox inputs
 
 **Date:** 2026-06-23
