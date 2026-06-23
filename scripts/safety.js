@@ -518,7 +518,7 @@ function openPrestartForm(id) {
     _prestartDraft = {
       briefing_date:    _todayIso(),
       briefing_time:    _nowTime(),
-      site_abbr:        ((typeof STATE !== 'undefined' && STATE.sites || [])[0] || {}).abbr || '',
+      site_abbr:        'SYD53',
       sks_rep:          _currentUser(),
       subcontractor:    '',
       project_number:   '',
@@ -550,7 +550,7 @@ function renderPrestartForm() {
   let h = '<div style="padding:14px 16px">';
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('ps-site-dl'));
+  h += _fld('Site', '<div style="position:relative"><input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + ';padding-right:28px"><span style="position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--ink-3);font-size:12px">▾</span></div>' + _siteDatalist('ps-site-dl'));
   h += _fld('Project Number', '<input type="text" value="' + esc(d.project_number || '') + '" oninput="_psField(\'project_number\',this.value)" placeholder="e.g. 26184" style="' + _I + '">');
   h += '</div>';
 
