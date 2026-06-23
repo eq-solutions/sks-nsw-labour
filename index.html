@@ -86,6 +86,7 @@
 <script src="scripts/pipeline.js"></script>
 <script src="scripts/pipeline-resource.js"></script>
 <script src="scripts/home.js"></script>
+<script src="scripts/jszip.min.js"></script>
 <script src="scripts/safety.js"></script>
 <script src="scripts/safety-dashboard.js"></script>
 
@@ -632,8 +633,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.69
+  EQ Solves — Field  v3.10.70
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.70  (Safety: Word export + project fields)
+  ────────────────────────────────────────────────────
+  • Prestart form: added Project Name, Project Number, Project Address fields
+    (saved to Supabase via migration 2026-06-23_prestarts_project_fields.sql).
+  • "↓ Word" button on every prestart (draft or submitted) generates a
+    .docx matching the SKS Daily Pre-Start template: project info table,
+    static Controls table, 8-point Measures checklist, HRCW checkboxes,
+    hazards, permits, compliance declaration, and crew signatures as images.
+  • JSZip 3.10.1 bundled locally (scripts/jszip.min.js) and precached in
+    the service worker — export works offline if already cached.
 
   CHANGES IN v3.10.69  (Timesheets: visual readability)
   ────────────────────────────────────────────────────

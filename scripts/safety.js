@@ -506,6 +506,9 @@ function openPrestartForm(id) {
       site_abbr:        ((typeof STATE !== 'undefined' && STATE.sites || [])[0] || {}).abbr || '',
       sks_rep:          _currentUser(),
       subcontractor:    '',
+      project_name:     '',
+      project_number:   '',
+      project_address:  '',
       prev_day_issues:  '',
       works_scope:      '',
       crew:             [],
@@ -530,6 +533,12 @@ function renderPrestartForm() {
   const armed     = _safetyArmed.has('prestart-delete');
 
   let h = '<div style="padding:14px 16px">';
+
+  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  h += _fld('Project Name', '<input type="text" value="' + esc(d.project_name || '') + '" oninput="_psField(\'project_name\',this.value)" placeholder="e.g. Arncliffe Central" style="' + _I + '">');
+  h += _fld('Project Number', '<input type="text" value="' + esc(d.project_number || '') + '" oninput="_psField(\'project_number\',this.value)" placeholder="e.g. 26184" style="' + _I + '">');
+  h += '</div>';
+  h += _fld('Project Address', '<input type="text" value="' + esc(d.project_address || '') + '" oninput="_psField(\'project_address\',this.value)" placeholder="e.g. 26 Eden St, Arncliffe NSW 2205" style="' + _I + '">');
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('ps-site-dl'));
@@ -588,6 +597,7 @@ function renderPrestartForm() {
       + (armed ? 'Tap again to delete' : 'Delete') + '</button>';
   }
   h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-prestart\')">Close</button>';
+  h += '<button class="btn btn-secondary" onclick="_psExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
   if (!submitted) h += '<button class="btn" onclick="savePrestartDraft()">Save draft</button>';
   h += !submitted
     ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitPrestart()">Submit</button>'
@@ -705,6 +715,364 @@ async function submitPrestart() {
     showToast('Prestart submitted ✓');
     renderPrestart(); renderPrestartForm();
   } finally { _prestartInflight.delete('submit'); }
+}
+
+// ── Word / .docx export ───────────────────────────────────────
+async function _psExportDocx() {
+  if (!_prestartDraft) { showToast('No prestart to export'); return; }
+  if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
+
+  const d = _prestartDraft;
+  const siteObj = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
+  const siteName = siteObj ? siteObj.name : (d.site_abbr || '');
+
+  function xe(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Collect signature images
+  const sigMap = {};
+  let nextRid = 2;
+  (d.crew || []).forEach(function(m, i) {
+    if (m.signature_image) {
+      sigMap[i] = {
+        rId: 'rId' + nextRid++,
+        base64: m.signature_image.replace(/^data:image\/[^;]+;base64,/, ''),
+        fileName: 'sig' + i + '.png'
+      };
+    }
+  });
+
+  // ── XML helpers ───────────────────────────────────────────────
+  function rPr(bold, sz, color) {
+    var s = '<w:rPr>';
+    if (bold)  s += '<w:b/>';
+    if (sz)    s += '<w:sz w:val="' + (sz * 2) + '"/><w:szCs w:val="' + (sz * 2) + '"/>';
+    if (color) s += '<w:color w:val="' + color + '"/>';
+    return s + '</w:rPr>';
+  }
+
+  function run(text, bold, sz, color) {
+    return '<w:r>' + rPr(bold, sz, color) + '<w:t xml:space="preserve">' + xe(text) + '</w:t></w:r>';
+  }
+
+  var CELL_BORDERS = '<w:tcBorders>'
+    + '<w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
+    + '<w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
+    + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
+    + '<w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
+    + '</w:tcBorders>';
+  var CELL_MAR = '<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="100" w:type="dxa"/>'
+    + '<w:bottom w:w="60" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar>';
+
+  function tc(w, fill, inner, gridSpan) {
+    var tcpr = '<w:tcPr>'
+      + '<w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
+      + CELL_BORDERS
+      + (fill ? '<w:shd w:val="clear" w:color="auto" w:fill="' + fill + '"/>' : '')
+      + CELL_MAR
+      + '</w:tcPr>';
+    return '<w:tc>' + tcpr + inner + '</w:tc>';
+  }
+
+  function kv(w, label, value, gridSpan) {
+    return tc(w, 'F5F5F5',
+      '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>'
+      + run(label + ':  ', true, 9)
+      + run(value || '', false, 9)
+      + '</w:p>', gridSpan);
+  }
+
+  function tblHdr(w, text) {
+    return tc(w, '1F335C',
+      '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="40" w:after="40"/></w:pPr>'
+      + run(text, true, 9, 'FFFFFF')
+      + '</w:p>');
+  }
+
+  function secBar(text) {
+    return '<w:p>'
+      + '<w:pPr><w:spacing w:before="140" w:after="40"/>'
+      + '<w:shd w:val="clear" w:color="auto" w:fill="1F335C"/></w:pPr>'
+      + run(text, true, 9, 'FFFFFF')
+      + '</w:p>';
+  }
+
+  var TBL_OPEN = '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/>'
+    + '<w:tblBorders>'
+    + '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
+    + '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
+    + '</w:tblBorders>'
+    + '</w:tblPr>';
+
+  function imgRun(sig) {
+    if (!sig) return '';
+    var cx = 1371600, cy = 457200;
+    return '<w:r><w:drawing>'
+      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+      + '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:docPr id="' + sig.rId + '" name="' + xe(sig.fileName) + '"/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+      + '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:nvPicPr><pic:cNvPr id="1" name="' + xe(sig.fileName) + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:blipFill>'
+      + '<a:blip r:embed="' + sig.rId + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
+      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic>'
+      + '</wp:inline></w:drawing></w:r>';
+  }
+
+  // ── Build document body ───────────────────────────────────────
+  var body = '';
+
+  // Title
+  body += '<w:p>'
+    + '<w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="160"/></w:pPr>'
+    + run('SKS DAILY PRE-START', true, 18)
+    + '</w:p>';
+
+  // Project / site info table
+  body += TBL_OPEN
+    + '<w:tr>' + kv(4680, 'Project Name', d.project_name) + kv(4680, 'Project Number', d.project_number) + '</w:tr>'
+    + '<w:tr>' + kv(9360, 'Project Address', d.project_address, 2) + '</w:tr>'
+    + '<w:tr>' + kv(4680, 'Site', siteName) + kv(4680, 'Date', _fmtDate(d.briefing_date)) + '</w:tr>'
+    + '<w:tr>' + kv(4680, 'Time', d.briefing_time ? d.briefing_time.slice(0,5) : '') + kv(4680, 'SKS Representative', d.sks_rep) + '</w:tr>'
+    + '<w:tr>' + kv(9360, 'Sub-Contractor / Principal Contractor', d.subcontractor, 2) + '</w:tr>'
+    + '</w:tbl>';
+
+  // Daily briefing Q&A
+  body += secBar('DAILY BRIEFING');
+  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="20"/></w:pPr>'
+    + run('Are there any Safety issues arising from the previous workday?', true, 9) + '</w:p>';
+  body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
+    + run(d.prev_day_issues || 'None reported', false, 9) + '</w:p>';
+  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="20"/></w:pPr>'
+    + run('What Works are taking Place Today, By Who & Where?', true, 9) + '</w:p>';
+  body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
+    + run(d.works_scope || '', false, 9) + '</w:p>';
+  if (d.swms_refs) {
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="20"/></w:pPr>'
+      + run('SWMS References:', true, 9) + '</w:p>';
+    body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
+      + run(d.swms_refs, false, 9) + '</w:p>';
+  }
+
+  // Controls table (static)
+  var CONTROLS = [
+    ['Slips Trips and Falls',        'Housekeeping'],
+    ['Cuts Scrapes and Abrasions',   'Correct PPE'],
+    ['Manual Handling',              'Correct Manual Handling Technique'],
+    ['Using Power tools',            'Tags are up to date, Correct Use of tools, Right tool for right job'],
+    ['Use of knives',                'NO KNIVES'],
+  ];
+  body += secBar('CONTROLS');
+  body += TBL_OPEN
+    + '<w:tr>' + tblHdr(7200, 'Control') + tblHdr(2160, 'Action By') + '</w:tr>'
+    + CONTROLS.map(function(row) {
+        return '<w:tr>'
+          + tc(7200, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(row[0], false, 9) + '</w:p>')
+          + tc(2160, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(row[1], false, 9) + '</w:p>')
+          + '</w:tr>';
+      }).join('')
+    + '</w:tbl>';
+
+  // Measures checklist (static — all Yes for submitted/complete prestart)
+  var MEASURES = [
+    'Scope of work and responsibilities for the day discussed and understood.',
+    'SWMS for today\'s work reviewed, understood, and approved by all workers.',
+    'Work Methods / Procedures discussed and understood.',
+    'All relevant permits to work are in place and understood.',
+    'Tools including all Equipment checked and in good working order & displays current tag evidence.',
+    'All workers have the appropriate PPE for tasks being undertaken on site.',
+    'Housekeeping issues have been discussed & understood.',
+    'Materials and equipment to be used discussed & understood.',
+  ];
+  body += secBar('MEASURES FOR TODAY\'S WORK SCOPE');
+  body += TBL_OPEN
+    + MEASURES.map(function(m, i) {
+        return '<w:tr>'
+          + tc(8560, null, '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
+              + run((i + 1) + '.  ' + m, false, 9) + '</w:p>')
+          + tc(800, 'E8F5E9', '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="30" w:after="30"/></w:pPr>'
+              + run('Yes', true, 9, '15803D') + '</w:p>')
+          + '</w:tr>';
+      }).join('')
+    + '</w:tbl>';
+
+  // Other hazards
+  body += secBar('OTHER HAZARDS & RISKS');
+  body += TBL_OPEN
+    + '<w:tr>' + tblHdr(5760, 'Hazard / Risk') + tblHdr(2400, 'Action By') + tblHdr(1200, 'When') + '</w:tr>'
+    + (d.hazards
+      ? '<w:tr>'
+          + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(d.hazards, false, 9) + '</w:p>')
+          + tc(2400, null, '<w:p/>')
+          + tc(1200, null, '<w:p/>')
+          + '</w:tr>'
+      : '<w:tr>'
+          + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>' + run(' ', false, 9) + '</w:p>')
+          + tc(2400, null, '<w:p/>')
+          + tc(1200, null, '<w:p/>')
+          + '</w:tr>')
+    + '</w:tbl>';
+
+  // HRCW checkboxes
+  body += secBar('HIGH RISK CONSTRUCTION WORK (NSW WHS Reg Schedule 3)');
+  var hrcwRows = '';
+  for (var hi = 0; hi < HRCW.length; hi += 2) {
+    var lCat = HRCW[hi], rCat = HRCW[hi + 1];
+    var lChk = (d.hrcw_categories || []).indexOf(lCat.id) >= 0;
+    var rChk = rCat && (d.hrcw_categories || []).indexOf(rCat.id) >= 0;
+    hrcwRows += '<w:tr>'
+      + tc(4680, lChk ? 'E8F5E9' : null,
+          '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
+          + run((lChk ? '☑ ' : '☐ ') + lCat.label, false, 9)
+          + '</w:p>')
+      + (rCat
+        ? tc(4680, rChk ? 'E8F5E9' : null,
+            '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
+            + run((rChk ? '☑ ' : '☐ ') + rCat.label, false, 9)
+            + '</w:p>')
+        : tc(4680, null, '<w:p/>'))
+      + '</w:tr>';
+  }
+  body += TBL_OPEN + hrcwRows + '</w:tbl>';
+
+  // Permits (free text)
+  if (d.permits) {
+    body += secBar('PERMITS REQUIRED');
+    body += '<w:p><w:pPr><w:spacing w:before="60" w:after="80"/><w:ind w:left="200"/></w:pPr>'
+      + run(d.permits, false, 9) + '</w:p>';
+  }
+
+  // Declaration
+  body += secBar('DECLARATION');
+  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr>'
+    + run('I have reviewed today\'s scope of works and associated SWMS and agree to comply with all the controls. '
+      + 'If the task changes for any reason the SWMS will be reviewed and where applicable will be amended to reflect the change in task.',
+      false, 9)
+    + '</w:p>';
+
+  // Signatures
+  body += secBar('CREW SIGN-OFF');
+  var crew = d.crew || [];
+  if (crew.length) {
+    body += TBL_OPEN
+      + '<w:tr>' + tblHdr(4680, 'Name & Signature') + tblHdr(4680, 'Signature') + '</w:tr>'
+      + crew.map(function(m, i) {
+          var sig = sigMap[i];
+          var sigCell = sig
+            ? '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>' + imgRun(sig) + '</w:p>'
+            : '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>'
+                + run('Not signed', false, 8, 'AAAAAA') + '</w:p>';
+          return '<w:tr>'
+            + tc(4680, null, '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>' + run(m.name || '', false, 9) + '</w:p>')
+            + tc(4680, null, sigCell)
+            + '</w:tr>';
+        }).join('')
+      + '</w:tbl>';
+  } else {
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>'
+      + run('No crew recorded.', false, 9, 'AAAAAA') + '</w:p>';
+  }
+
+  // Footer note
+  body += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="200" w:after="0"/></w:pPr>'
+    + run('Daily Prestart  |  Page 1 of 1  |  Generated by EQ Solves — Field', false, 8, 'AAAAAA')
+    + '</w:p>';
+
+  // ── Relationships ─────────────────────────────────────────────
+  var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+  Object.keys(sigMap).forEach(function(k) {
+    var sig = sigMap[k];
+    docRels += '<Relationship Id="' + sig.rId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + sig.fileName + '"/>';
+  });
+  docRels += '</Relationships>';
+
+  var hasSigs = Object.keys(sigMap).length > 0;
+
+  var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+    + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+    + (hasSigs ? '<Default Extension="png" ContentType="image/png"/>' : '')
+    + '</Types>';
+
+  var dotRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    + '</Relationships>';
+
+  var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:docDefaults><w:rPrDefault><w:rPr>'
+    + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+    + '<w:sz w:val="18"/><w:szCs w:val="18"/>'
+    + '</w:rPr></w:rPrDefault>'
+    + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr></w:pPrDefault>'
+    + '</w:docDefaults></w:styles>';
+
+  var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+    + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    + '<w:body>'
+    + body
+    + '<w:sectPr>'
+    + '<w:pgSz w:w="11906" w:h="16838"/>'
+    + '<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/>'
+    + '</w:sectPr>'
+    + '</w:body></w:document>';
+
+  // ── Package and download ──────────────────────────────────────
+  var zip = new JSZip();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.folder('_rels').file('.rels', dotRels);
+  var wFolder = zip.folder('word');
+  wFolder.file('document.xml', docXml);
+  wFolder.file('styles.xml', stylesXml);
+  wFolder.folder('_rels').file('document.xml.rels', docRels);
+  if (hasSigs) {
+    var mFolder = wFolder.folder('media');
+    Object.keys(sigMap).forEach(function(k) {
+      var sig = sigMap[k];
+      mFolder.file(sig.fileName, sig.base64, { base64: true });
+    });
+  }
+
+  var repStr  = (d.sks_rep || 'Rep').replace(/[^a-zA-Z0-9]/g, '_');
+  var dateStr = (d.briefing_date || '').replace(/-/g, '');
+  var siteStr = (siteName || d.site_abbr || 'Site').replace(/[^a-zA-Z0-9]/g, '_');
+  var fileName = 'PreStart_' + repStr + '_' + dateStr + '_' + siteStr + '.docx';
+
+  try {
+    var blob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Word doc downloaded');
+  } catch(e) {
+    console.error('EQ[safety] docx export failed:', e);
+    showToast('Export failed — try again');
+  }
 }
 
 // ════════════════════════════════════════════════════════════════

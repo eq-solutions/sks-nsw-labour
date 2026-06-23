@@ -1,5 +1,22 @@
 # EQ Solves Field — Changelog
 
+# v3.10.70 — Safety: Word export + project fields
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`, `scripts/jszip.min.js`, `index.html`, `sw.js`, `migrations/2026-06-23_prestarts_project_fields.sql`
+
+Added Word (.docx) export to the prestart form, matching the SKS Daily Pre-Start template format.
+
+**Form changes:** Project Name, Project Number, and Project Address fields added to the prestart form. Saved to Supabase via `migrations/2026-06-23_prestarts_project_fields.sql` (adds three nullable TEXT columns to the `prestarts` table).
+
+**Export:** "↓ Word" button appears in the form footer on every prestart (draft or submitted). Generates a fully structured .docx with: project/site info table, daily briefing Q&A, static Controls table (slips/trips → PPE → manual handling), 8-point Measures checklist (all Yes), Other Hazards & Risks table, HRCW checkboxes (ticked items highlighted), permits, compliance declaration, and crew names with embedded signature images.
+
+**Dependencies:** JSZip 3.10.1 bundled at `scripts/jszip.min.js` — no CDN dependency, precached in the service worker so export works offline once the app is cached.
+
+**Version stamps:** `APP_VERSION = '3.10.70'`, SW cache `eq-field-v3.10.70`.
+
+---
+
 # v3.10.68 — Job Numbers: compact table layout
 
 **Date:** 2026-06-19
