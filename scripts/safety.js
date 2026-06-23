@@ -518,7 +518,7 @@ function openPrestartForm(id) {
     _prestartDraft = {
       briefing_date:    _todayIso(),
       briefing_time:    _nowTime(),
-      site_abbr:        'SYD53',
+      site_abbr:        '',
       sks_rep:          _currentUser(),
       subcontractor:    '',
       project_number:   '',
