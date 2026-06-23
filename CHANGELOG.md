@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.71 — Safety: Word export visual redesign
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+Rewrote `_psExportDocx()` to match the Terry Su SKS Daily Pre-Start template design exactly.
+
+**Design changes:** Replaced the old gray-cell layout with the correct two-color system extracted from the reference OOXML: navy (#1F335C) label cells with white bold text and navy borders; light-blue (#EEF1F8) value cells with CCCCCC borders. Section headings (Controls, Measures, etc.) are now bold-caps navy-colored paragraphs rather than filled dark-blue bars. The info table is now a 4-column grid (4 × 2340 DXA) with single-column label and 3-column spanning value for wide fields. Q&A questions use 2-col inline tables (question navy | answer light-blue) or full-width 2-row tables for long answers. Yes/No answers use green (#4caf82) bold text. Measures table is now 3-column (720 dark-blue number | 6480 plain text | 2160 green-tinted Yes). Controls data rows use EEF1F8 light-blue, not white. Declaration rendered in an italic light-blue table cell.
+
+**Version stamps:** `APP_VERSION = '3.10.71'`, SW cache `eq-field-v3.10.71`.
+
+---
+
 # v3.10.70 — Safety: Word export + project fields
 
 **Date:** 2026-06-23

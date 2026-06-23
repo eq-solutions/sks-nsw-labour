@@ -786,68 +786,109 @@ async function _psExportDocx() {
     }
   });
 
-  // ── XML helpers ───────────────────────────────────────────────
-  function rPr(bold, sz, color) {
-    var s = '<w:rPr>';
-    if (bold)  s += '<w:b/>';
-    if (sz)    s += '<w:sz w:val="' + (sz * 2) + '"/><w:szCs w:val="' + (sz * 2) + '"/>';
-    if (color) s += '<w:color w:val="' + color + '"/>';
-    return s + '</w:rPr>';
+  // ── Color constants (from Terry Su reference XML) ──────────────
+  var NAVY  = '1F335C';  // dark blue — labels, headers
+  var LBLUE = 'EEF1F8';  // light blue — value cells
+  var LGRAY = 'CCCCCC';  // gray — borders on value cells
+  var GREEN = '4caf82';  // green — Yes/No answer text
+  var GRNBG = 'e8f5ee';  // green tint — Yes cell background
+
+  var RMAR = '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
+  var NBORD = '<w:tcBorders><w:top w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/><w:left w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/><w:bottom w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/><w:right w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/></w:tcBorders>';
+  var GBORD = '<w:tcBorders><w:top w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/><w:left w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/><w:bottom w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/><w:right w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/></w:tcBorders>';
+
+  function arial(text, bold, color) {
+    return '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + (bold ? '<w:b/><w:bCs/>' : '')
+      + (color ? '<w:color w:val="' + color + '"/>' : '')
+      + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text) + '</w:t></w:r>';
   }
 
-  function run(text, bold, sz, color) {
-    return '<w:r>' + rPr(bold, sz, color) + '<w:t xml:space="preserve">' + xe(text) + '</w:t></w:r>';
-  }
-
-  var CELL_BORDERS = '<w:tcBorders>'
-    + '<w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-    + '<w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-    + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-    + '<w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-    + '</w:tcBorders>';
-  var CELL_MAR = '<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="100" w:type="dxa"/>'
-    + '<w:bottom w:w="60" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar>';
-
-  function tc(w, fill, inner, gridSpan) {
-    var tcpr = '<w:tcPr>'
-      + '<w:tcW w:w="' + w + '" w:type="dxa"/>'
+  // Navy label cell
+  function tcN(w, text, gridSpan) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
       + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
-      + CELL_BORDERS
-      + (fill ? '<w:shd w:val="clear" w:color="auto" w:fill="' + fill + '"/>' : '')
-      + CELL_MAR
-      + '</w:tcPr>';
-    return '<w:tc>' + tcpr + inner + '</w:tc>';
+      + NBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + NAVY + '"/>' + RMAR
+      + '<w:vAlign w:val="center"/></w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="FFFFFF"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text) + '</w:t></w:r></w:p></w:tc>';
   }
 
-  function kv(w, label, value, gridSpan) {
-    return tc(w, 'F5F5F5',
-      '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>'
-      + run(label + ':  ', true, 9)
-      + run(value || '', false, 9)
-      + '</w:p>', gridSpan);
+  // Light-blue value cell
+  function tcL(w, text, gridSpan) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
+      + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+      + '<w:vAlign w:val="center"/></w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text || '') + '</w:t></w:r></w:p></w:tc>';
   }
 
-  function tblHdr(w, text) {
-    return tc(w, '1F335C',
-      '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="40" w:after="40"/></w:pPr>'
-      + run(text, true, 9, 'FFFFFF')
-      + '</w:p>');
+  // Light-blue cell with green answer text (Yes/No answers)
+  function tcLG(w, text, gridSpan) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
+      + NBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+      + '</w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + GREEN + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text || '') + '</w:t></w:r></w:p></w:tc>';
   }
 
-  function secBar(text) {
-    return '<w:p>'
-      + '<w:pPr><w:spacing w:before="140" w:after="40"/>'
-      + '<w:shd w:val="clear" w:color="auto" w:fill="1F335C"/></w:pPr>'
-      + run(text, true, 9, 'FFFFFF')
-      + '</w:p>';
+  // Plain white cell (no fill)
+  function tcW(w, text) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + GBORD + RMAR + '</w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text || '') + '</w:t></w:r></w:p></w:tc>';
   }
 
-  var TBL_OPEN = '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/>'
-    + '<w:tblBorders>'
-    + '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-    + '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-    + '</w:tblBorders>'
-    + '</w:tblPr>';
+  // Green-tinted Yes cell
+  function tcYes() {
+    return '<w:tc><w:tcPr><w:tcW w:w="2160" w:type="dxa"/>'
+      + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + GRNBG + '"/>' + RMAR
+      + '</w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + GREEN + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t>Yes</w:t></w:r></w:p></w:tc>';
+  }
+
+  // Section heading paragraph (bold caps, navy colored — NOT a filled bar)
+  function secHead(text) {
+    return '<w:p><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:caps/><w:color w:val="' + NAVY + '"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>'
+      + '<w:t>' + xe(text) + '</w:t></w:r></w:p>';
+  }
+
+  // HRCW/permit checkbox cell
+  function tcChk(w, label, checked) {
+    var fill = checked ? GRNBG : LBLUE;
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + fill + '"/>' + RMAR
+      + '</w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + (checked ? '<w:b/><w:bCs/><w:color w:val="' + GREEN + '"/>' : '')
+      + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + (checked ? '☑ ' : '☐ ') + xe(label) + '</w:t></w:r></w:p></w:tc>';
+  }
+
+  function tblOpen4() {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/></w:tblGrid>';
+  }
+  function tblOpen2(c1, c2) {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="' + c1 + '"/><w:gridCol w:w="' + c2 + '"/></w:tblGrid>';
+  }
+  function tblOpen3(c1, c2, c3) {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="' + c1 + '"/><w:gridCol w:w="' + c2 + '"/><w:gridCol w:w="' + c3 + '"/></w:tblGrid>';
+  }
+  function tblOpen1() {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="9360"/></w:tblGrid>';
+  }
+
+  function spacer() { return '<w:p><w:pPr><w:spacing w:before="200" w:after="0"/></w:pPr></w:p>'; }
+  function spacerSm() { return '<w:p><w:pPr><w:spacing w:before="100" w:after="0"/></w:pPr></w:p>'; }
 
   function imgRun(sig) {
     if (!sig) return '';
@@ -861,8 +902,7 @@ async function _psExportDocx() {
       + '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
       + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
       + '<pic:nvPicPr><pic:cNvPr id="1" name="' + xe(sig.fileName) + '"/><pic:cNvPicPr/></pic:nvPicPr>'
-      + '<pic:blipFill>'
-      + '<a:blip r:embed="' + sig.rId + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
+      + '<pic:blipFill><a:blip r:embed="' + sig.rId + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
       + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
       + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>'
       + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
@@ -873,62 +913,67 @@ async function _psExportDocx() {
   // ── Build document body ───────────────────────────────────────
   var body = '';
 
-  // Title
-  body += '<w:p>'
-    + '<w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="160"/></w:pPr>'
-    + run('SKS DAILY PRE-START', true, 18)
-    + '</w:p>';
+  // Title — Roboto font, navy, 16pt bold, centered (matches Terry Su reference)
+  body += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="200"/></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Roboto" w:hAnsi="Roboto" w:cs="Roboto"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>'
+    + '<w:t>SKS DAILY PRE-START</w:t></w:r></w:p>';
 
-  // Project / site info table (matches SKS Daily Pre-Start template order)
-  body += TBL_OPEN
-    + '<w:tr>' + kv(4680, 'Project Name', d.project_name) + kv(4680, 'Project Number', d.project_number) + '</w:tr>'
-    + '<w:tr>' + kv(9360, 'Project Address', d.project_address, 2) + '</w:tr>'
-    + '<w:tr>' + kv(4680, 'Date', _fmtDate(d.briefing_date)) + kv(4680, 'Time', d.briefing_time ? d.briefing_time.slice(0,5) : '') + '</w:tr>'
-    + '<w:tr>' + kv(4680, 'SKS Representative', d.sks_rep) + kv(4680, 'Sub-Contractor', d.subcontractor) + '</w:tr>'
-    + (siteName ? '<w:tr>' + kv(9360, 'Site', siteName, 2) + '</w:tr>' : '')
-    + '</w:tbl>';
+  // Info table — 4-column (2340×4): label cells navy, value cells light blue
+  body += tblOpen4();
+  body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,d.project_name) + tcN(2340,'Project Number:') + tcL(2340,d.project_number) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,d.project_address,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.briefing_date)) + tcN(2340,'Time:') + tcL(2340,d.briefing_time ? d.briefing_time.slice(0,5) : '') + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'SKS Representative:') + tcL(7020,d.sks_rep,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Sub-Contractor:') + tcL(7020,d.subcontractor,3) + '</w:tr>';
+  if (siteName) body += '<w:tr>' + tcN(2340,'Site:') + tcL(7020,siteName,3) + '</w:tr>';
+  body += '</w:tbl>';
 
-  // Daily briefing Q&A
-  body += secBar('DAILY BRIEFING');
-  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="20"/></w:pPr>'
-    + run('Are there any Safety issues arising from the previous workday?', true, 9) + '</w:p>';
-  body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
-    + run(d.prev_day_issues || 'None reported', false, 9) + '</w:p>';
-  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="20"/></w:pPr>'
-    + run('What Works are taking Place Today, By Who & Where?', true, 9) + '</w:p>';
-  body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
-    + run(d.works_scope || '', false, 9) + '</w:p>';
-  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="20"/></w:pPr>'
-    + run('Will this work affect other trades?', true, 9) + '</w:p>';
-  body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
-    + run(d.affects_other_trades || '—', false, 9) + '</w:p>';
+  body += spacer();
+
+  // Safety issues — 2-col inline table (question left navy, answer right light-blue+green)
+  body += tblOpen2(6360,3000);
+  body += '<w:tr>' + tcN(6360,'Are there any Safety issues arising from the previous workday?') + tcLG(3000,d.prev_day_issues || 'No') + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacerSm();
+
+  // Works scope — full-width 2-row table
+  body += tblOpen1();
+  body += '<w:tr>' + tcN(9360,'What Works are taking Place Today, By Who & Where?') + '</w:tr>';
+  body += '<w:tr>' + tcL(9360,d.works_scope) + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacerSm();
+
+  // Affects other trades — 2-col inline table
+  body += tblOpen2(6360,3000);
+  body += '<w:tr>' + tcN(6360,'Will this work affect other trades?') + tcLG(3000,d.affects_other_trades || '') + '</w:tr>';
+  body += '</w:tbl>';
+
   if (d.swms_refs) {
-    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="20"/></w:pPr>'
-      + run('SWMS References:', true, 9) + '</w:p>';
-    body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
-      + run(d.swms_refs, false, 9) + '</w:p>';
+    body += spacerSm();
+    body += tblOpen2(6360,3000);
+    body += '<w:tr>' + tcN(6360,'SWMS References:') + tcL(3000,d.swms_refs) + '</w:tr>';
+    body += '</w:tbl>';
   }
 
-  // Controls table (static)
+  // Controls
   var CONTROLS = [
-    ['Slips Trips and Falls',        'Housekeeping'],
-    ['Cuts Scrapes and Abrasions',   'Correct PPE'],
-    ['Manual Handling',              'Correct Manual Handling Technique'],
-    ['Using Power tools',            'Tags are up to date, Correct Use of tools, Right tool for right job'],
-    ['Use of knives',                'NO KNIVES'],
+    ['Slips Trips and Falls',      'Housekeeping'],
+    ['Cuts Scrapes and Abrasions', 'Correct PPE'],
+    ['Manual Handling',            'Correct Manual Handling Technique'],
+    ['Using Power tools',          'Tags are up to date, Correct Use of tools, Right tool for right job'],
+    ['Use of knifes',              'NO KNIFES'],
   ];
-  body += secBar('CONTROLS');
-  body += TBL_OPEN
-    + '<w:tr>' + tblHdr(7200, 'Control') + tblHdr(2160, 'Action By') + '</w:tr>'
-    + CONTROLS.map(function(row) {
-        return '<w:tr>'
-          + tc(7200, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(row[0], false, 9) + '</w:p>')
-          + tc(2160, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(row[1], false, 9) + '</w:p>')
-          + '</w:tr>';
-      }).join('')
-    + '</w:tbl>';
+  body += secHead('Controls');
+  body += tblOpen2(6000,3360);
+  body += '<w:tr>' + tcN(6000,'Control') + tcN(3360,'Action By') + '</w:tr>';
+  CONTROLS.forEach(function(r) {
+    body += '<w:tr>' + tcL(6000,r[0]) + tcL(3360,r[1]) + '</w:tr>';
+  });
+  body += '</w:tbl>';
 
-  // Measures checklist (static — all Yes for submitted/complete prestart)
+  // Measures — 3-col (720 num navy | 6480 text white | 2160 yes green)
   var MEASURES = [
     'Scope of work and responsibilities for the day discussed and understood.',
     'SWMS for today\'s work reviewed, understood, and approved by all workers.',
@@ -939,116 +984,84 @@ async function _psExportDocx() {
     'Housekeeping issues have been discussed & understood.',
     'Materials and equipment to be used discussed & understood.',
   ];
-  body += secBar('MEASURES FOR TODAY\'S WORK SCOPE');
-  body += TBL_OPEN
-    + MEASURES.map(function(m, i) {
-        return '<w:tr>'
-          + tc(8560, null, '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
-              + run((i + 1) + '.  ' + m, false, 9) + '</w:p>')
-          + tc(800, 'E8F5E9', '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="30" w:after="30"/></w:pPr>'
-              + run('Yes', true, 9, '15803D') + '</w:p>')
-          + '</w:tr>';
-      }).join('')
-    + '</w:tbl>';
+  body += secHead("Measures for Today's Work Scope");
+  body += tblOpen3(720,6480,2160);
+  MEASURES.forEach(function(m, i) {
+    body += '<w:tr>' + tcN(720,String(i+1)+'.') + tcW(6480,m) + tcYes() + '</w:tr>';
+  });
+  body += '</w:tbl>';
 
-  // Other hazards — always include 3 blank rows for handwriting space
+  // Other hazards
   var BLANK_HAZ = '<w:tr>'
-    + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="100" w:after="100"/></w:pPr><w:r><w:t xml:space="preserve"> </w:t></w:r></w:p>')
-    + tc(2400, null, '<w:p><w:pPr><w:spacing w:before="100" w:after="100"/></w:pPr></w:p>')
-    + tc(1200, null, '<w:p><w:pPr><w:spacing w:before="100" w:after="100"/></w:pPr></w:p>')
+    + tcL(5760,' ') + tcL(2400,' ') + tcL(1200,' ')
     + '</w:tr>';
-  body += secBar('OTHER HAZARDS & RISKS');
-  body += TBL_OPEN
-    + '<w:tr>' + tblHdr(5760, 'Hazard / Risk') + tblHdr(2400, 'Action By') + tblHdr(1200, 'When') + '</w:tr>'
-    + (d.hazards ? '<w:tr>'
-        + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(d.hazards, false, 9) + '</w:p>')
-        + tc(2400, null, '<w:p/>')
-        + tc(1200, null, '<w:p/>')
-        + '</w:tr>' : '')
-    + BLANK_HAZ + BLANK_HAZ + BLANK_HAZ
-    + '</w:tbl>';
+  body += secHead('Other Hazards & Risks');
+  body += tblOpen3(5760,2400,1200);
+  body += '<w:tr>' + tcN(5760,'Hazard / Risk') + tcN(2400,'Action By') + tcN(1200,'When') + '</w:tr>';
+  if (d.hazards) body += '<w:tr>' + tcL(5760,d.hazards) + tcL(2400,'') + tcL(1200,'') + '</w:tr>';
+  body += BLANK_HAZ + BLANK_HAZ + BLANK_HAZ;
+  body += '</w:tbl>';
 
   // HRCW checkboxes
-  body += secBar('HIGH RISK CONSTRUCTION WORK (NSW WHS Reg Schedule 3)');
-  var hrcwRows = '';
+  body += secHead('High Risk Construction Work (NSW WHS Reg Schedule 3)');
+  body += tblOpen2(4680,4680);
   for (var hi = 0; hi < HRCW.length; hi += 2) {
-    var lCat = HRCW[hi], rCat = HRCW[hi + 1];
+    var lCat = HRCW[hi], rCat = HRCW[hi+1];
     var lChk = (d.hrcw_categories || []).indexOf(lCat.id) >= 0;
     var rChk = rCat && (d.hrcw_categories || []).indexOf(rCat.id) >= 0;
-    hrcwRows += '<w:tr>'
-      + tc(4680, lChk ? 'E8F5E9' : null,
-          '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
-          + run((lChk ? '☑ ' : '☐ ') + lCat.label, false, 9)
-          + '</w:p>')
-      + (rCat
-        ? tc(4680, rChk ? 'E8F5E9' : null,
-            '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
-            + run((rChk ? '☑ ' : '☐ ') + rCat.label, false, 9)
-            + '</w:p>')
-        : tc(4680, null, '<w:p/>'))
-      + '</w:tr>';
+    body += '<w:tr>' + tcChk(4680,lCat.label,lChk) + (rCat ? tcChk(4680,rCat.label,rChk) : tcL(4680,'')) + '</w:tr>';
   }
-  body += TBL_OPEN + hrcwRows + '</w:tbl>';
+  body += '</w:tbl>';
 
-  // Relevant Permits — structured 10-type checklist matching SKS template
-  body += secBar('RELEVANT PERMITS');
-  var permRows = '';
+  // Relevant Permits
+  body += secHead('Relevant Permits');
+  body += tblOpen2(4680,4680);
   for (var pi = 0; pi < PERMITS_CATS.length; pi += 2) {
-    var lp = PERMITS_CATS[pi], rp = PERMITS_CATS[pi + 1];
+    var lp = PERMITS_CATS[pi], rp = PERMITS_CATS[pi+1];
     var lpChk = (d.permits_categories || []).indexOf(lp.id) >= 0;
     var rpChk = rp && (d.permits_categories || []).indexOf(rp.id) >= 0;
-    permRows += '<w:tr>'
-      + tc(4680, lpChk ? 'E8F5E9' : null,
-          '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
-          + run((lpChk ? '☑ ' : '☐ ') + lp.label, false, 9) + '</w:p>')
-      + (rp
-        ? tc(4680, rpChk ? 'E8F5E9' : null,
-            '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
-            + run((rpChk ? '☑ ' : '☐ ') + rp.label, false, 9) + '</w:p>')
-        : tc(4680, null, '<w:p/>'))
-      + '</w:tr>';
+    body += '<w:tr>' + tcChk(4680,lp.label,lpChk) + (rp ? tcChk(4680,rp.label,rpChk) : tcL(4680,'')) + '</w:tr>';
   }
-  body += TBL_OPEN + permRows + '</w:tbl>';
+  body += '</w:tbl>';
   if (d.permits) {
     body += '<w:p><w:pPr><w:spacing w:before="40" w:after="60"/><w:ind w:left="200"/></w:pPr>'
-      + run('Notes: ' + d.permits, false, 9) + '</w:p>';
+      + arial('Notes: ' + d.permits, false, null) + '</w:p>';
   }
 
   // Declaration
-  body += secBar('DECLARATION');
-  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr>'
-    + run('I have reviewed today\'s scope of works and associated SWMS and agree to comply with all the controls. '
-      + 'If the task changes for any reason the SWMS will be reviewed to and where applicable will be amended to reflect the change in task.',
-      false, 9)
-    + '</w:p>';
+  body += secHead('Declaration');
+  body += tblOpen1();
+  body += '<w:tr><w:tc><w:tcPr><w:tcW w:w="9360" w:type="dxa"/>'
+    + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+    + '</w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:i/><w:iCs/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+    + '<w:t xml:space="preserve">'
+    + xe('I have reviewed today\'s scope of works and associated SWMS and agree to comply with all the controls. '
+      + 'If the task changes for any reason the SWMS will be reviewed to and where applicable will be amended to reflect the change in task.')
+    + '</w:t></w:r></w:p></w:tc></w:tr>';
+  body += '</w:tbl>';
 
   // Signatures
-  body += secBar('SIGNATURES');
+  body += secHead('Signatures');
   var crew = d.crew || [];
   if (crew.length) {
-    body += TBL_OPEN
-      + '<w:tr>' + tblHdr(4680, 'Name & Signature') + tblHdr(4680, 'Signature') + '</w:tr>'
-      + crew.map(function(m, i) {
-          var sig = sigMap[i];
-          var sigCell = sig
-            ? '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>' + imgRun(sig) + '</w:p>'
-            : '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>'
-                + run('Not signed', false, 8, 'AAAAAA') + '</w:p>';
-          return '<w:tr>'
-            + tc(4680, null, '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>' + run(m.name || '', false, 9) + '</w:p>')
-            + tc(4680, null, sigCell)
-            + '</w:tr>';
-        }).join('')
-      + '</w:tbl>';
+    body += tblOpen2(4680,4680);
+    body += '<w:tr>' + tcN(4680,'Name & Signature') + tcN(4680,'Signature') + '</w:tr>';
+    crew.forEach(function(m, i) {
+      var sig = sigMap[i];
+      var sigContent = sig
+        ? '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>' + imgRun(sig) + '</w:p>'
+        : '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>' + arial('Not signed', false, LGRAY) + '</w:p>';
+      body += '<w:tr>' + tcL(4680,m.name || '') + '<w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/>' + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR + '</w:tcPr>' + sigContent + '</w:tc></w:tr>';
+    });
+    body += '</w:tbl>';
   } else {
-    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>'
-      + run('No crew recorded.', false, 9, 'AAAAAA') + '</w:p>';
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + arial('No crew recorded.', false, LGRAY) + '</w:p>';
   }
 
-  // Footer note
+  // Footer
   body += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="200" w:after="0"/></w:pPr>'
-    + run('Daily Prestart  |  Page 1 of 1  |  Generated by EQ Solves — Field', false, 8, 'AAAAAA')
-    + '</w:p>';
+    + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="16"/><w:szCs w:val="16"/><w:color w:val="' + LGRAY + '"/></w:rPr>'
+    + '<w:t>Daily Prestart  |  Page 1 of 1  |  Generated by EQ Solves — Field</w:t></w:r></w:p>';
 
   // ── Relationships ─────────────────────────────────────────────
   var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
