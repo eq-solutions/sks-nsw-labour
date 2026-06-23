@@ -633,8 +633,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.72
+  EQ Solves — Field  v3.10.73
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.73  (Safety: Word export polish — sig table + footer + hoisting fix)
+  ────────────────────────────────────────────────────
+  • Fixed critical hoisting bug: hasLogo/hasSigs declared before use so logo header
+    now actually appears in the exported docx.
+  • Signature table restructured: both columns headed "Name & Signature" (navy),
+    crew paired per row with name bold-navy + signature image stacked in one cell.
+  • Replaced body-paragraph footer with a proper Word page footer (footer1.xml),
+    matching the Terry Su reference. Bottom margin increased to 1440 DXA (1").
+  • FOOTER_RID = rId98 wired into docRels, contentTypes, and sectPr.
 
   CHANGES IN v3.10.72  (Safety: SKS logo in Word export header)
   ────────────────────────────────────────────────────

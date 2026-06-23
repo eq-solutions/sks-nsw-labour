@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.73 — Safety: Word export polish — sig table + footer + hoisting fix
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- **Bug fix**: `hasLogo`/`hasSigs` were declared after their first use in `docRels` (JavaScript `var` hoisting — value was `undefined` at that point). Moved declarations immediately after the logo fetch so the header relationship, content-type entry, and packaging all fire correctly.
+- **Signature table**: restructured to match the Terry Su reference — both columns now headed "Name & Signature" (navy), crew paired two per row, name bold-navy + signature image stacked inside one cell per person.
+- **Page footer**: replaced the body-paragraph workaround with a proper Word `footer1.xml` (wired through `docRels`, `contentTypes`, and `sectPr`). Bottom margin raised to 1440 DXA (1 inch) to give the footer room.
+
+**Version stamps:** `APP_VERSION = '3.10.73'`, SW cache `eq-field-v3.10.73`.
+
+---
+
 # v3.10.72 — Safety: SKS logo in Word export header
 
 **Date:** 2026-06-23
