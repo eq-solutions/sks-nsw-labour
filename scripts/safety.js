@@ -106,7 +106,7 @@ function _peopleDatalist(id) {
   return '<datalist id="' + id + '">' + people.map(function(p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist>';
 }
 
-const _I = 'width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:16px;font-family:inherit;box-sizing:border-box';
+const _I = 'width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box';
 const _TA = _I + ';resize:vertical;min-height:60px';
 
 function _lbl(text) {
@@ -428,6 +428,7 @@ function _injectSafetyStyle() {
     + '#modal-prestart-sig .modal,#modal-toolbox-sig .modal{max-width:100vw!important;width:100vw!important}'
     + '#modal-prestart-sig canvas,#modal-toolbox-sig canvas{height:260px!important}'
     + '#prestart-form-body .grid2,#toolbox-form-body .grid2{grid-template-columns:1fr!important}'
+    + '#prestart-form-body input,#prestart-form-body textarea,#toolbox-form-body input,#toolbox-form-body textarea{font-size:16px!important}'
     + '}';
   document.head.appendChild(s);
 }

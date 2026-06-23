@@ -5,7 +5,7 @@
 **Date:** 2026-06-23
 **Scope:** `scripts/safety.js`
 
-- **Bug fix**: `_I` constant had `font-size:13px` on all prestart and toolbox text inputs. iOS auto-zooms the viewport when a focused input is below 16px, causing jarring UX on every field tap. Increased to `16px` — threshold for no-zoom behaviour on iOS Safari.
+- **Bug fix**: All prestart and toolbox text inputs were `font-size:13px` (via `_I` constant). iOS Safari auto-zooms the viewport on any input below 16px. Fixed by adding a `@media(max-width:640px)` rule in `_injectSafetyStyle()` that forces `font-size:16px` on all inputs and textareas inside `#prestart-form-body` and `#toolbox-form-body`. Desktop rendering unchanged (stays 13px).
 
 **Version stamps:** `APP_VERSION = '3.10.75'`, SW cache `eq-field-v3.10.75`.
 

@@ -638,9 +638,9 @@
 
   CHANGES IN v3.10.75  (Safety: fix iOS auto-zoom on prestart + toolbox inputs)
   ────────────────────────────────────────────────────
-  • Increased input font-size from 13px to 16px in _I constant (shared by all
-    prestart and toolbox text inputs). iOS auto-zooms the viewport when a focused
-    input is below 16px — this eliminates that on all safety form fields.
+  • Added @media(max-width:640px) rule in _injectSafetyStyle() that forces
+    font-size:16px on all inputs/textareas inside #prestart-form-body and
+    #toolbox-form-body. iOS auto-zooms on inputs below 16px. Desktop unchanged.
 
   CHANGES IN v3.10.74  (Safety: Word export — drawing ID fix + logo perf)
   ────────────────────────────────────────────────────
