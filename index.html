@@ -633,8 +633,22 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.73
+  EQ Solves — Field  v3.10.75
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.75  (Safety: fix iOS auto-zoom on prestart + toolbox inputs)
+  ────────────────────────────────────────────────────
+  • Increased input font-size from 13px to 16px in _I constant (shared by all
+    prestart and toolbox text inputs). iOS auto-zooms the viewport when a focused
+    input is below 16px — this eliminates that on all safety form fields.
+
+  CHANGES IN v3.10.74  (Safety: Word export — drawing ID fix + logo perf)
+  ────────────────────────────────────────────────────
+  • Fixed OOXML drawing ID conflict: wp:docPr and pic:cNvPr IDs are now unique
+    integers per image (signatures start at 100), preventing Word repair warnings
+    on documents with multiple signature images.
+  • Replaced 400K-iteration forEach loop with chunked String.fromCharCode.apply
+    for logo binary conversion — eliminates UI freeze on low-end devices.
 
   CHANGES IN v3.10.73  (Safety: Word export polish — sig table + footer + hoisting fix)
   ────────────────────────────────────────────────────
