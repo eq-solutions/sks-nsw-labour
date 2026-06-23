@@ -45,6 +45,20 @@ const HRCW = [
   { id: 'press',  label: 'Pressure vessels' },
 ];
 
+// ── Relevant Permits (matches SKS Daily Pre-Start template) ───
+const PERMITS_CATS = [
+  { id: 'hot',      label: 'Hot Works' },
+  { id: 'cutcore',  label: 'Cut & Core' },
+  { id: 'excav',    label: 'Excavation' },
+  { id: 'isol',     label: 'Isolation' },
+  { id: 'energ',    label: 'Energization' },
+  { id: 'asb',      label: 'Asbestos' },
+  { id: 'confined', label: 'Confined / Restricted Space' },
+  { id: 'harness',  label: 'Harness' },
+  { id: 'roof',     label: 'Roof Access' },
+  { id: 'other',    label: 'Other (please list)' },
+];
+
 // ── Shared helpers ─────────────────────────────────────────────
 function _todayIso() {
   const d = new Date();
@@ -512,10 +526,12 @@ function openPrestartForm(id) {
       prev_day_issues:  '',
       works_scope:      '',
       crew:             [],
-      hrcw_categories:  [],
-      swms_refs:        '',
-      hazards:          '',
-      permits:          '',
+      hrcw_categories:     [],
+      permits_categories:  [],
+      affects_other_trades: '',
+      swms_refs:           '',
+      hazards:             '',
+      permits:             '',
       photos:           [],
       status:           'draft',
     };
@@ -552,6 +568,15 @@ function renderPrestartForm() {
 
   h += _fld('Principal Contractor / Customer', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_psField(\'subcontractor\',this.value)" placeholder="Company or site controller" style="' + _I + '">');
   h += _fld('Scope of works', _taWithMic('ps', 'works_scope', d.works_scope, 'What work is being done today?'));
+  h += _fld('Will this work affect other trades?',
+    '<div style="display:flex;gap:8px">'
+    + ['Yes', 'No'].map(function(v) {
+        var sel = d.affects_other_trades === v;
+        return '<button type="button" onclick="_psField(\'affects_other_trades\',\'' + v + '\');renderPrestartForm()" '
+          + 'style="padding:7px 16px;border:1px solid ' + (sel ? 'var(--blue)' : 'var(--border)') + ';border-radius:7px;font-size:13px;cursor:pointer;'
+          + 'background:' + (sel ? 'var(--blue)' : 'var(--surface)') + ';color:' + (sel ? '#fff' : 'var(--ink)') + '">' + v + '</button>';
+      }).join('')
+    + '</div>');
   h += _fld('Previous day issues', _taWithMic('ps', 'prev_day_issues', d.prev_day_issues, 'Issues, incidents or carry-over actions from yesterday'));
 
   h += _lbl('High Risk Construction Work (NSW WHS Reg Schedule 3)');
@@ -565,7 +590,16 @@ function renderPrestartForm() {
 
   h += _fld('SWMS references', '<input type="text" value="' + esc(d.swms_refs || '') + '" oninput="_psField(\'swms_refs\',this.value)" placeholder="e.g. SWMS-003, SWMS-007" style="' + _I + '">');
   h += _fld('Hazards identified', _taWithMic('ps', 'hazards', d.hazards, 'Site-specific hazards discussed at this briefing'));
-  h += _fld('Permits required', _taWithMic('ps', 'permits', d.permits, 'Permits to work — hot work, confined space, access'));
+
+  h += _lbl('Relevant Permits');
+  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">';
+  PERMITS_CATS.forEach(function(cat) {
+    var sel = (d.permits_categories || []).includes(cat.id);
+    h += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid ' + (sel ? 'var(--blue)' : 'var(--border)') + ';border-radius:6px;cursor:pointer;font-size:12px;background:' + (sel ? 'var(--blue-lt)' : 'var(--surface)') + '">'
+      + '<input type="checkbox"' + (sel ? ' checked' : '') + ' onchange="_psTogglePermit(\'' + cat.id + '\',this.checked)" style="flex-shrink:0"> ' + esc(cat.label) + '</label>';
+  });
+  h += '</div>';
+  h += _fld('Permit notes / other', _taWithMic('ps', 'permits', d.permits, 'Additional permit details or "Other" permit description'));
 
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px">'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3)">Crew sign-off</div>'
@@ -614,6 +648,14 @@ function _psToggleHrcw(id, checked) {
   if (!Array.isArray(_prestartDraft.hrcw_categories)) _prestartDraft.hrcw_categories = [];
   if (checked) { if (!_prestartDraft.hrcw_categories.includes(id)) _prestartDraft.hrcw_categories.push(id); }
   else _prestartDraft.hrcw_categories = _prestartDraft.hrcw_categories.filter(function(x) { return x !== id; });
+  renderPrestartForm();
+}
+
+function _psTogglePermit(id, checked) {
+  if (!_prestartDraft) return;
+  if (!Array.isArray(_prestartDraft.permits_categories)) _prestartDraft.permits_categories = [];
+  if (checked) { if (!_prestartDraft.permits_categories.includes(id)) _prestartDraft.permits_categories.push(id); }
+  else _prestartDraft.permits_categories = _prestartDraft.permits_categories.filter(function(x) { return x !== id; });
   renderPrestartForm();
 }
 
@@ -837,13 +879,13 @@ async function _psExportDocx() {
     + run('SKS DAILY PRE-START', true, 18)
     + '</w:p>';
 
-  // Project / site info table
+  // Project / site info table (matches SKS Daily Pre-Start template order)
   body += TBL_OPEN
     + '<w:tr>' + kv(4680, 'Project Name', d.project_name) + kv(4680, 'Project Number', d.project_number) + '</w:tr>'
     + '<w:tr>' + kv(9360, 'Project Address', d.project_address, 2) + '</w:tr>'
-    + '<w:tr>' + kv(4680, 'Site', siteName) + kv(4680, 'Date', _fmtDate(d.briefing_date)) + '</w:tr>'
-    + '<w:tr>' + kv(4680, 'Time', d.briefing_time ? d.briefing_time.slice(0,5) : '') + kv(4680, 'SKS Representative', d.sks_rep) + '</w:tr>'
-    + '<w:tr>' + kv(9360, 'Sub-Contractor / Principal Contractor', d.subcontractor, 2) + '</w:tr>'
+    + '<w:tr>' + kv(4680, 'Date', _fmtDate(d.briefing_date)) + kv(4680, 'Time', d.briefing_time ? d.briefing_time.slice(0,5) : '') + '</w:tr>'
+    + '<w:tr>' + kv(4680, 'SKS Representative', d.sks_rep) + kv(4680, 'Sub-Contractor', d.subcontractor) + '</w:tr>'
+    + (siteName ? '<w:tr>' + kv(9360, 'Site', siteName, 2) + '</w:tr>' : '')
     + '</w:tbl>';
 
   // Daily briefing Q&A
@@ -856,6 +898,10 @@ async function _psExportDocx() {
     + run('What Works are taking Place Today, By Who & Where?', true, 9) + '</w:p>';
   body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
     + run(d.works_scope || '', false, 9) + '</w:p>';
+  body += '<w:p><w:pPr><w:spacing w:before="80" w:after="20"/></w:pPr>'
+    + run('Will this work affect other trades?', true, 9) + '</w:p>';
+  body += '<w:p><w:pPr><w:spacing w:before="0" w:after="80"/><w:ind w:left="200"/></w:pPr>'
+    + run(d.affects_other_trades || '—', false, 9) + '</w:p>';
   if (d.swms_refs) {
     body += '<w:p><w:pPr><w:spacing w:before="40" w:after="20"/></w:pPr>'
       + run('SWMS References:', true, 9) + '</w:p>';
@@ -905,21 +951,21 @@ async function _psExportDocx() {
       }).join('')
     + '</w:tbl>';
 
-  // Other hazards
+  // Other hazards — always include 3 blank rows for handwriting space
+  var BLANK_HAZ = '<w:tr>'
+    + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="100" w:after="100"/></w:pPr><w:r><w:t xml:space="preserve"> </w:t></w:r></w:p>')
+    + tc(2400, null, '<w:p><w:pPr><w:spacing w:before="100" w:after="100"/></w:pPr></w:p>')
+    + tc(1200, null, '<w:p><w:pPr><w:spacing w:before="100" w:after="100"/></w:pPr></w:p>')
+    + '</w:tr>';
   body += secBar('OTHER HAZARDS & RISKS');
   body += TBL_OPEN
     + '<w:tr>' + tblHdr(5760, 'Hazard / Risk') + tblHdr(2400, 'Action By') + tblHdr(1200, 'When') + '</w:tr>'
-    + (d.hazards
-      ? '<w:tr>'
-          + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(d.hazards, false, 9) + '</w:p>')
-          + tc(2400, null, '<w:p/>')
-          + tc(1200, null, '<w:p/>')
-          + '</w:tr>'
-      : '<w:tr>'
-          + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>' + run(' ', false, 9) + '</w:p>')
-          + tc(2400, null, '<w:p/>')
-          + tc(1200, null, '<w:p/>')
-          + '</w:tr>')
+    + (d.hazards ? '<w:tr>'
+        + tc(5760, null, '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + run(d.hazards, false, 9) + '</w:p>')
+        + tc(2400, null, '<w:p/>')
+        + tc(1200, null, '<w:p/>')
+        + '</w:tr>' : '')
+    + BLANK_HAZ + BLANK_HAZ + BLANK_HAZ
     + '</w:tbl>';
 
   // HRCW checkboxes
@@ -944,23 +990,40 @@ async function _psExportDocx() {
   }
   body += TBL_OPEN + hrcwRows + '</w:tbl>';
 
-  // Permits (free text)
+  // Relevant Permits — structured 10-type checklist matching SKS template
+  body += secBar('RELEVANT PERMITS');
+  var permRows = '';
+  for (var pi = 0; pi < PERMITS_CATS.length; pi += 2) {
+    var lp = PERMITS_CATS[pi], rp = PERMITS_CATS[pi + 1];
+    var lpChk = (d.permits_categories || []).indexOf(lp.id) >= 0;
+    var rpChk = rp && (d.permits_categories || []).indexOf(rp.id) >= 0;
+    permRows += '<w:tr>'
+      + tc(4680, lpChk ? 'E8F5E9' : null,
+          '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
+          + run((lpChk ? '☑ ' : '☐ ') + lp.label, false, 9) + '</w:p>')
+      + (rp
+        ? tc(4680, rpChk ? 'E8F5E9' : null,
+            '<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr>'
+            + run((rpChk ? '☑ ' : '☐ ') + rp.label, false, 9) + '</w:p>')
+        : tc(4680, null, '<w:p/>'))
+      + '</w:tr>';
+  }
+  body += TBL_OPEN + permRows + '</w:tbl>';
   if (d.permits) {
-    body += secBar('PERMITS REQUIRED');
-    body += '<w:p><w:pPr><w:spacing w:before="60" w:after="80"/><w:ind w:left="200"/></w:pPr>'
-      + run(d.permits, false, 9) + '</w:p>';
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="60"/><w:ind w:left="200"/></w:pPr>'
+      + run('Notes: ' + d.permits, false, 9) + '</w:p>';
   }
 
   // Declaration
   body += secBar('DECLARATION');
   body += '<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr>'
     + run('I have reviewed today\'s scope of works and associated SWMS and agree to comply with all the controls. '
-      + 'If the task changes for any reason the SWMS will be reviewed and where applicable will be amended to reflect the change in task.',
+      + 'If the task changes for any reason the SWMS will be reviewed to and where applicable will be amended to reflect the change in task.',
       false, 9)
     + '</w:p>';
 
   // Signatures
-  body += secBar('CREW SIGN-OFF');
+  body += secBar('SIGNATURES');
   var crew = d.crew || [];
   if (crew.length) {
     body += TBL_OPEN
