@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.79 — Safety: prestart Word export — 12-hour AM/PM time format
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- Prestart docx Time field now exports as 12-hour format with AM/PM (e.g. `2:30 PM` instead of `14:30`).
+
+---
+
 # v3.10.78 — Safety: remove SYD53 default from prestart site field
 
 **Date:** 2026-06-23

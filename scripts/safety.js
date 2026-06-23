@@ -945,7 +945,8 @@ async function _psExportDocx() {
   body += tblOpen4();
   body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,siteName) + tcN(2340,'Project Number:') + tcL(2340,d.project_number) + '</w:tr>';
   body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,siteAddress,3) + '</w:tr>';
-  body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.briefing_date)) + tcN(2340,'Time:') + tcL(2340,d.briefing_time ? d.briefing_time.slice(0,5) : '') + '</w:tr>';
+  var _fmtTime12 = function(t) { if (!t) return ''; var p = t.slice(0,5).split(':'); var h = parseInt(p[0],10); var m = p[1]; var ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + m + ' ' + ampm; };
+  body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.briefing_date)) + tcN(2340,'Time:') + tcL(2340,_fmtTime12(d.briefing_time)) + '</w:tr>';
   body += '<w:tr>' + tcN(2340,'SKS Representative:') + tcL(7020,d.sks_rep,3) + '</w:tr>';
   body += '<w:tr>' + tcN(2340,'Sub-Contractor:') + tcL(7020,d.subcontractor,3) + '</w:tr>';
   if (siteName) body += '<w:tr>' + tcN(2340,'Site:') + tcL(7020,siteName,3) + '</w:tr>';
