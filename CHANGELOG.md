@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.78 — Safety: remove SYD53 default from prestart site field
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- New prestart drafts now start with `site_abbr` blank (no default).
+
+---
+
 # v3.10.77 — Safety: prestart site field — default SYD53 + dropdown indicator
 
 **Date:** 2026-06-23
