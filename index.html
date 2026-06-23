@@ -86,6 +86,7 @@
 <script src="scripts/pipeline.js"></script>
 <script src="scripts/pipeline-resource.js"></script>
 <script src="scripts/home.js"></script>
+<script src="scripts/jszip.min.js"></script>
 <script src="scripts/safety.js"></script>
 <script src="scripts/safety-dashboard.js"></script>
 
@@ -632,8 +633,42 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.69
+  EQ Solves — Field  v3.10.73
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.10.73  (Safety: Word export polish — sig table + footer + hoisting fix)
+  ────────────────────────────────────────────────────
+  • Fixed critical hoisting bug: hasLogo/hasSigs declared before use so logo header
+    now actually appears in the exported docx.
+  • Signature table restructured: both columns headed "Name & Signature" (navy),
+    crew paired per row with name bold-navy + signature image stacked in one cell.
+  • Replaced body-paragraph footer with a proper Word page footer (footer1.xml),
+    matching the Terry Su reference. Bottom margin increased to 1440 DXA (1").
+  • FOOTER_RID = rId98 wired into docRels, contentTypes, and sectPr.
+
+  CHANGES IN v3.10.72  (Safety: SKS logo in Word export header)
+  ────────────────────────────────────────────────────
+  • Added SKS Technologies logo to Word export header (word/header1.xml),
+    matching the Terry Su reference document exactly (1619250×590550 EMU).
+  • Logo fetched from /images/sks-logo.png at export time; added to SW precache.
+
+  CHANGES IN v3.10.71  (Safety: Word export visual redesign)
+  ────────────────────────────────────────────────────
+  • Rewrote _psExportDocx() to match the Terry Su SKS Daily Pre-Start template
+    exactly: navy (#1F335C) label cells, light-blue (#EEF1F8) value cells,
+    section headings as bold-caps navy paragraphs (not filled bars), 4-column
+    info grid, green (#4caf82) Yes/No answer text, 3-column Measures table.
+
+  CHANGES IN v3.10.70  (Safety: Word export + project fields)
+  ────────────────────────────────────────────────────
+  • Prestart form: added Project Name, Project Number, Project Address fields
+    (saved to Supabase via migration 2026-06-23_prestarts_project_fields.sql).
+  • "↓ Word" button on every prestart (draft or submitted) generates a
+    .docx matching the SKS Daily Pre-Start template: project info table,
+    static Controls table, 8-point Measures checklist, HRCW checkboxes,
+    hazards, permits, compliance declaration, and crew signatures as images.
+  • JSZip 3.10.1 bundled locally (scripts/jszip.min.js) and precached in
+    the service worker — export works offline if already cached.
 
   CHANGES IN v3.10.69  (Timesheets: visual readability)
   ────────────────────────────────────────────────────

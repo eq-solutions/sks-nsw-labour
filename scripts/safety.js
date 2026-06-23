@@ -45,6 +45,20 @@ const HRCW = [
   { id: 'press',  label: 'Pressure vessels' },
 ];
 
+// ── Relevant Permits (matches SKS Daily Pre-Start template) ───
+const PERMITS_CATS = [
+  { id: 'hot',      label: 'Hot Works' },
+  { id: 'cutcore',  label: 'Cut & Core' },
+  { id: 'excav',    label: 'Excavation' },
+  { id: 'isol',     label: 'Isolation' },
+  { id: 'energ',    label: 'Energization' },
+  { id: 'asb',      label: 'Asbestos' },
+  { id: 'confined', label: 'Confined / Restricted Space' },
+  { id: 'harness',  label: 'Harness' },
+  { id: 'roof',     label: 'Roof Access' },
+  { id: 'other',    label: 'Other (please list)' },
+];
+
 // ── Shared helpers ─────────────────────────────────────────────
 function _todayIso() {
   const d = new Date();
@@ -506,13 +520,18 @@ function openPrestartForm(id) {
       site_abbr:        ((typeof STATE !== 'undefined' && STATE.sites || [])[0] || {}).abbr || '',
       sks_rep:          _currentUser(),
       subcontractor:    '',
+      project_name:     '',
+      project_number:   '',
+      project_address:  '',
       prev_day_issues:  '',
       works_scope:      '',
       crew:             [],
-      hrcw_categories:  [],
-      swms_refs:        '',
-      hazards:          '',
-      permits:          '',
+      hrcw_categories:     [],
+      permits_categories:  [],
+      affects_other_trades: '',
+      swms_refs:           '',
+      hazards:             '',
+      permits:             '',
       photos:           [],
       status:           'draft',
     };
@@ -532,6 +551,12 @@ function renderPrestartForm() {
   let h = '<div style="padding:14px 16px">';
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  h += _fld('Project Name', '<input type="text" value="' + esc(d.project_name || '') + '" oninput="_psField(\'project_name\',this.value)" placeholder="e.g. Arncliffe Central" style="' + _I + '">');
+  h += _fld('Project Number', '<input type="text" value="' + esc(d.project_number || '') + '" oninput="_psField(\'project_number\',this.value)" placeholder="e.g. 26184" style="' + _I + '">');
+  h += '</div>';
+  h += _fld('Project Address', '<input type="text" value="' + esc(d.project_address || '') + '" oninput="_psField(\'project_address\',this.value)" placeholder="e.g. 26 Eden St, Arncliffe NSW 2205" style="' + _I + '">');
+
+  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('ps-site-dl'));
   h += _fld('Date', '<input type="date" value="' + esc(d.briefing_date || '') + '" onchange="_psField(\'briefing_date\',this.value)" style="' + _I + '">');
   h += '</div>';
@@ -543,6 +568,15 @@ function renderPrestartForm() {
 
   h += _fld('Principal Contractor / Customer', '<input type="text" value="' + esc(d.subcontractor || '') + '" oninput="_psField(\'subcontractor\',this.value)" placeholder="Company or site controller" style="' + _I + '">');
   h += _fld('Scope of works', _taWithMic('ps', 'works_scope', d.works_scope, 'What work is being done today?'));
+  h += _fld('Will this work affect other trades?',
+    '<div style="display:flex;gap:8px">'
+    + ['Yes', 'No'].map(function(v) {
+        var sel = d.affects_other_trades === v;
+        return '<button type="button" onclick="_psField(\'affects_other_trades\',\'' + v + '\');renderPrestartForm()" '
+          + 'style="padding:7px 16px;border:1px solid ' + (sel ? 'var(--blue)' : 'var(--border)') + ';border-radius:7px;font-size:13px;cursor:pointer;'
+          + 'background:' + (sel ? 'var(--blue)' : 'var(--surface)') + ';color:' + (sel ? '#fff' : 'var(--ink)') + '">' + v + '</button>';
+      }).join('')
+    + '</div>');
   h += _fld('Previous day issues', _taWithMic('ps', 'prev_day_issues', d.prev_day_issues, 'Issues, incidents or carry-over actions from yesterday'));
 
   h += _lbl('High Risk Construction Work (NSW WHS Reg Schedule 3)');
@@ -556,7 +590,16 @@ function renderPrestartForm() {
 
   h += _fld('SWMS references', '<input type="text" value="' + esc(d.swms_refs || '') + '" oninput="_psField(\'swms_refs\',this.value)" placeholder="e.g. SWMS-003, SWMS-007" style="' + _I + '">');
   h += _fld('Hazards identified', _taWithMic('ps', 'hazards', d.hazards, 'Site-specific hazards discussed at this briefing'));
-  h += _fld('Permits required', _taWithMic('ps', 'permits', d.permits, 'Permits to work — hot work, confined space, access'));
+
+  h += _lbl('Relevant Permits');
+  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">';
+  PERMITS_CATS.forEach(function(cat) {
+    var sel = (d.permits_categories || []).includes(cat.id);
+    h += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid ' + (sel ? 'var(--blue)' : 'var(--border)') + ';border-radius:6px;cursor:pointer;font-size:12px;background:' + (sel ? 'var(--blue-lt)' : 'var(--surface)') + '">'
+      + '<input type="checkbox"' + (sel ? ' checked' : '') + ' onchange="_psTogglePermit(\'' + cat.id + '\',this.checked)" style="flex-shrink:0"> ' + esc(cat.label) + '</label>';
+  });
+  h += '</div>';
+  h += _fld('Permit notes / other', _taWithMic('ps', 'permits', d.permits, 'Additional permit details or "Other" permit description'));
 
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px">'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3)">Crew sign-off</div>'
@@ -588,6 +631,7 @@ function renderPrestartForm() {
       + (armed ? 'Tap again to delete' : 'Delete') + '</button>';
   }
   h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-prestart\')">Close</button>';
+  h += '<button class="btn btn-secondary" onclick="_psExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
   if (!submitted) h += '<button class="btn" onclick="savePrestartDraft()">Save draft</button>';
   h += !submitted
     ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitPrestart()">Submit</button>'
@@ -604,6 +648,14 @@ function _psToggleHrcw(id, checked) {
   if (!Array.isArray(_prestartDraft.hrcw_categories)) _prestartDraft.hrcw_categories = [];
   if (checked) { if (!_prestartDraft.hrcw_categories.includes(id)) _prestartDraft.hrcw_categories.push(id); }
   else _prestartDraft.hrcw_categories = _prestartDraft.hrcw_categories.filter(function(x) { return x !== id; });
+  renderPrestartForm();
+}
+
+function _psTogglePermit(id, checked) {
+  if (!_prestartDraft) return;
+  if (!Array.isArray(_prestartDraft.permits_categories)) _prestartDraft.permits_categories = [];
+  if (checked) { if (!_prestartDraft.permits_categories.includes(id)) _prestartDraft.permits_categories.push(id); }
+  else _prestartDraft.permits_categories = _prestartDraft.permits_categories.filter(function(x) { return x !== id; });
   renderPrestartForm();
 }
 
@@ -705,6 +757,474 @@ async function submitPrestart() {
     showToast('Prestart submitted ✓');
     renderPrestart(); renderPrestartForm();
   } finally { _prestartInflight.delete('submit'); }
+}
+
+// ── Word / .docx export ───────────────────────────────────────
+async function _psExportDocx() {
+  if (!_prestartDraft) { showToast('No prestart to export'); return; }
+  if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
+
+  const d = _prestartDraft;
+  const siteObj = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
+  const siteName = siteObj ? siteObj.name : (d.site_abbr || '');
+
+  function xe(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Collect signature images
+  const sigMap = {};
+  let nextRid = 2;
+  (d.crew || []).forEach(function(m, i) {
+    if (m.signature_image) {
+      sigMap[i] = {
+        rId: 'rId' + nextRid++,
+        base64: m.signature_image.replace(/^data:image\/[^;]+;base64,/, ''),
+        fileName: 'sig' + i + '.png'
+      };
+    }
+  });
+
+  // Fetch SKS logo for header
+  var logoBase64 = null;
+  try {
+    var logoResp = await fetch('/images/sks-logo.png');
+    if (logoResp.ok) {
+      var logoBuf = await logoResp.arrayBuffer();
+      var logoBin = new Uint8Array(logoBuf);
+      var logoStr = '';
+      logoBin.forEach(function(b) { logoStr += String.fromCharCode(b); });
+      logoBase64 = btoa(logoStr);
+    }
+  } catch(e) { console.warn('EQ[safety] logo fetch failed:', e); }
+
+  // Declare here — used in docRels/contentTypes/sectPr before end of function
+  var hasSigs = Object.keys(sigMap).length > 0;
+  var hasLogo = !!logoBase64;
+  var LOGO_RID = 'rId99';
+  var LOGO_IMG_RID = 'rId0';
+  var FOOTER_RID = 'rId98';
+
+  // ── Color constants (from Terry Su reference XML) ──────────────
+  var NAVY  = '1F335C';  // dark blue — labels, headers
+  var LBLUE = 'EEF1F8';  // light blue — value cells
+  var LGRAY = 'CCCCCC';  // gray — borders on value cells
+  var GREEN = '4caf82';  // green — Yes/No answer text
+  var GRNBG = 'e8f5ee';  // green tint — Yes cell background
+
+  var RMAR = '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
+  var NBORD = '<w:tcBorders><w:top w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/><w:left w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/><w:bottom w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/><w:right w:val="single" w:color="' + NAVY + '" w:sz="4" w:space="0"/></w:tcBorders>';
+  var GBORD = '<w:tcBorders><w:top w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/><w:left w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/><w:bottom w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/><w:right w:val="single" w:color="' + LGRAY + '" w:sz="1" w:space="0"/></w:tcBorders>';
+
+  function arial(text, bold, color) {
+    return '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + (bold ? '<w:b/><w:bCs/>' : '')
+      + (color ? '<w:color w:val="' + color + '"/>' : '')
+      + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text) + '</w:t></w:r>';
+  }
+
+  // Navy label cell
+  function tcN(w, text, gridSpan) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
+      + NBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + NAVY + '"/>' + RMAR
+      + '<w:vAlign w:val="center"/></w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="FFFFFF"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text) + '</w:t></w:r></w:p></w:tc>';
+  }
+
+  // Light-blue value cell
+  function tcL(w, text, gridSpan) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
+      + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+      + '<w:vAlign w:val="center"/></w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text || '') + '</w:t></w:r></w:p></w:tc>';
+  }
+
+  // Light-blue cell with green answer text (Yes/No answers)
+  function tcLG(w, text, gridSpan) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (gridSpan ? '<w:gridSpan w:val="' + gridSpan + '"/>' : '')
+      + NBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+      + '</w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + GREEN + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text || '') + '</w:t></w:r></w:p></w:tc>';
+  }
+
+  // Plain white cell (no fill)
+  function tcW(w, text) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + GBORD + RMAR + '</w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + xe(text || '') + '</w:t></w:r></w:p></w:tc>';
+  }
+
+  // Green-tinted Yes cell
+  function tcYes() {
+    return '<w:tc><w:tcPr><w:tcW w:w="2160" w:type="dxa"/>'
+      + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + GRNBG + '"/>' + RMAR
+      + '</w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + GREEN + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t>Yes</w:t></w:r></w:p></w:tc>';
+  }
+
+  // Section heading paragraph (bold caps, navy colored — NOT a filled bar)
+  function secHead(text) {
+    return '<w:p><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:caps/><w:color w:val="' + NAVY + '"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>'
+      + '<w:t>' + xe(text) + '</w:t></w:r></w:p>';
+  }
+
+  // HRCW/permit checkbox cell
+  function tcChk(w, label, checked) {
+    var fill = checked ? GRNBG : LBLUE;
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + fill + '"/>' + RMAR
+      + '</w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + (checked ? '<w:b/><w:bCs/><w:color w:val="' + GREEN + '"/>' : '')
+      + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + (checked ? '☑ ' : '☐ ') + xe(label) + '</w:t></w:r></w:p></w:tc>';
+  }
+
+  function tblOpen4() {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/></w:tblGrid>';
+  }
+  function tblOpen2(c1, c2) {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="' + c1 + '"/><w:gridCol w:w="' + c2 + '"/></w:tblGrid>';
+  }
+  function tblOpen3(c1, c2, c3) {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="' + c1 + '"/><w:gridCol w:w="' + c2 + '"/><w:gridCol w:w="' + c3 + '"/></w:tblGrid>';
+  }
+  function tblOpen1() {
+    return '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="9360"/></w:tblGrid>';
+  }
+
+  function spacer() { return '<w:p><w:pPr><w:spacing w:before="200" w:after="0"/></w:pPr></w:p>'; }
+  function spacerSm() { return '<w:p><w:pPr><w:spacing w:before="100" w:after="0"/></w:pPr></w:p>'; }
+
+  function imgRun(sig) {
+    if (!sig) return '';
+    var cx = 1371600, cy = 457200;
+    return '<w:r><w:drawing>'
+      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+      + '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:docPr id="' + sig.rId + '" name="' + xe(sig.fileName) + '"/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+      + '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:nvPicPr><pic:cNvPr id="1" name="' + xe(sig.fileName) + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:blipFill><a:blip r:embed="' + sig.rId + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
+      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic>'
+      + '</wp:inline></w:drawing></w:r>';
+  }
+
+  // ── Build document body ───────────────────────────────────────
+  var body = '';
+
+  // Title — Roboto font, navy, 16pt bold, centered (matches Terry Su reference)
+  body += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="200"/></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Roboto" w:hAnsi="Roboto" w:cs="Roboto"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>'
+    + '<w:t>SKS DAILY PRE-START</w:t></w:r></w:p>';
+
+  // Info table — 4-column (2340×4): label cells navy, value cells light blue
+  body += tblOpen4();
+  body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,d.project_name) + tcN(2340,'Project Number:') + tcL(2340,d.project_number) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,d.project_address,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.briefing_date)) + tcN(2340,'Time:') + tcL(2340,d.briefing_time ? d.briefing_time.slice(0,5) : '') + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'SKS Representative:') + tcL(7020,d.sks_rep,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Sub-Contractor:') + tcL(7020,d.subcontractor,3) + '</w:tr>';
+  if (siteName) body += '<w:tr>' + tcN(2340,'Site:') + tcL(7020,siteName,3) + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacer();
+
+  // Safety issues — 2-col inline table (question left navy, answer right light-blue+green)
+  body += tblOpen2(6360,3000);
+  body += '<w:tr>' + tcN(6360,'Are there any Safety issues arising from the previous workday?') + tcLG(3000,d.prev_day_issues || 'No') + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacerSm();
+
+  // Works scope — full-width 2-row table
+  body += tblOpen1();
+  body += '<w:tr>' + tcN(9360,'What Works are taking Place Today, By Who & Where?') + '</w:tr>';
+  body += '<w:tr>' + tcL(9360,d.works_scope) + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacerSm();
+
+  // Affects other trades — 2-col inline table
+  body += tblOpen2(6360,3000);
+  body += '<w:tr>' + tcN(6360,'Will this work affect other trades?') + tcLG(3000,d.affects_other_trades || '') + '</w:tr>';
+  body += '</w:tbl>';
+
+  if (d.swms_refs) {
+    body += spacerSm();
+    body += tblOpen2(6360,3000);
+    body += '<w:tr>' + tcN(6360,'SWMS References:') + tcL(3000,d.swms_refs) + '</w:tr>';
+    body += '</w:tbl>';
+  }
+
+  // Controls
+  var CONTROLS = [
+    ['Slips Trips and Falls',      'Housekeeping'],
+    ['Cuts Scrapes and Abrasions', 'Correct PPE'],
+    ['Manual Handling',            'Correct Manual Handling Technique'],
+    ['Using Power tools',          'Tags are up to date, Correct Use of tools, Right tool for right job'],
+    ['Use of knifes',              'NO KNIFES'],
+  ];
+  body += secHead('Controls');
+  body += tblOpen2(6000,3360);
+  body += '<w:tr>' + tcN(6000,'Control') + tcN(3360,'Action By') + '</w:tr>';
+  CONTROLS.forEach(function(r) {
+    body += '<w:tr>' + tcL(6000,r[0]) + tcL(3360,r[1]) + '</w:tr>';
+  });
+  body += '</w:tbl>';
+
+  // Measures — 3-col (720 num navy | 6480 text white | 2160 yes green)
+  var MEASURES = [
+    'Scope of work and responsibilities for the day discussed and understood.',
+    'SWMS for today\'s work reviewed, understood, and approved by all workers.',
+    'Work Methods / Procedures discussed and understood.',
+    'All relevant permits to work are in place and understood.',
+    'Tools including all Equipment checked and in good working order & displays current tag evidence.',
+    'All workers have the appropriate PPE for tasks being undertaken on site.',
+    'Housekeeping issues have been discussed & understood.',
+    'Materials and equipment to be used discussed & understood.',
+  ];
+  body += secHead("Measures for Today's Work Scope");
+  body += tblOpen3(720,6480,2160);
+  MEASURES.forEach(function(m, i) {
+    body += '<w:tr>' + tcN(720,String(i+1)+'.') + tcW(6480,m) + tcYes() + '</w:tr>';
+  });
+  body += '</w:tbl>';
+
+  // Other hazards
+  var BLANK_HAZ = '<w:tr>'
+    + tcL(5760,' ') + tcL(2400,' ') + tcL(1200,' ')
+    + '</w:tr>';
+  body += secHead('Other Hazards & Risks');
+  body += tblOpen3(5760,2400,1200);
+  body += '<w:tr>' + tcN(5760,'Hazard / Risk') + tcN(2400,'Action By') + tcN(1200,'When') + '</w:tr>';
+  if (d.hazards) body += '<w:tr>' + tcL(5760,d.hazards) + tcL(2400,'') + tcL(1200,'') + '</w:tr>';
+  body += BLANK_HAZ + BLANK_HAZ + BLANK_HAZ;
+  body += '</w:tbl>';
+
+  // HRCW checkboxes
+  body += secHead('High Risk Construction Work (NSW WHS Reg Schedule 3)');
+  body += tblOpen2(4680,4680);
+  for (var hi = 0; hi < HRCW.length; hi += 2) {
+    var lCat = HRCW[hi], rCat = HRCW[hi+1];
+    var lChk = (d.hrcw_categories || []).indexOf(lCat.id) >= 0;
+    var rChk = rCat && (d.hrcw_categories || []).indexOf(rCat.id) >= 0;
+    body += '<w:tr>' + tcChk(4680,lCat.label,lChk) + (rCat ? tcChk(4680,rCat.label,rChk) : tcL(4680,'')) + '</w:tr>';
+  }
+  body += '</w:tbl>';
+
+  // Relevant Permits
+  body += secHead('Relevant Permits');
+  body += tblOpen2(4680,4680);
+  for (var pi = 0; pi < PERMITS_CATS.length; pi += 2) {
+    var lp = PERMITS_CATS[pi], rp = PERMITS_CATS[pi+1];
+    var lpChk = (d.permits_categories || []).indexOf(lp.id) >= 0;
+    var rpChk = rp && (d.permits_categories || []).indexOf(rp.id) >= 0;
+    body += '<w:tr>' + tcChk(4680,lp.label,lpChk) + (rp ? tcChk(4680,rp.label,rpChk) : tcL(4680,'')) + '</w:tr>';
+  }
+  body += '</w:tbl>';
+  if (d.permits) {
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="60"/><w:ind w:left="200"/></w:pPr>'
+      + arial('Notes: ' + d.permits, false, null) + '</w:p>';
+  }
+
+  // Declaration
+  body += secHead('Declaration');
+  body += tblOpen1();
+  body += '<w:tr><w:tc><w:tcPr><w:tcW w:w="9360" w:type="dxa"/>'
+    + GBORD + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+    + '</w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:i/><w:iCs/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+    + '<w:t xml:space="preserve">'
+    + xe('I have reviewed today\'s scope of works and associated SWMS and agree to comply with all the controls. '
+      + 'If the task changes for any reason the SWMS will be reviewed to and where applicable will be amended to reflect the change in task.')
+    + '</w:t></w:r></w:p></w:tc></w:tr>';
+  body += '</w:tbl>';
+
+  // Signatures
+  body += secHead('Signatures');
+  var crew = d.crew || [];
+  if (crew.length) {
+    body += tblOpen2(4680,4680);
+    body += '<w:tr>' + tcN(4680,'Name & Signature') + tcN(4680,'Name & Signature') + '</w:tr>';
+    // Each row = 2 crew members side by side; name bold navy + sig image stacked in one cell
+    function sigPersonCell(m, sig, w) {
+      var nameP = '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + xe(m.name || '') + '</w:t></w:r></w:p>';
+      var sigP = sig
+        ? '<w:p><w:pPr><w:spacing w:before="20" w:after="80"/></w:pPr>' + imgRun(sig) + '</w:p>'
+        : '<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr></w:p>';
+      return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + GBORD
+        + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+        + '</w:tcPr>' + nameP + sigP + '</w:tc>';
+    }
+    for (var si = 0; si < crew.length; si += 2) {
+      var mL = crew[si], mR = crew[si + 1];
+      body += '<w:tr>' + sigPersonCell(mL, sigMap[si], 4680)
+        + (mR ? sigPersonCell(mR, sigMap[si + 1], 4680) : tcL(4680,''))
+        + '</w:tr>';
+    }
+    body += '</w:tbl>';
+  } else {
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + arial('No crew recorded.', false, LGRAY) + '</w:p>';
+  }
+
+
+  // ── Relationships ─────────────────────────────────────────────
+  var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+  Object.keys(sigMap).forEach(function(k) {
+    var sig = sigMap[k];
+    docRels += '<Relationship Id="' + sig.rId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + sig.fileName + '"/>';
+  });
+  if (hasLogo) docRels += '<Relationship Id="' + LOGO_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>';
+  docRels += '<Relationship Id="' + FOOTER_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>';
+  docRels += '</Relationships>';
+
+  var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+    + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+    + ((hasLogo || hasSigs) ? '<Default Extension="png" ContentType="image/png"/>' : '')
+    + (hasLogo ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : '')
+    + '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+    + '</Types>';
+
+  var dotRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    + '</Relationships>';
+
+  var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:docDefaults><w:rPrDefault><w:rPr>'
+    + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+    + '<w:sz w:val="18"/><w:szCs w:val="18"/>'
+    + '</w:rPr></w:rPrDefault>'
+    + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr></w:pPrDefault>'
+    + '</w:docDefaults></w:styles>';
+
+  var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+    + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    + '<w:body>'
+    + body
+    + '<w:sectPr>'
+    + (hasLogo ? '<w:headerReference w:type="default" r:id="' + LOGO_RID + '"/>' : '')
+    + '<w:footerReference w:type="default" r:id="' + FOOTER_RID + '"/>'
+    + '<w:pgSz w:w="11906" w:h="16838"/>'
+    + '<w:pgMar w:top="720" w:right="720" w:bottom="1440" w:left="720"/>'
+    + '</w:sectPr>'
+    + '</w:body></w:document>';
+
+  // ── Package and download ──────────────────────────────────────
+  var zip = new JSZip();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.folder('_rels').file('.rels', dotRels);
+  var wFolder = zip.folder('word');
+  wFolder.file('document.xml', docXml);
+  wFolder.file('styles.xml', stylesXml);
+  wFolder.folder('_rels').file('document.xml.rels', docRels);
+  if (hasLogo || hasSigs) {
+    var mFolder = wFolder.folder('media');
+    if (hasLogo) mFolder.file('sks-logo.png', logoBase64, { base64: true });
+    Object.keys(sigMap).forEach(function(k) {
+      var sig = sigMap[k];
+      mFolder.file(sig.fileName, sig.base64, { base64: true });
+    });
+  }
+  var footerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+    + '<w:sz w:val="14"/><w:szCs w:val="14"/><w:color w:val="AAAAAA"/></w:rPr>'
+    + '<w:t>Daily Prestart  |  Page 1 of 1  |  Generated by EQ Solves — Field</w:t></w:r>'
+    + '</w:p></w:ftr>';
+  wFolder.file('footer1.xml', footerXml);
+
+  if (hasLogo) {
+    var headerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+      + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+      + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+      + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<w:p><w:r><w:drawing>'
+      + '<wp:inline distT="0" distB="0" distL="0" distR="0">'
+      + '<wp:extent cx="1619250" cy="590550"/>'
+      + '<wp:effectExtent t="0" r="0" b="0" l="0"/>'
+      + '<wp:docPr id="1" name="sks-logo" descr="SKS Technologies Logo" title=""/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic>'
+      + '<pic:nvPicPr><pic:cNvPr id="0" name="" descr=""/>'
+      + '<pic:cNvPicPr><a:picLocks noChangeAspect="1" noChangeArrowheads="1"/></pic:cNvPicPr>'
+      + '</pic:nvPicPr>'
+      + '<pic:blipFill><a:blip r:embed="' + LOGO_IMG_RID + '" cstate="none"/>'
+      + '<a:srcRect/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr bwMode="auto"><a:xfrm><a:off x="0" y="0"/>'
+      + '<a:ext cx="1619250" cy="590550"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic>'
+      + '</a:graphicData></a:graphic>'
+      + '</wp:inline>'
+      + '</w:drawing></w:r></w:p>'
+      + '</w:hdr>';
+    var headerRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="' + LOGO_IMG_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sks-logo.png"/>'
+      + '</Relationships>';
+    wFolder.file('header1.xml', headerXml);
+    wFolder.folder('_rels').file('header1.xml.rels', headerRels);
+  }
+
+  var repStr  = (d.sks_rep || 'Rep').replace(/[^a-zA-Z0-9]/g, '_');
+  var dateStr = (d.briefing_date || '').replace(/-/g, '');
+  var siteStr = (siteName || d.site_abbr || 'Site').replace(/[^a-zA-Z0-9]/g, '_');
+  var fileName = 'PreStart_' + repStr + '_' + dateStr + '_' + siteStr + '.docx';
+
+  try {
+    var blob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Word doc downloaded');
+  } catch(e) {
+    console.error('EQ[safety] docx export failed:', e);
+    showToast('Export failed — try again');
+  }
 }
 
 // ════════════════════════════════════════════════════════════════

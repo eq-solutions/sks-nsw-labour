@@ -1,5 +1,59 @@
 # EQ Solves Field — Changelog
 
+# v3.10.73 — Safety: Word export polish — sig table + footer + hoisting fix
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- **Bug fix**: `hasLogo`/`hasSigs` were declared after their first use in `docRels` (JavaScript `var` hoisting — value was `undefined` at that point). Moved declarations immediately after the logo fetch so the header relationship, content-type entry, and packaging all fire correctly.
+- **Signature table**: restructured to match the Terry Su reference — both columns now headed "Name & Signature" (navy), crew paired two per row, name bold-navy + signature image stacked inside one cell per person.
+- **Page footer**: replaced the body-paragraph workaround with a proper Word `footer1.xml` (wired through `docRels`, `contentTypes`, and `sectPr`). Bottom margin raised to 1440 DXA (1 inch) to give the footer room.
+
+**Version stamps:** `APP_VERSION = '3.10.73'`, SW cache `eq-field-v3.10.73`.
+
+---
+
+# v3.10.72 — Safety: SKS logo in Word export header
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`, `sw.js`, `images/sks-logo.png`
+
+Added the SKS Technologies logo to the Word export header, matching the Terry Su reference document (`word/header1.xml`, `rId0`, 1619250×590550 EMU). Logo extracted from the reference `.docx` media folder and stored at `/images/sks-logo.png`. Fetched asynchronously at export time via `fetch()` and embedded as a binary PNG inside the ZIP. Added to SW precache. Falls back gracefully (no header) if the fetch fails.
+
+**Version stamps:** `APP_VERSION = '3.10.72'`, SW cache `eq-field-v3.10.72`.
+
+---
+
+# v3.10.71 — Safety: Word export visual redesign
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+Rewrote `_psExportDocx()` to match the Terry Su SKS Daily Pre-Start template design exactly.
+
+**Design changes:** Replaced the old gray-cell layout with the correct two-color system extracted from the reference OOXML: navy (#1F335C) label cells with white bold text and navy borders; light-blue (#EEF1F8) value cells with CCCCCC borders. Section headings (Controls, Measures, etc.) are now bold-caps navy-colored paragraphs rather than filled dark-blue bars. The info table is now a 4-column grid (4 × 2340 DXA) with single-column label and 3-column spanning value for wide fields. Q&A questions use 2-col inline tables (question navy | answer light-blue) or full-width 2-row tables for long answers. Yes/No answers use green (#4caf82) bold text. Measures table is now 3-column (720 dark-blue number | 6480 plain text | 2160 green-tinted Yes). Controls data rows use EEF1F8 light-blue, not white. Declaration rendered in an italic light-blue table cell.
+
+**Version stamps:** `APP_VERSION = '3.10.71'`, SW cache `eq-field-v3.10.71`.
+
+---
+
+# v3.10.70 — Safety: Word export + project fields
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`, `scripts/jszip.min.js`, `index.html`, `sw.js`, `migrations/2026-06-23_prestarts_project_fields.sql`
+
+Added Word (.docx) export to the prestart form, matching the SKS Daily Pre-Start template format.
+
+**Form changes:** Project Name, Project Number, and Project Address fields added to the prestart form. Saved to Supabase via `migrations/2026-06-23_prestarts_project_fields.sql` (adds three nullable TEXT columns to the `prestarts` table).
+
+**Export:** "↓ Word" button appears in the form footer on every prestart (draft or submitted). Generates a fully structured .docx with: project/site info table, daily briefing Q&A, static Controls table (slips/trips → PPE → manual handling), 8-point Measures checklist (all Yes), Other Hazards & Risks table, HRCW checkboxes (ticked items highlighted), permits, compliance declaration, and crew names with embedded signature images.
+
+**Dependencies:** JSZip 3.10.1 bundled at `scripts/jszip.min.js` — no CDN dependency, precached in the service worker so export works offline once the app is cached.
+
+**Version stamps:** `APP_VERSION = '3.10.70'`, SW cache `eq-field-v3.10.70`.
+
+---
+
 # v3.10.68 — Job Numbers: compact table layout
 
 **Date:** 2026-06-19
