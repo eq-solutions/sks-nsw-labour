@@ -786,6 +786,19 @@ async function _psExportDocx() {
     }
   });
 
+  // Fetch SKS logo for header
+  var logoBase64 = null;
+  try {
+    var logoResp = await fetch('/images/sks-logo.png');
+    if (logoResp.ok) {
+      var logoBuf = await logoResp.arrayBuffer();
+      var logoBin = new Uint8Array(logoBuf);
+      var logoStr = '';
+      logoBin.forEach(function(b) { logoStr += String.fromCharCode(b); });
+      logoBase64 = btoa(logoStr);
+    }
+  } catch(e) { console.warn('EQ[safety] logo fetch failed:', e); }
+
   // ── Color constants (from Terry Su reference XML) ──────────────
   var NAVY  = '1F335C';  // dark blue — labels, headers
   var LBLUE = 'EEF1F8';  // light blue — value cells
@@ -1071,9 +1084,13 @@ async function _psExportDocx() {
     var sig = sigMap[k];
     docRels += '<Relationship Id="' + sig.rId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + sig.fileName + '"/>';
   });
+  if (hasLogo) docRels += '<Relationship Id="' + LOGO_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>';
   docRels += '</Relationships>';
 
   var hasSigs = Object.keys(sigMap).length > 0;
+  var hasLogo = !!logoBase64;
+  var LOGO_RID = 'rId99';
+  var LOGO_IMG_RID = 'rId0';
 
   var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -1081,7 +1098,8 @@ async function _psExportDocx() {
     + '<Default Extension="xml" ContentType="application/xml"/>'
     + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
     + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
-    + (hasSigs ? '<Default Extension="png" ContentType="image/png"/>' : '')
+    + ((hasLogo || hasSigs) ? '<Default Extension="png" ContentType="image/png"/>' : '')
+    + (hasLogo ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : '')
     + '</Types>';
 
   var dotRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -1107,6 +1125,7 @@ async function _psExportDocx() {
     + '<w:body>'
     + body
     + '<w:sectPr>'
+    + (hasLogo ? '<w:headerReference w:type="default" r:id="' + LOGO_RID + '"/>' : '')
     + '<w:pgSz w:w="11906" w:h="16838"/>'
     + '<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/>'
     + '</w:sectPr>'
@@ -1120,12 +1139,48 @@ async function _psExportDocx() {
   wFolder.file('document.xml', docXml);
   wFolder.file('styles.xml', stylesXml);
   wFolder.folder('_rels').file('document.xml.rels', docRels);
-  if (hasSigs) {
+  if (hasLogo || hasSigs) {
     var mFolder = wFolder.folder('media');
+    if (hasLogo) mFolder.file('sks-logo.png', logoBase64, { base64: true });
     Object.keys(sigMap).forEach(function(k) {
       var sig = sigMap[k];
       mFolder.file(sig.fileName, sig.base64, { base64: true });
     });
+  }
+  if (hasLogo) {
+    var headerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+      + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+      + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+      + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<w:p><w:r><w:drawing>'
+      + '<wp:inline distT="0" distB="0" distL="0" distR="0">'
+      + '<wp:extent cx="1619250" cy="590550"/>'
+      + '<wp:effectExtent t="0" r="0" b="0" l="0"/>'
+      + '<wp:docPr id="1" name="sks-logo" descr="SKS Technologies Logo" title=""/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic>'
+      + '<pic:nvPicPr><pic:cNvPr id="0" name="" descr=""/>'
+      + '<pic:cNvPicPr><a:picLocks noChangeAspect="1" noChangeArrowheads="1"/></pic:cNvPicPr>'
+      + '</pic:nvPicPr>'
+      + '<pic:blipFill><a:blip r:embed="' + LOGO_IMG_RID + '" cstate="none"/>'
+      + '<a:srcRect/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr bwMode="auto"><a:xfrm><a:off x="0" y="0"/>'
+      + '<a:ext cx="1619250" cy="590550"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic>'
+      + '</a:graphicData></a:graphic>'
+      + '</wp:inline>'
+      + '</w:drawing></w:r></w:p>'
+      + '</w:hdr>';
+    var headerRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="' + LOGO_IMG_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sks-logo.png"/>'
+      + '</Relationships>';
+    wFolder.file('header1.xml', headerXml);
+    wFolder.folder('_rels').file('header1.xml.rels', headerRels);
   }
 
   var repStr  = (d.sks_rep || 'Rep').replace(/[^a-zA-Z0-9]/g, '_');

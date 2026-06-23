@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.72 — Safety: SKS logo in Word export header
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`, `sw.js`, `images/sks-logo.png`
+
+Added the SKS Technologies logo to the Word export header, matching the Terry Su reference document (`word/header1.xml`, `rId0`, 1619250×590550 EMU). Logo extracted from the reference `.docx` media folder and stored at `/images/sks-logo.png`. Fetched asynchronously at export time via `fetch()` and embedded as a binary PNG inside the ZIP. Added to SW precache. Falls back gracefully (no header) if the fetch fails.
+
+**Version stamps:** `APP_VERSION = '3.10.72'`, SW cache `eq-field-v3.10.72`.
+
+---
+
 # v3.10.71 — Safety: Word export visual redesign
 
 **Date:** 2026-06-23
