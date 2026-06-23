@@ -1,5 +1,17 @@
 # EQ Solves Field — Changelog
 
+# v3.10.77 — Safety: prestart site field — default SYD53 + dropdown indicator
+
+**Date:** 2026-06-23
+**Scope:** `scripts/safety.js`
+
+- New prestart drafts default `site_abbr` to `'SYD53'` instead of the first site in the list.
+- Site input now has a `▾` chevron indicator (wrapped in `position:relative` div) so it reads as a combobox. Datalist pick-or-type behaviour unchanged.
+
+**Version stamps:** `APP_VERSION = '3.10.77'`, SW cache `eq-field-v3.10.77`.
+
+---
+
 # v3.10.76 — Safety: prestart form — remove redundant project fields
 
 **Date:** 2026-06-23
