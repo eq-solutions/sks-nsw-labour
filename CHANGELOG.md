@@ -1,5 +1,21 @@
 # EQ Solves Field — Changelog
 
+# v3.10.81 — Safety: filter, select & batch-download records (+ toolbox Word export)
+
+**Date:** 2026-06-26
+**Scope:** `scripts/safety.js`, `index.html`
+
+- New **Records** tab on the Safety page — filter prestarts + toolbox talks together by type, site, status, free-text search (site / person / topic), and date.
+- **Date filtering** built for audits: rolling chips (7/30/90d), **This week / Last week** presets (Mon–Fri), and explicit **From / To** date pickers for any span.
+- **Mon–Fri coverage strip** — when a single site + a one-week range are active, shows M T W T F with tick/cross so a missing day's prestart is obvious before downloading.
+- Multi-select with **Select all**, or one-tap **Download all (N)** for the whole filtered set.
+- Downloads as a `.zip` of individual Word docs (single selection downloads the `.docx` directly). The zip is named from the active filter, e.g. `Prestarts_SYD53_2026-06-22_to_2026-06-26.zip`; duplicate filenames are auto-suffixed.
+- **Audit filenames**: `Prestart_<SITE>_<YYYY-MM-DD>_<Day>_<Rep>[_<ProjNo>].docx` (and the toolbox equivalent) — site-grouped, date-sortable, weekday visible.
+- Added **Toolbox Talk Word export** (`↓ Word` on the toolbox form) — previously prestart-only.
+- Refactored the `.docx` builder into a shared toolkit (`_safetyDocxKit` / `_safetyDocxPackage`) reused by prestart, toolbox and batch export. Prestart output is unchanged.
+
+---
+
 # v3.10.80 — Batch: filter archived workers from people list
 
 **Date:** 2026-06-23
