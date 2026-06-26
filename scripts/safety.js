@@ -439,7 +439,7 @@ function _injectSafetyStyle() {
 
 function showSafetyTab(tab) {
   _safetyTab = tab;
-  ['prestart', 'toolbox'].forEach(function(t) {
+  ['prestart', 'toolbox', 'records'].forEach(function(t) {
     const content = document.getElementById('safety-tab-content-' + t);
     const btn     = document.getElementById('safety-tab-btn-' + t);
     if (content) content.style.display = t === tab ? '' : 'none';
@@ -449,8 +449,9 @@ function showSafetyTab(tab) {
       btn.style.fontWeight   = t === tab ? '700' : '500';
     }
   });
-  if (tab === 'prestart') renderPrestart();
-  else renderToolbox();
+  if (tab === 'prestart')      renderPrestart();
+  else if (tab === 'toolbox')  renderToolbox();
+  else                         renderSafetyRecords();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -755,56 +756,63 @@ async function submitPrestart() {
 }
 
 // ── Word / .docx export ───────────────────────────────────────
-async function _psExportDocx() {
-  if (!_prestartDraft) { showToast('No prestart to export'); return; }
-  if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
+// ════════════════════════════════════════════════════════════════
+// Shared .docx toolkit — used by prestart export, toolbox export and
+// the batch (Records) download. OOXML helpers + packaging in one place.
+// ════════════════════════════════════════════════════════════════
 
-  const d = _prestartDraft;
-  const siteObj    = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
-  const siteName   = siteObj ? siteObj.name    : (d.site_abbr || '');
-  const siteAddress = siteObj ? (siteObj.address || '') : '';
+let _safetyLogoCache; // base64 PNG — fetched once, reused across exports
+async function _safetyLogoB64() {
+  if (_safetyLogoCache !== undefined) return _safetyLogoCache;
+  _safetyLogoCache = null;
+  try {
+    var resp = await fetch('/images/sks-logo.png');
+    if (resp.ok) {
+      var bin = new Uint8Array(await resp.arrayBuffer());
+      var chunks = [];
+      for (var i = 0; i < bin.length; i += 8192) chunks.push(String.fromCharCode.apply(null, bin.subarray(i, i + 8192)));
+      _safetyLogoCache = btoa(chunks.join(''));
+    }
+  } catch(e) { console.warn('EQ[safety] logo fetch failed:', e); }
+  return _safetyLogoCache;
+}
 
+function _downloadBlob(blob, fileName) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Local-date helpers (avoid UTC skew from toISOString) + audit filename bits.
+function _safetyDateIso(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function _safetyParseIso(iso) {
+  if (!iso) return null;
+  var p = String(iso).split('-');
+  if (p.length < 3) return null;
+  return new Date(+p[0], +p[1] - 1, +p[2]);
+}
+function _safetyWeekday(iso) {
+  var d = _safetyParseIso(iso);
+  return d ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()] : '';
+}
+// Filename-safe token: keep alphanumerics, collapse the rest to single underscores.
+function _fnSafe(s) {
+  return String(s == null ? '' : s).replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// OOXML cell / table / formatting helpers (Terry Su reference styling).
+// Returns a fresh kit each call (imgRun owns its own drawing-id counter).
+function _safetyDocxKit() {
   function xe(s) {
     if (s == null) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // Collect signature images
-  const sigMap = {};
-  let nextRid = 2;
-  (d.crew || []).forEach(function(m, i) {
-    if (m.signature_image) {
-      sigMap[i] = {
-        rId: 'rId' + nextRid++,
-        base64: m.signature_image.replace(/^data:image\/[^;]+;base64,/, ''),
-        fileName: 'sig' + i + '.png'
-      };
-    }
-  });
-
-  // Fetch SKS logo for header
-  var logoBase64 = null;
-  try {
-    var logoResp = await fetch('/images/sks-logo.png');
-    if (logoResp.ok) {
-      var logoBuf = await logoResp.arrayBuffer();
-      var logoBin = new Uint8Array(logoBuf);
-      var logoChunks = [];
-      for (var lci = 0; lci < logoBin.length; lci += 8192) {
-        logoChunks.push(String.fromCharCode.apply(null, logoBin.subarray(lci, lci + 8192)));
-      }
-      logoBase64 = btoa(logoChunks.join(''));
-    }
-  } catch(e) { console.warn('EQ[safety] logo fetch failed:', e); }
-
-  // Declare here — used in docRels/contentTypes/sectPr before end of function
-  var hasSigs = Object.keys(sigMap).length > 0;
-  var hasLogo = !!logoBase64;
-  var LOGO_RID = 'rId99';
-  var LOGO_IMG_RID = 'rId0';
-  var FOOTER_RID = 'rId98';
-
-  // ── Color constants (from Terry Su reference XML) ──────────────
   var NAVY  = '1F335C';  // dark blue — labels, headers
   var LBLUE = 'EEF1F8';  // light blue — value cells
   var LGRAY = 'CCCCCC';  // gray — borders on value cells
@@ -909,8 +917,7 @@ async function _psExportDocx() {
   function spacerSm() { return '<w:p><w:pPr><w:spacing w:before="100" w:after="0"/></w:pPr></w:p>'; }
 
   // Drawing IDs must be unique positive integers across the whole document.
-  // Header logo uses docPr id=1 / cNvPr id=0.
-  // Signatures start at id=100 to avoid any collision.
+  // Header logo uses docPr id=1 / cNvPr id=0. Signatures start at id=100.
   var _drawingId = 100;
   function imgRun(sig) {
     if (!sig) return '';
@@ -932,6 +939,194 @@ async function _psExportDocx() {
       + '</pic:pic></a:graphicData></a:graphic>'
       + '</wp:inline></w:drawing></w:r>';
   }
+
+  // 24hr "HH:MM" → 12hr "h:MM AM/PM"
+  function fmtTime12(t) {
+    if (!t) return '';
+    var p = t.slice(0,5).split(':'); var h = parseInt(p[0],10); var m = p[1];
+    var ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return h + ':' + m + ' ' + ampm;
+  }
+
+  return {
+    xe: xe, arial: arial, tcN: tcN, tcL: tcL, tcLG: tcLG, tcW: tcW, tcYes: tcYes,
+    secHead: secHead, tcChk: tcChk, tblOpen1: tblOpen1, tblOpen2: tblOpen2, tblOpen3: tblOpen3,
+    tblOpen4: tblOpen4, spacer: spacer, spacerSm: spacerSm, imgRun: imgRun, fmtTime12: fmtTime12,
+    NAVY: NAVY, LBLUE: LBLUE, LGRAY: LGRAY, GREEN: GREEN, GRNBG: GRNBG, RMAR: RMAR, NBORD: NBORD, GBORD: GBORD
+  };
+}
+
+// Package an assembled <w:body> string into a .docx zip. Either triggers a
+// download (default) or returns { blob, fileName } when opts.returnBlob is set
+// (used by the batch download to bundle many docs into one .zip).
+async function _safetyDocxPackage(o) {
+  var body        = o.body;
+  var sigMap      = o.sigMap || {};
+  var logoBase64  = o.logoBase64 || null;
+  var footerLabel = o.footerLabel || 'Safety Record';
+  var fileName    = o.fileName || 'Safety_Record.docx';
+  var hasSigs = Object.keys(sigMap).length > 0;
+  var hasLogo = !!logoBase64;
+  var LOGO_RID = 'rId99', LOGO_IMG_RID = 'rId0', FOOTER_RID = 'rId98';
+
+  var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+  Object.keys(sigMap).forEach(function(k) {
+    var sig = sigMap[k];
+    docRels += '<Relationship Id="' + sig.rId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + sig.fileName + '"/>';
+  });
+  if (hasLogo) docRels += '<Relationship Id="' + LOGO_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>';
+  docRels += '<Relationship Id="' + FOOTER_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>';
+  docRels += '</Relationships>';
+
+  var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+    + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+    + ((hasLogo || hasSigs) ? '<Default Extension="png" ContentType="image/png"/>' : '')
+    + (hasLogo ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : '')
+    + '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+    + '</Types>';
+
+  var dotRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    + '</Relationships>';
+
+  var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:docDefaults><w:rPrDefault><w:rPr>'
+    + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+    + '<w:sz w:val="18"/><w:szCs w:val="18"/>'
+    + '</w:rPr></w:rPrDefault>'
+    + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr></w:pPrDefault>'
+    + '</w:docDefaults></w:styles>';
+
+  var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+    + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    + '<w:body>'
+    + body
+    + '<w:sectPr>'
+    + (hasLogo ? '<w:headerReference w:type="default" r:id="' + LOGO_RID + '"/>' : '')
+    + '<w:footerReference w:type="default" r:id="' + FOOTER_RID + '"/>'
+    + '<w:pgSz w:w="11906" w:h="16838"/>'
+    + '<w:pgMar w:top="720" w:right="720" w:bottom="1440" w:left="720"/>'
+    + '</w:sectPr>'
+    + '</w:body></w:document>';
+
+  var zip = new JSZip();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.folder('_rels').file('.rels', dotRels);
+  var wFolder = zip.folder('word');
+  wFolder.file('document.xml', docXml);
+  wFolder.file('styles.xml', stylesXml);
+  wFolder.folder('_rels').file('document.xml.rels', docRels);
+  if (hasLogo || hasSigs) {
+    var mFolder = wFolder.folder('media');
+    if (hasLogo) mFolder.file('sks-logo.png', logoBase64, { base64: true });
+    Object.keys(sigMap).forEach(function(k) {
+      var sig = sigMap[k];
+      mFolder.file(sig.fileName, sig.base64, { base64: true });
+    });
+  }
+  var footerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+    + '<w:sz w:val="14"/><w:szCs w:val="14"/><w:color w:val="AAAAAA"/></w:rPr>'
+    + '<w:t>' + footerLabel + '  |  Page 1 of 1  |  Generated by EQ Solves — Field</w:t></w:r>'
+    + '</w:p></w:ftr>';
+  wFolder.file('footer1.xml', footerXml);
+
+  if (hasLogo) {
+    var headerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+      + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+      + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+      + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<w:p><w:r><w:drawing>'
+      + '<wp:inline distT="0" distB="0" distL="0" distR="0">'
+      + '<wp:extent cx="1619250" cy="590550"/>'
+      + '<wp:effectExtent t="0" r="0" b="0" l="0"/>'
+      + '<wp:docPr id="1" name="sks-logo" descr="SKS Technologies Logo" title=""/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic>'
+      + '<pic:nvPicPr><pic:cNvPr id="0" name="" descr=""/>'
+      + '<pic:cNvPicPr><a:picLocks noChangeAspect="1" noChangeArrowheads="1"/></pic:cNvPicPr>'
+      + '</pic:nvPicPr>'
+      + '<pic:blipFill><a:blip r:embed="' + LOGO_IMG_RID + '" cstate="none"/>'
+      + '<a:srcRect/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr bwMode="auto"><a:xfrm><a:off x="0" y="0"/>'
+      + '<a:ext cx="1619250" cy="590550"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic>'
+      + '</a:graphicData></a:graphic>'
+      + '</wp:inline>'
+      + '</w:drawing></w:r></w:p>'
+      + '</w:hdr>';
+    var headerRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="' + LOGO_IMG_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sks-logo.png"/>'
+      + '</Relationships>';
+    wFolder.file('header1.xml', headerXml);
+    wFolder.folder('_rels').file('header1.xml.rels', headerRels);
+  }
+
+  var blob;
+  try {
+    blob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+  } catch(e) {
+    console.error('EQ[safety] docx export failed:', e);
+    if (!o.returnBlob) showToast('Export failed — try again');
+    return null;
+  }
+  if (o.returnBlob) return { blob: blob, fileName: fileName };
+  _downloadBlob(blob, fileName);
+  showToast('Word doc downloaded');
+  return { blob: blob, fileName: fileName };
+}
+
+async function _psExportDocx(recArg, opts) {
+  var d = recArg || (typeof _prestartDraft !== 'undefined' ? _prestartDraft : null);
+  if (!d) { showToast('No prestart to export'); return; }
+  if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
+
+  var K = _safetyDocxKit();
+  var xe = K.xe, arial = K.arial, tcN = K.tcN, tcL = K.tcL, tcLG = K.tcLG, tcW = K.tcW, tcYes = K.tcYes,
+      secHead = K.secHead, tcChk = K.tcChk, tblOpen1 = K.tblOpen1, tblOpen2 = K.tblOpen2, tblOpen3 = K.tblOpen3,
+      tblOpen4 = K.tblOpen4, spacer = K.spacer, spacerSm = K.spacerSm, imgRun = K.imgRun,
+      NAVY = K.NAVY, LBLUE = K.LBLUE, LGRAY = K.LGRAY, GBORD = K.GBORD, RMAR = K.RMAR;
+
+  var siteObj    = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
+  var siteName   = siteObj ? siteObj.name    : (d.site_abbr || '');
+  var siteAddress = siteObj ? (siteObj.address || '') : '';
+
+  // Collect signature images
+  var sigMap = {};
+  var nextRid = 2;
+  (d.crew || []).forEach(function(m, i) {
+    if (m.signature_image) {
+      sigMap[i] = {
+        rId: 'rId' + nextRid++,
+        base64: m.signature_image.replace(/^data:image\/[^;]+;base64,/, ''),
+        fileName: 'sig' + i + '.png'
+      };
+    }
+  });
+
+  var logoBase64 = await _safetyLogoB64();
 
   // ── Build document body ───────────────────────────────────────
   var body = '';
@@ -1094,141 +1289,120 @@ async function _psExportDocx() {
   }
 
 
-  // ── Relationships ─────────────────────────────────────────────
-  var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
-  Object.keys(sigMap).forEach(function(k) {
-    var sig = sigMap[k];
-    docRels += '<Relationship Id="' + sig.rId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + sig.fileName + '"/>';
+  // Audit filename: Prestart_<SITE>_<YYYY-MM-DD>_<Day>_<Rep>[_<ProjNo>].docx
+  var siteStr = _fnSafe(d.site_abbr || siteName || 'Site');
+  var dayStr  = _safetyWeekday(d.briefing_date);
+  var repStr  = _fnSafe(d.sks_rep || 'Rep');
+  var projStr = d.project_number ? '_' + _fnSafe(d.project_number) : '';
+  var fileName = 'Prestart_' + siteStr + '_' + (d.briefing_date || '') + (dayStr ? '_' + dayStr : '') + '_' + repStr + projStr + '.docx';
+
+  return await _safetyDocxPackage({
+    body: body, sigMap: sigMap, logoBase64: logoBase64,
+    footerLabel: 'Daily Prestart', fileName: fileName, returnBlob: opts && opts.returnBlob
   });
-  if (hasLogo) docRels += '<Relationship Id="' + LOGO_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>';
-  docRels += '<Relationship Id="' + FOOTER_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>';
-  docRels += '</Relationships>';
+}
 
-  var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-    + '<Default Extension="xml" ContentType="application/xml"/>'
-    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-    + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
-    + ((hasLogo || hasSigs) ? '<Default Extension="png" ContentType="image/png"/>' : '')
-    + (hasLogo ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : '')
-    + '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
-    + '</Types>';
+// Toolbox Talk .docx — mirrors the prestart export, toolbox template.
+async function _tbExportDocx(recArg, opts) {
+  var d = recArg || (typeof _toolboxDraft !== 'undefined' ? _toolboxDraft : null);
+  if (!d) { showToast('No toolbox talk to export'); return; }
+  if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
 
-  var dotRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-    + '</Relationships>';
+  var K = _safetyDocxKit();
+  var xe = K.xe, arial = K.arial, tcN = K.tcN, tcL = K.tcL, secHead = K.secHead,
+      tblOpen1 = K.tblOpen1, tblOpen2 = K.tblOpen2, tblOpen4 = K.tblOpen4,
+      spacer = K.spacer, spacerSm = K.spacerSm, imgRun = K.imgRun, fmtTime12 = K.fmtTime12,
+      NAVY = K.NAVY, LBLUE = K.LBLUE, LGRAY = K.LGRAY, GBORD = K.GBORD, RMAR = K.RMAR;
 
-  var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    + '<w:docDefaults><w:rPrDefault><w:rPr>'
-    + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
-    + '<w:sz w:val="18"/><w:szCs w:val="18"/>'
-    + '</w:rPr></w:rPrDefault>'
-    + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr></w:pPrDefault>'
-    + '</w:docDefaults></w:styles>';
+  var siteObj  = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
+  var siteName = siteObj ? siteObj.name : (d.site_abbr || '');
+  var siteAddr = siteObj ? (siteObj.address || '') : '';
 
-  var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
-    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
-    + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
-    + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
-    + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-    + '<w:body>'
-    + body
-    + '<w:sectPr>'
-    + (hasLogo ? '<w:headerReference w:type="default" r:id="' + LOGO_RID + '"/>' : '')
-    + '<w:footerReference w:type="default" r:id="' + FOOTER_RID + '"/>'
-    + '<w:pgSz w:w="11906" w:h="16838"/>'
-    + '<w:pgMar w:top="720" w:right="720" w:bottom="1440" w:left="720"/>'
-    + '</w:sectPr>'
-    + '</w:body></w:document>';
+  // Collect attendance signature images
+  var sigMap = {};
+  var nextRid = 2;
+  (d.attendance || []).forEach(function(m, i) {
+    if (m.signature_image) {
+      sigMap[i] = {
+        rId: 'rId' + nextRid++,
+        base64: m.signature_image.replace(/^data:image\/[^;]+;base64,/, ''),
+        fileName: 'sig' + i + '.png'
+      };
+    }
+  });
 
-  // ── Package and download ──────────────────────────────────────
-  var zip = new JSZip();
-  zip.file('[Content_Types].xml', contentTypes);
-  zip.folder('_rels').file('.rels', dotRels);
-  var wFolder = zip.folder('word');
-  wFolder.file('document.xml', docXml);
-  wFolder.file('styles.xml', stylesXml);
-  wFolder.folder('_rels').file('document.xml.rels', docRels);
-  if (hasLogo || hasSigs) {
-    var mFolder = wFolder.folder('media');
-    if (hasLogo) mFolder.file('sks-logo.png', logoBase64, { base64: true });
-    Object.keys(sigMap).forEach(function(k) {
-      var sig = sigMap[k];
-      mFolder.file(sig.fileName, sig.base64, { base64: true });
-    });
-  }
-  var footerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
-    + '<w:sz w:val="14"/><w:szCs w:val="14"/><w:color w:val="AAAAAA"/></w:rPr>'
-    + '<w:t>Daily Prestart  |  Page 1 of 1  |  Generated by EQ Solves — Field</w:t></w:r>'
-    + '</w:p></w:ftr>';
-  wFolder.file('footer1.xml', footerXml);
+  var logoBase64 = await _safetyLogoB64();
 
-  if (hasLogo) {
-    var headerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
-      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
-      + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
-      + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
-      + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<w:p><w:r><w:drawing>'
-      + '<wp:inline distT="0" distB="0" distL="0" distR="0">'
-      + '<wp:extent cx="1619250" cy="590550"/>'
-      + '<wp:effectExtent t="0" r="0" b="0" l="0"/>'
-      + '<wp:docPr id="1" name="sks-logo" descr="SKS Technologies Logo" title=""/>'
-      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
-      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<pic:pic>'
-      + '<pic:nvPicPr><pic:cNvPr id="0" name="" descr=""/>'
-      + '<pic:cNvPicPr><a:picLocks noChangeAspect="1" noChangeArrowheads="1"/></pic:cNvPicPr>'
-      + '</pic:nvPicPr>'
-      + '<pic:blipFill><a:blip r:embed="' + LOGO_IMG_RID + '" cstate="none"/>'
-      + '<a:srcRect/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
-      + '<pic:spPr bwMode="auto"><a:xfrm><a:off x="0" y="0"/>'
-      + '<a:ext cx="1619250" cy="590550"/></a:xfrm>'
-      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
-      + '</pic:pic>'
-      + '</a:graphicData></a:graphic>'
-      + '</wp:inline>'
-      + '</w:drawing></w:r></w:p>'
-      + '</w:hdr>';
-    var headerRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="' + LOGO_IMG_RID + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sks-logo.png"/>'
-      + '</Relationships>';
-    wFolder.file('header1.xml', headerXml);
-    wFolder.folder('_rels').file('header1.xml.rels', headerRels);
+  var body = '';
+
+  // Title
+  body += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="200"/></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Roboto" w:hAnsi="Roboto" w:cs="Roboto"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>'
+    + '<w:t>SKS TOOLBOX TALK</w:t></w:r></w:p>';
+
+  // Info table — 4-column
+  body += tblOpen4();
+  body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,siteName) + tcN(2340,'Topic:') + tcL(2340,d.topic) + '</w:tr>';
+  if (siteAddr) body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,siteAddr,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.meeting_date)) + tcN(2340,'Time:') + tcL(2340,fmtTime12(d.meeting_time)) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Facilitator:') + tcL(2340,d.facilitator) + tcN(2340,'Next Meeting:') + tcL(2340,d.next_meeting ? _fmtDate(d.next_meeting) : '') + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Principal Contractor:') + tcL(7020,d.subcontractor,3) + '</w:tr>';
+  if (d.swms_refs) body += '<w:tr>' + tcN(2340,'SWMS References:') + tcL(7020,d.swms_refs,3) + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacer();
+
+  // Full-width labelled text block
+  function block(label, text) {
+    return tblOpen1()
+      + '<w:tr>' + tcN(9360,label) + '</w:tr>'
+      + '<w:tr>' + tcL(9360, text || '—') + '</w:tr>'
+      + '</w:tbl>';
   }
 
-  var repStr  = (d.sks_rep || 'Rep').replace(/[^a-zA-Z0-9]/g, '_');
-  var dateStr = (d.briefing_date || '').replace(/-/g, '');
-  var siteStr = (siteName || d.site_abbr || 'Site').replace(/[^a-zA-Z0-9]/g, '_');
-  var fileName = 'PreStart_' + repStr + '_' + dateStr + '_' + siteStr + '.docx';
+  if (d.safety_message) { body += block('Key Safety Message', d.safety_message); body += spacerSm(); }
+  if (d.items_reviewed) { body += block('Items Reviewed', d.items_reviewed); body += spacerSm(); }
+  if (d.open_actions)   { body += block('Open Actions from Last Talk', d.open_actions); body += spacerSm(); }
+  if (d.hazards)        { body += block('Hazards Discussed', d.hazards); body += spacerSm(); }
 
-  try {
-    var blob = await zip.generateAsync({
-      type: 'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = fileName;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Word doc downloaded');
-  } catch(e) {
-    console.error('EQ[safety] docx export failed:', e);
-    showToast('Export failed — try again');
+  // Attendance + signatures (2 per row, name bold navy + sig image stacked)
+  body += secHead('Attendance');
+  var att = d.attendance || [];
+  if (att.length) {
+    body += tblOpen2(4680,4680);
+    body += '<w:tr>' + tcN(4680,'Name & Signature') + tcN(4680,'Name & Signature') + '</w:tr>';
+    function attCell(m, sig, w) {
+      var nameP = '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + xe(m.name || '') + '</w:t></w:r></w:p>';
+      var sigP = sig
+        ? '<w:p><w:pPr><w:spacing w:before="20" w:after="80"/></w:pPr>' + imgRun(sig) + '</w:p>'
+        : '<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr></w:p>';
+      return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + GBORD
+        + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+        + '</w:tcPr>' + nameP + sigP + '</w:tc>';
+    }
+    for (var ai = 0; ai < att.length; ai += 2) {
+      var mL = att[ai], mR = att[ai + 1];
+      body += '<w:tr>' + attCell(mL, sigMap[ai], 4680)
+        + (mR ? attCell(mR, sigMap[ai + 1], 4680) : tcL(4680,''))
+        + '</w:tr>';
+    }
+    body += '</w:tbl>';
+  } else {
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + arial('No attendance recorded.', false, LGRAY) + '</w:p>';
   }
+
+  // Audit filename: Toolbox_<SITE>_<YYYY-MM-DD>_<Day>_<Facilitator>.docx
+  var siteStr = _fnSafe(d.site_abbr || siteName || 'Site');
+  var dayStr  = _safetyWeekday(d.meeting_date);
+  var facStr  = _fnSafe(d.facilitator || 'Facilitator');
+  var fileName = 'Toolbox_' + siteStr + '_' + (d.meeting_date || '') + (dayStr ? '_' + dayStr : '') + '_' + facStr + '.docx';
+
+  return await _safetyDocxPackage({
+    body: body, sigMap: sigMap, logoBase64: logoBase64,
+    footerLabel: 'Toolbox Talk', fileName: fileName, returnBlob: opts && opts.returnBlob
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1378,6 +1552,7 @@ function renderToolboxForm() {
       + (armed ? 'Tap again to delete' : 'Delete') + '</button>';
   }
   h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-toolbox\')">Close</button>';
+  h += '<button class="btn btn-secondary" onclick="_tbExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
   if (!submitted) h += '<button class="btn" onclick="saveToolboxDraft()">Save draft</button>';
   h += !submitted
     ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitToolbox()">Submit</button>'
@@ -1493,6 +1668,346 @@ async function submitToolbox() {
 // ── Page entry point ───────────────────────────────────────────
 let _safetyOnlineHandler = null;
 let _safetyLoaded = false;
+
+// ════════════════════════════════════════════════════════════════
+// RECORDS — filter, multi-select and batch download (prestarts + toolboxes)
+// ════════════════════════════════════════════════════════════════
+
+let _safetyRecType   = 'all';   // 'all' | 'ps' | 'tb'
+let _safetyRecDays   = 30;      // 7 | 30 | 90 | 0 (all) — null when an explicit From/To range is active
+let _safetyRecStatus = 'all';   // 'all' | 'submitted' | 'draft'
+let _safetyRecSite   = '';      // '' = all (holds site abbr)
+let _safetyRecSearch = '';
+let _safetyRecFrom   = '';      // explicit range start (YYYY-MM-DD), '' = open
+let _safetyRecTo     = '';      // explicit range end (YYYY-MM-DD), '' = open
+let _safetyRecSel    = new Set(); // keys: 'ps:<id>' / 'tb:<id>'
+
+function _safetyIsoMinus(days) {
+  var d = new Date(); d.setDate(d.getDate() - days);
+  return _safetyDateIso(d);
+}
+
+// Monday-anchored week range (Mon–Fri). offsetWeeks 0 = this week, -1 = last week.
+function _safetyWeekRange(offsetWeeks) {
+  var d = new Date();
+  var dow = (d.getDay() + 6) % 7;            // 0 = Mon … 6 = Sun
+  d.setDate(d.getDate() - dow + offsetWeeks * 7);
+  var mon = new Date(d), fri = new Date(d); fri.setDate(mon.getDate() + 4);
+  return { from: _safetyDateIso(mon), to: _safetyDateIso(fri) };
+}
+
+// Weekday dates (Mon–Fri only) within an inclusive [from,to] range.
+function _safetyWeekdaysBetween(from, to) {
+  var s = _safetyParseIso(from), e = _safetyParseIso(to), out = [];
+  if (!s || !e || e < s) return out;
+  var cur = new Date(s), guard = 0;
+  while (cur <= e && guard++ < 40) {
+    var dow = cur.getDay();
+    if (dow >= 1 && dow <= 5) out.push({ iso: _safetyDateIso(cur), label: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow] });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function _safetyRecSiteName(abbr) {
+  if (!abbr) return '';
+  var s = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(o) { return o.abbr === abbr; });
+  return s ? s.name : abbr;
+}
+
+// Unified list of every cached prestart + toolbox, normalised for filtering.
+function _safetyRecAll() {
+  var rows = [];
+  (_prestartCache || []).forEach(function(r) {
+    rows.push({ type: 'ps', id: r.id, date: r.briefing_date || '', time: r.briefing_time || '',
+      site: r.site_abbr || '', who: r.sks_rep || r.submitted_by || r.created_by || '', topic: '', status: r.status || 'draft' });
+  });
+  (_toolboxCache || []).forEach(function(r) {
+    rows.push({ type: 'tb', id: r.id, date: r.meeting_date || '', time: r.meeting_time || '',
+      site: r.site_abbr || '', who: r.facilitator || r.submitted_by || r.created_by || '', topic: r.topic || '', status: r.status || 'draft' });
+  });
+  return rows;
+}
+
+function _safetyRecSites() {
+  var seen = {}, out = [];
+  _safetyRecAll().forEach(function(x) {
+    if (x.site && !seen[x.site]) { seen[x.site] = 1; out.push({ abbr: x.site, name: _safetyRecSiteName(x.site) }); }
+  });
+  out.sort(function(a, b) { return a.name.localeCompare(b.name); });
+  return out;
+}
+
+function _safetyRecFiltered() {
+  // Explicit From/To range takes precedence; otherwise the rolling N-day cutoff.
+  var ranged = !!(_safetyRecFrom || _safetyRecTo);
+  var cutoff = (!ranged && _safetyRecDays && _safetyRecDays > 0) ? _safetyIsoMinus(_safetyRecDays) : null;
+  var q = (_safetyRecSearch || '').trim().toLowerCase();
+  return _safetyRecAll().filter(function(x) {
+    if (_safetyRecType !== 'all' && x.type !== _safetyRecType) return false;
+    if (_safetyRecStatus !== 'all') {
+      var st = x.status === 'submitted' ? 'submitted' : 'draft';
+      if (st !== _safetyRecStatus) return false;
+    }
+    if (_safetyRecSite && x.site !== _safetyRecSite) return false;
+    if (_safetyRecFrom && x.date && x.date < _safetyRecFrom) return false;
+    if (_safetyRecTo   && x.date && x.date > _safetyRecTo)   return false;
+    if (cutoff && x.date && x.date < cutoff) return false;
+    if (q) {
+      var hay = (x.site + ' ' + _safetyRecSiteName(x.site) + ' ' + x.who + ' ' + x.topic).toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  }).sort(function(a, b) { return (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')); });
+}
+
+function renderSafetyRecords() {
+  const el = document.getElementById('page-safety-records');
+  if (!el) return;
+  _injectSafetyStyle();
+  el.innerHTML = _safetyRecControlsHTML() + '<div id="safety-rec-list">' + _safetyRecListHTML() + '</div>';
+}
+
+function _safetyRecRenderList() {
+  const l = document.getElementById('safety-rec-list');
+  if (l) l.innerHTML = _safetyRecListHTML();
+}
+
+function _safetyRecControlsHTML() {
+  function pill(active, label, onclick) {
+    return '<button onclick="' + onclick + '" style="padding:5px 12px;border-radius:999px;border:1.5px solid '
+      + (active ? 'var(--blue)' : 'var(--border)') + ';background:' + (active ? 'var(--blue)' : 'var(--surface)')
+      + ';color:' + (active ? '#fff' : 'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">'
+      + label + '</button>';
+  }
+  var SEL = 'flex:1;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);font-family:inherit';
+  var h = '<div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;gap:8px">';
+
+  h += '<div style="display:flex;gap:5px;flex-wrap:wrap">'
+    + pill(_safetyRecType === 'all', 'All', "_safetyRecSetType('all')")
+    + pill(_safetyRecType === 'ps', 'Prestarts', "_safetyRecSetType('ps')")
+    + pill(_safetyRecType === 'tb', 'Toolboxes', "_safetyRecSetType('tb')")
+    + '</div>';
+
+  var thisWk = _safetyWeekRange(0), lastWk = _safetyWeekRange(-1);
+  var ranged = !!(_safetyRecFrom || _safetyRecTo);
+  var isThisWk = _safetyRecFrom === thisWk.from && _safetyRecTo === thisWk.to;
+  var isLastWk = _safetyRecFrom === lastWk.from && _safetyRecTo === lastWk.to;
+
+  h += '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">';
+  h += pill(isThisWk, 'This week', '_safetyRecSetWeek(0)');
+  h += pill(isLastWk, 'Last week', '_safetyRecSetWeek(-1)');
+  h += '<span style="width:1px;height:18px;background:var(--border);margin:0 3px"></span>';
+  [[7, '7d'], [30, '30d'], [90, '90d'], [0, 'All']].forEach(function(p) {
+    h += pill(!ranged && _safetyRecDays === p[0], p[1], '_safetyRecSetDays(' + p[0] + ')');
+  });
+  h += '</div>';
+
+  var DIN = 'flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);font-family:inherit';
+  h += '<div style="display:flex;gap:6px;align-items:center">';
+  h += '<span style="font-size:11px;color:var(--ink-3);font-weight:600">From</span>';
+  h += '<input type="date" value="' + esc(_safetyRecFrom || '') + '" onchange="_safetyRecSetFrom(this.value)" style="' + DIN + '">';
+  h += '<span style="font-size:11px;color:var(--ink-3);font-weight:600">To</span>';
+  h += '<input type="date" value="' + esc(_safetyRecTo || '') + '" onchange="_safetyRecSetTo(this.value)" style="' + DIN + '">';
+  if (ranged) h += '<button onclick="_safetyRecClearRange()" title="Clear date range" style="background:none;border:none;color:var(--ink-3);font-size:15px;cursor:pointer;padding:0 2px;line-height:1">&#10005;</button>';
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:8px">';
+  h += '<select onchange="_safetyRecSetSite(this.value)" style="' + SEL + '">';
+  h += '<option value=""' + (_safetyRecSite === '' ? ' selected' : '') + '>All sites</option>';
+  _safetyRecSites().forEach(function(s) {
+    h += '<option value="' + esc(s.abbr) + '"' + (_safetyRecSite === s.abbr ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+  });
+  h += '</select>';
+  h += '<select onchange="_safetyRecSetStatus(this.value)" style="' + SEL + '">';
+  [['all', 'All status'], ['submitted', 'Submitted'], ['draft', 'Draft']].forEach(function(o) {
+    h += '<option value="' + o[0] + '"' + (_safetyRecStatus === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+  });
+  h += '</select>';
+  h += '</div>';
+
+  h += '<input type="text" value="' + esc(_safetyRecSearch || '') + '" oninput="_safetyRecSearchInput(this.value)" placeholder="Search site, person or topic…" '
+    + 'style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);font-family:inherit">';
+
+  h += '</div>';
+  return h;
+}
+
+function _safetyRecListHTML() {
+  var rows = _safetyRecFiltered();
+  var selCount = _safetyRecSel.size;
+  var allSelected = rows.length > 0 && rows.every(function(x) { return _safetyRecSel.has(x.type + ':' + x.id); });
+
+  var h = _safetyCoverageHTML();
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">';
+  h += '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-2)">'
+    + '<input type="checkbox"' + (allSelected ? ' checked' : '') + ' onchange="_safetyRecSelectAllToggle()" style="width:16px;height:16px"> '
+    + 'Select all (' + rows.length + ')</label>';
+  // No manual selection → one-tap "Download all (N)"; otherwise download the ticked set.
+  var dlFn = selCount > 0 ? '_safetyRecDownload()' : '_safetyRecDownloadAll()';
+  var dlLabel = selCount > 0 ? 'Download (' + selCount + ')' : 'Download all' + (rows.length ? ' (' + rows.length + ')' : '');
+  var dlOff = selCount === 0 && rows.length === 0;
+  h += '<button class="btn" onclick="' + dlFn + '"' + (dlOff ? ' disabled style="opacity:.45;pointer-events:none"' : '') + '>&#8595;&nbsp;' + dlLabel + '</button>';
+  h += '</div>';
+
+  if (selCount > 0) {
+    h += '<div style="padding:6px 16px;font-size:11px;color:var(--ink-3);background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+      + '<span>' + selCount + ' selected — downloads as ' + (selCount > 1 ? 'a .zip of Word docs' : 'a Word doc') + '</span>'
+      + '<button onclick="_safetyRecClearSel()" style="background:none;border:none;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Clear</button></div>';
+  }
+
+  if (!rows.length) {
+    h += '<div style="padding:28px 16px;text-align:center;color:var(--ink-3);font-size:13px">No safety docs match these filters.</div>';
+    return h;
+  }
+  rows.forEach(function(x) { h += _safetyRecRow(x); });
+  return h;
+}
+
+function _safetyRecRow(x) {
+  var key = x.type + ':' + x.id;
+  var sel = _safetyRecSel.has(key);
+  var sName = _safetyRecSiteName(x.site) || 'No site';
+  var badge = x.type === 'ps'
+    ? '<span style="background:var(--blue-lt);color:var(--blue);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">PS</span>'
+    : '<span style="background:var(--green-lt,#e8f5ee);color:var(--green,#15803d);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">TB</span>';
+  var title = esc(sName) + (x.topic ? ' · ' + esc(x.topic) : '');
+  var meta = _fmtDate(x.date) + (x.time ? ' · ' + x.time.slice(0, 5) : '') + (x.who ? ' · ' + esc(x.who) : '');
+  var openFn = x.type === 'ps' ? 'openPrestartForm' : 'openToolboxForm';
+  return '<div onclick="_safetyRecToggle(\'' + x.type + '\',\'' + esc(x.id) + '\')" style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:' + (sel ? 'var(--blue-lt)' : 'var(--surface)') + '">'
+    + '<input type="checkbox"' + (sel ? ' checked' : '') + ' onclick="event.stopPropagation();_safetyRecToggle(\'' + x.type + '\',\'' + esc(x.id) + '\')" style="width:17px;height:17px;flex-shrink:0">'
+    + '<div style="flex:1;min-width:0">'
+    + '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + title + '</div>'
+    + '<div style="font-size:11px;color:var(--ink-3);margin-top:3px;display:flex;align-items:center;gap:6px">' + badge + '<span>' + meta + '</span></div>'
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">' + _statusPill(x.status)
+    + '<button onclick="event.stopPropagation();' + openFn + '(\'' + esc(x.id) + '\')" style="background:none;border:none;color:var(--blue);font-size:15px;cursor:pointer;padding:0 2px;line-height:1" title="Open">↗</button>'
+    + '</div></div>';
+}
+
+// Mon–Fri completeness strip — shown when a single site + a ≤1-week range are
+// active. Coverage is a prestart concept (daily), so it's hidden for toolbox-only.
+function _safetyCoverageHTML() {
+  if (!_safetyRecSite || !_safetyRecFrom || !_safetyRecTo) return '';
+  if (_safetyRecType === 'tb') return '';
+  var days = _safetyWeekdaysBetween(_safetyRecFrom, _safetyRecTo);
+  if (!days.length || days.length > 6) return '';
+  var have = {};
+  (_prestartCache || []).forEach(function(r) {
+    if (r.site_abbr === _safetyRecSite && r.briefing_date) have[r.briefing_date] = true;
+  });
+  var covered = days.filter(function(d) { return have[d.iso]; }).length;
+  var allOk = covered === days.length;
+
+  var h = '<div style="padding:9px 16px;border-bottom:1px solid var(--border);background:var(--surface)">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+    + '<span style="font-size:11px;font-weight:700;color:var(--ink-2)">Prestart coverage · ' + esc(_safetyRecSiteName(_safetyRecSite)) + '</span>'
+    + '<span style="font-size:11px;font-weight:700;color:' + (allOk ? 'var(--green,#15803d)' : 'var(--amber,#b45309)') + '">' + covered + '/' + days.length + ' days</span>'
+    + '</div>';
+  h += '<div style="display:flex;gap:5px;flex-wrap:wrap">';
+  days.forEach(function(d) {
+    var ok = !!have[d.iso];
+    h += '<span title="' + esc(d.iso) + '" style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid '
+      + (ok ? 'var(--green,#15803d)' : 'var(--border)') + ';background:' + (ok ? 'var(--green-lt,#e8f5ee)' : 'var(--surface-2)') + ';color:' + (ok ? 'var(--green,#15803d)' : 'var(--ink-3)') + '">'
+      + (ok ? '✓' : '✕') + ' ' + d.label + '</span>';
+  });
+  h += '</div></div>';
+  return h;
+}
+
+function _safetyRecSetType(t)   { _safetyRecType = t;   renderSafetyRecords(); }
+function _safetyRecSetDays(d)    { _safetyRecDays = d; _safetyRecFrom = ''; _safetyRecTo = ''; renderSafetyRecords(); }
+function _safetyRecSetWeek(off)  { var r = _safetyWeekRange(off); _safetyRecFrom = r.from; _safetyRecTo = r.to; _safetyRecDays = null; renderSafetyRecords(); }
+function _safetyRecSetFrom(v)    { _safetyRecFrom = v; _safetyRecDays = null; renderSafetyRecords(); }
+function _safetyRecSetTo(v)      { _safetyRecTo = v;   _safetyRecDays = null; renderSafetyRecords(); }
+function _safetyRecClearRange()  { _safetyRecFrom = ''; _safetyRecTo = ''; _safetyRecDays = 30; renderSafetyRecords(); }
+function _safetyRecSetStatus(v)  { _safetyRecStatus = v; renderSafetyRecords(); }
+function _safetyRecSetSite(v)    { _safetyRecSite = v;   renderSafetyRecords(); }
+function _safetyRecSearchInput(v) { _safetyRecSearch = v; _safetyRecRenderList(); }
+
+function _safetyRecToggle(type, id) {
+  var key = type + ':' + id;
+  if (_safetyRecSel.has(key)) _safetyRecSel.delete(key); else _safetyRecSel.add(key);
+  _safetyRecRenderList();
+}
+
+function _safetyRecSelectAllToggle() {
+  var rows = _safetyRecFiltered();
+  var allSelected = rows.length > 0 && rows.every(function(x) { return _safetyRecSel.has(x.type + ':' + x.id); });
+  rows.forEach(function(x) {
+    var key = x.type + ':' + x.id;
+    if (allSelected) _safetyRecSel.delete(key); else _safetyRecSel.add(key);
+  });
+  _safetyRecRenderList();
+}
+
+function _safetyRecClearSel() { _safetyRecSel.clear(); _safetyRecRenderList(); }
+
+// Download the ticked selection.
+async function _safetyRecDownload() {
+  var keys = Array.from(_safetyRecSel);
+  if (!keys.length) { showToast('Select at least one record'); return; }
+  return _safetyRecDownloadKeys(keys);
+}
+
+// One-tap: download everything currently matching the filters (no ticking needed).
+async function _safetyRecDownloadAll() {
+  var keys = _safetyRecFiltered().map(function(x) { return x.type + ':' + x.id; });
+  if (!keys.length) { showToast('Nothing to download'); return; }
+  return _safetyRecDownloadKeys(keys);
+}
+
+// Audit-friendly zip name derived from the active filter, e.g.
+// Prestarts_SYD53_2026-06-22_to_2026-06-26.zip
+function _safetyZipName() {
+  var typeLabel = _safetyRecType === 'ps' ? 'Prestarts' : _safetyRecType === 'tb' ? 'Toolboxes' : 'Safety_Records';
+  var parts = [typeLabel];
+  if (_safetyRecSite) parts.push(_fnSafe(_safetyRecSite));
+  if (_safetyRecFrom && _safetyRecTo) parts.push(_safetyRecFrom + '_to_' + _safetyRecTo);
+  else if (_safetyRecFrom) parts.push('from_' + _safetyRecFrom);
+  else if (_safetyRecTo) parts.push('to_' + _safetyRecTo);
+  else parts.push(_todayIso());
+  return parts.join('_') + '.zip';
+}
+
+async function _safetyRecDownloadKeys(keys) {
+  if (typeof JSZip === 'undefined') { showToast('Download needs an internet connection'); return; }
+  showToast('Preparing ' + keys.length + ' document' + (keys.length > 1 ? 's' : '') + '…');
+
+  var docs = [];
+  for (var i = 0; i < keys.length; i++) {
+    var type = keys[i].slice(0, 2);            // 'ps' | 'tb'
+    var id = keys[i].slice(3);                 // remainder after 'xx:'
+    var res = null;
+    if (type === 'ps') {
+      var pr = (_prestartCache || []).find(function(r) { return String(r.id) === id; });
+      if (pr) res = await _psExportDocx(pr, { returnBlob: true });
+    } else {
+      var tr = (_toolboxCache || []).find(function(r) { return String(r.id) === id; });
+      if (tr) res = await _tbExportDocx(tr, { returnBlob: true });
+    }
+    if (res && res.blob) docs.push(res);
+  }
+
+  if (!docs.length) { showToast('Nothing to download'); return; }
+  if (docs.length === 1) { _downloadBlob(docs[0].blob, docs[0].fileName); showToast('Word doc downloaded'); return; }
+
+  var zip = new JSZip();
+  var used = {};
+  docs.forEach(function(dd) {
+    var fn = dd.fileName;
+    if (used[fn]) { used[fn]++; fn = fn.replace(/\.docx$/i, '_' + used[fn] + '.docx'); } else { used[fn] = 1; }
+    zip.file(fn, dd.blob);
+  });
+  try {
+    var blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+    _downloadBlob(blob, _safetyZipName());
+    showToast(docs.length + ' docs downloaded');
+  } catch(e) {
+    console.error('EQ[safety] zip failed:', e);
+    showToast('Download failed — try again');
+  }
+}
 
 async function loadSafety() {
   if (_safetyLoaded) { showSafetyTab(_safetyTab); return; }
