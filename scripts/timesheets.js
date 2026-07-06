@@ -1036,7 +1036,18 @@ function _tsDayStatus(name, week, day) {
     // workable cell (don't auto-mute it as "TAFE").
     const _grp = (typeof STATE !== 'undefined' && Array.isArray(STATE.people))
       ? (STATE.people.find(pp => pp.name === name) || {}).group : null;
-    if (_grp === 'Apprentice') return { workable: false, tafeLabel: code };
+    if (_grp === 'Apprentice') {
+      // v3.10.82: during a configured TAFE holiday there is no class — the
+      // apprentice is on site all week. Don't mute the day as TAFE (which
+      // greys it out, auto-counts a phantom 8h, and blocks real hours entry);
+      // treat it as a normal workable cell so the supervisor can log actual
+      // site hours. Uses the same tafe_holidays config the roster "Apply TAFE
+      // Day" button and the tafe-weekly-fill cron already respect.
+      if (typeof isTafeHolidayCell === 'function' && isTafeHolidayCell(week, day)) {
+        return { workable: true };
+      }
+      return { workable: false, tafeLabel: code };
+    }
     return { workable: true };
   }
   if (typeof isLeave === 'function' && isLeave(code)) {

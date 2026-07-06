@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.82 — Timesheets: TAFE days respect the holiday config
+
+**Date:** 2026-07-07
+**Scope:** `scripts/timesheets.js`, `scripts/tafe.js`
+
+- **Fix:** apprentice TAFE days no longer mute the timesheet during a configured TAFE holiday. Previously the timesheet read any rostered `TAFE` cell and greyed the day out, auto-counted a phantom 8h, and blocked the supervisor from entering the real on-site hours — even inside a school break when there is no class. During school breaks apprentices are on site all week, so those days were wrong and "stuck".
+- The holiday config (`app_config.tafe_holidays`) was already respected by the *writers* (the roster "🎓 Apply TAFE Day" button and the `tafe-weekly-fill` cron), but not by the timesheet *reader*. `_tsDayStatus()` now consults the same config via a shared `isTafeHolidayCell(week, day)` helper: an apprentice's TAFE cell that falls inside a holiday range is treated as a normal workable day (no mute, no auto-8h, real hours enterable).
+- No data cleanup needed — self-corrects every current and future break. To be ported to EQ Field.
+
+---
+
 # v3.10.81 — Safety: filter, select & batch-download records (+ toolbox Word export)
 
 **Date:** 2026-06-26

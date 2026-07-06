@@ -78,6 +78,21 @@ function tafeIsHolidayForDay(monday, dayIdx /* 0=Mon..4=Fri */) {
   return tafeHolidays.some(h => iso >= h.start && iso <= h.end);
 }
 
+// v3.10.82: Shared holiday check keyed by the app's "DD.MM.YY" week + day
+// string. Consumed by the timesheet reader (scripts/timesheets.js) so it can
+// honour the SAME tafe_holidays config the "Apply TAFE Day" button and the
+// tafe-weekly-fill Edge Function already use — during a configured TAFE break
+// there is no class, so an apprentice's rostered TAFE cell must not mute the
+// timesheet day (grey it out / auto-count 8h / block real hours).
+function isTafeHolidayCell(weekKey, dayKey) {
+  const idx = ['mon','tue','wed','thu','fri','sat','sun']
+    .indexOf(String(dayKey || '').toLowerCase());
+  if (idx < 0) return false;
+  const monday = tafeWeekKeyToMonday(weekKey);
+  if (!monday) return false;
+  return tafeIsHolidayForDay(monday, idx);
+}
+
 // ── Apply TAFE day for current week ───────────────────────────
 // Only touches EMPTY cells for apprentices who have a nominated
 // TAFE day. Skips the day entirely if the date lands in a holiday
