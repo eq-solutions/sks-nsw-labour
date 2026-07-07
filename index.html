@@ -365,6 +365,13 @@
   border: 1px dashed rgba(91,87,160,.35);
 }
 
+/* TAFE break — the apprentice's usual TAFE day, but inside a TAFE      */
+/* holiday. Unlike .ts-cell-muted it stays editable (they're on site); */
+/* a faint purple edge + italic placeholder mark it so it doesn't read  */
+/* as a bare empty cell. (v3.10.83)                                     */
+.ts-cell-tafebreak { box-shadow: inset 3px 0 0 rgba(124,119,185,.5); }
+.ts-cell-tafebreak .ts-job::placeholder { color: #7C77B9; font-style: italic; opacity: .95; }
+
 /* Soften the split-+ and Fill-Week buttons so the data is the       */
 /* visual focus, not the buttons. Smaller, lower contrast.           */
 .ts-split-btn {
@@ -633,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.82
+  EQ Solves — Field  v3.10.83
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)

@@ -620,6 +620,8 @@
   }
   .ts-mday-status.done  { color: var(--green); background: var(--green-lt); }
   .ts-mday-status.empty { color: var(--red);   background: var(--red-lt); }
+  /* v3.10.83: TAFE break — editable day, hinted (not "missing"/red). */
+  .ts-mday-status.tafebreak { color: var(--purple); background: var(--purple-lt); }
   .ts-mday-mutepill {
     font-size: 12px;
     font-weight: 700;

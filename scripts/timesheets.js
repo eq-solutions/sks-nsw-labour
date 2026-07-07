@@ -1043,8 +1043,10 @@ function _tsDayStatus(name, week, day) {
       // treat it as a normal workable cell so the supervisor can log actual
       // site hours. Uses the same tafe_holidays config the roster "Apply TAFE
       // Day" button and the tafe-weekly-fill cron already respect.
+      // v3.10.83: flag it as `tafeBreak` so the cell shows a soft "TAFE break"
+      // hint instead of a bare empty cell — the day stays editable/required.
       if (typeof isTafeHolidayCell === 'function' && isTafeHolidayCell(week, day)) {
-        return { workable: true };
+        return { workable: true, tafeBreak: true };
       }
       return { workable: false, tafeLabel: code };
     }
@@ -1477,9 +1479,16 @@ function renderTimesheets() {
                 data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
                 onclick="repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻</button>`
           : '';
-        return `<td class="ts-input-cell${todayClass}" style="padding:5px 6px">
+        // v3.10.83: TAFE break — normally this apprentice's TAFE day, but it's
+        // inside a configured break, so it's editable/required (they're on site).
+        // Hint it so it's not a mysterious empty cell.
+        const _brk = dayStatus.tafeBreak;
+        const _jobPh = _brk ? '🎓 TAFE break' : 'Job no.';
+        const _brkCls = _brk ? ' ts-cell-tafebreak' : '';
+        const _brkTitle = _brk ? ' title="Normally their TAFE day — but it\'s a TAFE break, so enter what they actually worked"' : '';
+        return `<td class="ts-input-cell${todayClass}${_brkCls}" style="padding:5px 6px"${_brkTitle}>
           <div class="ts-cell">
-            <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
+            <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="${_jobPh}"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
             <input class="ts-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
@@ -2502,9 +2511,12 @@ function _renderTimesheetsMobile(opts) {
       const bubble    = _tsScheduleBubble(p.name, week, d);
       const filled    = !!(job1 && Number(hrs1) > 0);
       const collapsed = filled ? ' ts-mday-collapsed' : '';
+      const _brk      = dayStatus.tafeBreak; // v3.10.83: TAFE-break soft hint
       const statusPill = filled
         ? `<span class="ts-mday-status done">✓ ${hrs1}h</span>`
-        : `<span class="ts-mday-status empty">— missing</span>`;
+        : (_brk
+            ? `<span class="ts-mday-status tafebreak">🎓 TAFE break</span>`
+            : `<span class="ts-mday-status empty">— missing</span>`);
 
       const _otherWorkableExists = ['mon','tue','wed','thu','fri']
         .filter(d2 => d2 !== d)
@@ -2532,7 +2544,7 @@ function _renderTimesheetsMobile(opts) {
           <div class="ts-minput-row">
             <div class="ts-minput-jobwrap">
               <label class="ts-minput-label">Job / Docket No.</label>
-              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
+              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job1))}" placeholder="${_brk ? '🎓 TAFE break — site + hrs' : 'Job no.'}"${disabled}
                 data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
                 oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
             </div>

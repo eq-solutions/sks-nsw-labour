@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.83 — Timesheets: soft "TAFE break" hint on holiday-week TAFE days
+
+**Date:** 2026-07-07
+**Scope:** `scripts/timesheets.js`, `index.html`, `styles/mobile.css`
+
+- Follow-up to v3.10.82. When an apprentice's TAFE day falls inside a TAFE holiday, the timesheet now shows a subtle **🎓 TAFE break** hint on the cell instead of a bare empty one. The day stays fully **editable and required** — supervisors still enter the real on-site hours (apprentices work during TAFE breaks) — the hint just explains why the usual TAFE day is open for entry, so it no longer looks like the prefill silently vanished.
+- Desktop: faint purple left-edge + italic "🎓 TAFE break" placeholder on the job field (`.ts-cell-tafebreak`). Mobile: the day's status pill reads **🎓 TAFE break** (purple) instead of "— missing", and the job field placeholder prompts for site + hours.
+- Driven by a new `tafeBreak` flag on `_tsDayStatus()`; no change to hours maths or completion logic. Ported to EQ Field.
+
+---
+
 # v3.10.82 — Timesheets: TAFE days respect the holiday config
 
 **Date:** 2026-07-07
