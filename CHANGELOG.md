@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.85 — Timesheets: TAFE prefill driven by each apprentice's nominated day
+
+**Date:** 2026-07-08
+**Scope:** `scripts/timesheets.js`
+
+- Follow-up to v3.10.84. The TAFE prefill now keys off each apprentice's **nominated TAFE day** (`people.tafe_day`), not just cells where a manager hand-typed `TAFE` into the roster. So their TAFE day is pre-populated **every week** — including future weeks the roster hasn't been built for — instead of only the current week.
+- Precedence unchanged: the roster still wins when it has content. If an apprentice is rostered to a **site** on their nominated day, that day shows the site (no TAFE); if they're on **leave**, it mutes as leave. The nominated-day TAFE/8h default only fills an otherwise **empty** cell, and stays editable/type-over like any TAFE prefill.
+- Apprentices with no nominated `tafe_day` are unaffected (their roster-typed TAFE still shows). Driven entirely by `_tsDayStatus()`; counting/completion logic from v3.10.84 is unchanged. Ported to EQ Field.
+
+---
+
 # v3.10.84 — Timesheets: TAFE days are prefilled but editable (type-over)
 
 **Date:** 2026-07-07

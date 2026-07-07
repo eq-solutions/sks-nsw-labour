@@ -1032,16 +1032,28 @@ function _tsDayStatus(name, week, day) {
   if (typeof getPersonSchedule !== 'function') return { workable: true };
   const s = getPersonSchedule(name, week);
   const code = (s && s[day] ? s[day] : '').trim().toUpperCase();
-  if (!code) return { workable: true };
+  const _person = (typeof STATE !== 'undefined' && Array.isArray(STATE.people))
+    ? (STATE.people.find(pp => pp.name === name) || {}) : {};
+  const _isApp = _person.group === 'Apprentice';
+  if (!code) {
+    // v3.10.85: an apprentice's NOMINATED TAFE day (people.tafe_day) defaults to
+    // an editable TAFE/8h prefill even when the roster cell is empty — so their
+    // TAFE day is prepopulated EVERY week (not only where a manager hand-typed
+    // TAFE). Same tafePrefill treatment as a rostered TAFE cell: type a real job
+    // over it if they worked instead. The roster still wins when it has content
+    // (a site keeps the day workable; leave mutes it) — this only fills the gap.
+    if (_isApp && _person.tafe_day && _person.tafe_day === day) {
+      return { workable: false, tafeLabel: 'TAFE', tafePrefill: true };
+    }
+    return { workable: true };
+  }
   if (typeof isEducation === 'function' && isEducation(code)) {
     // v3.10.54: education (TAFE/TRAINING) only mutes the timesheet for
     // APPRENTICES — their course days are logged on the employer portal, not
     // here. Direct / Labour-Hire staff never go to TAFE; a training course is
     // entered against a job code by the supervisor, so the day stays a normal
     // workable cell (don't auto-mute it as "TAFE").
-    const _grp = (typeof STATE !== 'undefined' && Array.isArray(STATE.people))
-      ? (STATE.people.find(pp => pp.name === name) || {}).group : null;
-    if (_grp === 'Apprentice') {
+    if (_isApp) {
       // v3.10.84: TAFE days stay workable:false so the completion / 40h logic
       // still treats them as the paid TAFE day (auto-counted 8h via _tafeHrs,
       // week reads done without any entry). But `tafePrefill` tells the render
