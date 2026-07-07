@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.84 — Timesheets: TAFE days are prefilled but editable (type-over)
+
+**Date:** 2026-07-07
+**Scope:** `scripts/timesheets.js`, `index.html`, `styles/mobile.css`
+
+- Supersedes the v3.10.82/83 holiday-specific handling. **Every** apprentice TAFE day now renders as an editable cell **pre-filled with `TAFE` / 8h** — it looks done, counts 8h toward the 40h week, and the week reads complete without touching it (the old convenience), but a supervisor can **type a real job number straight over it** when the apprentice worked instead (e.g. during a TAFE break). Replaces both the old locked pill and the v3.10.83 empty "TAFE break" cell.
+- The 8h is display + total only (counted via `_tafeHrs`, entry-aware) — nothing is written unless the supervisor types over it, at which point that real entry is counted and the TAFE 8h is dropped (no double-count). Completion/40h logic is unchanged: TAFE days stay `workable:false`, so they never drag a row to "incomplete".
+- Desktop: prefilled cell has a faint purple left-edge + italic value (`.ts-cell-tafedefault`). Mobile: the day's status pill reads **🎓 TAFE · 8h** and the card stays editable. Driven by a `tafePrefill` flag on `_tsDayStatus()`. Ported to EQ Field.
+
+---
+
 # v3.10.83 — Timesheets: soft "TAFE break" hint on holiday-week TAFE days
 
 **Date:** 2026-07-07

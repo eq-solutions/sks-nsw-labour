@@ -190,7 +190,12 @@ function _tsApprenticeTotal(personName, week, entry) {
   const workHrs = tsTotalHrs(entry);
   let tafeHrs   = 0;
   ['mon','tue','wed','thu','fri'].forEach(d => {
-    if (_tsDayStatus(personName, week, d).tafeLabel) tafeHrs += 8;
+    // v3.10.84: a TAFE day counts 8h only while it holds its default — once a
+    // supervisor types real job/hours over it, tsTotalHrs already counts that
+    // entry (skip here to avoid double-counting). "Has entry" = a job OR any
+    // hours, so clearing the job but keeping hours doesn't re-add the 8h.
+    const hasEntry = entry && ((entry[d + '_job'] && String(entry[d + '_job']).trim()) || Number(entry[d + '_hrs']) > 0);
+    if (_tsDayStatus(personName, week, d).tafeLabel && !hasEntry) tafeHrs += 8;
   });
   return workHrs + tafeHrs;
 }
@@ -1037,18 +1042,15 @@ function _tsDayStatus(name, week, day) {
     const _grp = (typeof STATE !== 'undefined' && Array.isArray(STATE.people))
       ? (STATE.people.find(pp => pp.name === name) || {}).group : null;
     if (_grp === 'Apprentice') {
-      // v3.10.82: during a configured TAFE holiday there is no class — the
-      // apprentice is on site all week. Don't mute the day as TAFE (which
-      // greys it out, auto-counts a phantom 8h, and blocks real hours entry);
-      // treat it as a normal workable cell so the supervisor can log actual
-      // site hours. Uses the same tafe_holidays config the roster "Apply TAFE
-      // Day" button and the tafe-weekly-fill cron already respect.
-      // v3.10.83: flag it as `tafeBreak` so the cell shows a soft "TAFE break"
-      // hint instead of a bare empty cell — the day stays editable/required.
-      if (typeof isTafeHolidayCell === 'function' && isTafeHolidayCell(week, day)) {
-        return { workable: true, tafeBreak: true };
-      }
-      return { workable: false, tafeLabel: code };
+      // v3.10.84: TAFE days stay workable:false so the completion / 40h logic
+      // still treats them as the paid TAFE day (auto-counted 8h via _tafeHrs,
+      // week reads done without any entry). But `tafePrefill` tells the render
+      // to draw an EDITABLE cell pre-filled with TAFE/8h instead of a locked
+      // pill — a supervisor can type a real job straight over it when the
+      // apprentice worked instead (e.g. during a TAFE break). Supersedes the
+      // v3.10.82/83 holiday-specific handling: every TAFE day is now prefilled
+      // + editable, so no holiday lookup is needed here.
+      return { workable: false, tafeLabel: code, tafePrefill: true };
     }
     return { workable: true };
   }
@@ -1382,7 +1384,8 @@ function renderTimesheets() {
     const _workableDays    = _workDays.filter((_, i) => _dayStats[i].workable);
     const _workableHrs     = _workableDays.map(d => Number((entry && entry[d + '_hrs']) || 0));
     const _tafeHrs         = p.group === 'Apprentice'
-      ? _dayStats.filter(st => st.tafeLabel).length * 8
+      ? _workDays.filter((d, i) => _dayStats[i].tafeLabel &&
+          !(entry && ((entry[d + '_job'] && String(entry[d + '_job']).trim()) || Number(entry[d + '_hrs']) > 0))).length * 8
       : 0;
     // v3.10.41: A/L + SICK days count as 8h toward the total.
     const _leaveHrs        = _dayStats.filter(st => st.leaveLabel && _tsIsPaidLeave(st.leaveLabel)).length * 8;
@@ -1442,10 +1445,12 @@ function renderTimesheets() {
         // leave or at TAFE this day. Reads the existing schedule data
         // — no extra DB calls. View-only users get the same mute.
         const dayStatus = _tsDayStatus(p.name, week, d);
-        if (!dayStatus.workable) {
-          const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : _tsLeaveIcon(dayStatus.leaveLabel) + ' ' + (dayStatus.leaveLabel || 'Leave');
-          const muteTone  = dayStatus.tafeLabel ? 'ts-cell-tafe' : 'ts-cell-leave';
-          return `<td class="ts-cell-muted ${muteTone}" style="padding:5px 6px;text-align:center" title="From roster — no timesheet entry needed">
+        // v3.10.84: leave days stay a read-only mute pill. TAFE days
+        // (tafePrefill) fall through to the normal editable cell below, which
+        // pre-fills a TAFE/8h default you can type a real job over.
+        if (!dayStatus.workable && !dayStatus.tafePrefill) {
+          const muteLabel = _tsLeaveIcon(dayStatus.leaveLabel) + ' ' + (dayStatus.leaveLabel || 'Leave');
+          return `<td class="ts-cell-muted ts-cell-leave" style="padding:5px 6px;text-align:center" title="From roster — no timesheet entry needed">
             <div class="ts-mute-label">${muteLabel}</div>
           </td>`;
         }
@@ -1463,6 +1468,12 @@ function renderTimesheets() {
         } else {
           job1 = rawJob; hrs1 = rawHrs;
         }
+        // v3.10.84: TAFE day — pre-fill an editable TAFE/8h default the
+        // supervisor can type a real job over. Display only; the 8h is counted
+        // via _tafeHrs above (not a saved entry), so leaving it keeps the week
+        // complete, while typing a job over it logs real site hours.
+        const _tafeDef = dayStatus.tafePrefill && !rawJob && !(Number(rawHrs) > 0);
+        if (_tafeDef) { job1 = dayStatus.tafeLabel || 'TAFE'; hrs1 = 8; }
         const pid2 = p.name.replace(/\W/g, '_') + '_' + d;
         // v3.4.81: per-day "↻ repeat" chip replaces the v3.4.80
         // "fill week →" link. Works on ANY day (not just Mon), so
@@ -1474,21 +1485,19 @@ function renderTimesheets() {
         const _otherWorkableExists = ['mon','tue','wed','thu','fri']
           .filter(d2 => d2 !== d)
           .some(d2 => _tsDayStatus(p.name, week, d2).workable);
-        const repeatChip = (isManager && _hasJobThisDay && _otherWorkableExists)
+        const repeatChip = (isManager && _hasJobThisDay && _otherWorkableExists && !_tafeDef)
           ? `<button class="ts-repeatday-btn" title="Repeat ${d.toUpperCase()} across the rest of the week"
                 data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
                 onclick="repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻</button>`
           : '';
-        // v3.10.83: TAFE break — normally this apprentice's TAFE day, but it's
-        // inside a configured break, so it's editable/required (they're on site).
-        // Hint it so it's not a mysterious empty cell.
-        const _brk = dayStatus.tafeBreak;
-        const _jobPh = _brk ? '🎓 TAFE break' : 'Job no.';
-        const _brkCls = _brk ? ' ts-cell-tafebreak' : '';
-        const _brkTitle = _brk ? ' title="Normally their TAFE day — but it\'s a TAFE break, so enter what they actually worked"' : '';
-        return `<td class="ts-input-cell${todayClass}${_brkCls}" style="padding:5px 6px"${_brkTitle}>
+        // v3.10.84: a TAFE default cell gets a faint purple edge + tooltip so
+        // it reads as a prefilled default; once a real job is typed it renders
+        // like any other entry.
+        const _tafeCls = _tafeDef ? ' ts-cell-tafedefault' : '';
+        const _tafeTitle = _tafeDef ? ' title="TAFE day — prefilled 8h; type a job number over it if they worked instead"' : '';
+        return `<td class="ts-input-cell${todayClass}${_tafeCls}" style="padding:5px 6px"${_tafeTitle}>
           <div class="ts-cell">
-            <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="${_jobPh}"${disabled}
+            <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
             <input class="ts-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
@@ -2416,7 +2425,10 @@ function _renderTimesheetsMobile(opts) {
     const pid    = p.name.replace(/\W/g, '_');
     const entry  = getTsEntry(p.name, week);
     const _mTafeHrs = p.group === 'Apprentice'
-      ? ['mon','tue','wed','thu','fri'].filter(d => _tsDayStatus(p.name, week, d).tafeLabel).length * 8
+      ? ['mon','tue','wed','thu','fri'].filter(d => {
+          const st = _tsDayStatus(p.name, week, d); // v3.10.84: skip overwritten TAFE days
+          return st.tafeLabel && !(entry && ((entry[d + '_job'] && String(entry[d + '_job']).trim()) || Number(entry[d + '_hrs']) > 0));
+        }).length * 8
       : 0;
     // v3.10.41: A/L + SICK days count as 8h toward the total.
     const _mLeaveHrs = _tsPaidLeaveHrs(p.name, week);
@@ -2484,10 +2496,11 @@ function _renderTimesheetsMobile(opts) {
       const dayStatus  = _tsDayStatus(p.name, week, d);
       const isTodayCol = _isThisWeek && d === _todayDayKey;
 
-      if (!dayStatus.workable) {
-        const muteLabel = dayStatus.tafeLabel ? '🎓 TAFE' : _tsLeaveIcon(dayStatus.leaveLabel) + ' ' + (dayStatus.leaveLabel || 'Leave');
-        const muteCls   = dayStatus.tafeLabel ? 'ts-mday-tafe' : 'ts-mday-leave';
-        html += `<div class="ts-mday ts-mday-muted ${muteCls}">
+      // v3.10.84: leave days stay a read-only mute pill; TAFE days (tafePrefill)
+      // fall through to the editable card below with a TAFE/8h prefill.
+      if (!dayStatus.workable && !dayStatus.tafePrefill) {
+        const muteLabel = _tsLeaveIcon(dayStatus.leaveLabel) + ' ' + (dayStatus.leaveLabel || 'Leave');
+        html += `<div class="ts-mday ts-mday-muted ts-mday-leave">
           <div class="ts-mday-head">
             <span class="ts-mday-label">${dlabels[i]}</span>
             <span class="ts-mday-date">${weekDatesTs[i]}</span>
@@ -2508,20 +2521,24 @@ function _renderTimesheetsMobile(opts) {
         if (parts[2]) { const p2 = parts[2].split(':'); job3 = p2[0] || ''; hrs3 = p2[1] || ''; isSplit2 = true; }
       } else { job1 = rawJob; hrs1 = rawHrs; }
 
+      // v3.10.84: TAFE day — prefill an editable TAFE/8h default (type a real
+      // job over it if they worked). Counted via _mTafeHrs, not a saved entry.
+      const _tafeDef = dayStatus.tafePrefill && !rawJob && !(Number(rawHrs) > 0);
+      if (_tafeDef) { job1 = dayStatus.tafeLabel || 'TAFE'; hrs1 = 8; }
+
       const bubble    = _tsScheduleBubble(p.name, week, d);
       const filled    = !!(job1 && Number(hrs1) > 0);
       const collapsed = filled ? ' ts-mday-collapsed' : '';
-      const _brk      = dayStatus.tafeBreak; // v3.10.83: TAFE-break soft hint
-      const statusPill = filled
-        ? `<span class="ts-mday-status done">✓ ${hrs1}h</span>`
-        : (_brk
-            ? `<span class="ts-mday-status tafebreak">🎓 TAFE break</span>`
+      const statusPill = _tafeDef
+        ? `<span class="ts-mday-status tafe">🎓 TAFE · 8h</span>`
+        : (filled
+            ? `<span class="ts-mday-status done">✓ ${hrs1}h</span>`
             : `<span class="ts-mday-status empty">— missing</span>`);
 
       const _otherWorkableExists = ['mon','tue','wed','thu','fri']
         .filter(d2 => d2 !== d)
         .some(d2 => _tsDayStatus(p.name, week, d2).workable);
-      const repeatChip = (isManager && filled && _otherWorkableExists)
+      const repeatChip = (isManager && filled && _otherWorkableExists && !_tafeDef)
         ? `<button class="ts-mrepeat-btn" title="Repeat ${d.toUpperCase()} across the week"
               data-n="${esc(p.name)}" data-g="${p.group}" data-d="${d}"
               onclick="event.stopPropagation();repeatDayAcrossTs(this.dataset.n, this.dataset.g, this.dataset.d)">↻ repeat</button>`
@@ -2544,7 +2561,7 @@ function _renderTimesheetsMobile(opts) {
           <div class="ts-minput-row">
             <div class="ts-minput-jobwrap">
               <label class="ts-minput-label">Job / Docket No.</label>
-              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job1))}" placeholder="${_brk ? '🎓 TAFE break — site + hrs' : 'Job no.'}"${disabled}
+              <input class="ts-job ts-minput-field" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
                 data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
                 oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
             </div>
