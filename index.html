@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.85
+  EQ Solves — Field  v3.10.86
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3330,6 +3330,10 @@
         <option value="Apprentice">🎓 Apprentice</option>
         <option value="Labour Hire">🔧 Labour Hire</option>
         <option value="Direct">👷 Direct</option>
+      </select>
+      <!-- v3.10.86: agency filter — narrow to one labour-hire business to print/export & send. Options populated in _populateTsAgencyFilter(). -->
+      <select class="filter-select" id="ts-agency-filter" onchange="renderTimesheets()" title="Filter labour hire by their agency — to print or export that business's sheet">
+        <option value="">All agencies</option>
       </select>
       <div style="display:flex;gap:6px;margin-left:auto;align-items:center">
         <span style="font-size:11px;color:var(--ink-3);max-width:360px;line-height:1.4">Job numbers will be updated as required — we will focus on ensuring longer projects are included, speak to Royce if you have any questions</span>

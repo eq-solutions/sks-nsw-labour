@@ -517,9 +517,10 @@ function _showFillWeekUndoToast(msg, undoFn) {
 // ── Render grid ───────────────────────────────────────────────
 
 function _getTsFilteredPeople() {
-  const grpFilter = (document.getElementById('ts-group-filter') || {}).value || '';
-  const searchRaw = (document.getElementById('ts-search') || {}).value || '';
-  const search    = searchRaw.toLowerCase().trim();
+  const grpFilter    = (document.getElementById('ts-group-filter')  || {}).value || '';
+  const agencyFilter = (document.getElementById('ts-agency-filter') || {}).value || '';
+  const searchRaw    = (document.getElementById('ts-search') || {}).value || '';
+  const search       = searchRaw.toLowerCase().trim();
 
   let people = [...STATE.people]
     .filter(p => !p.archived && (p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct'));
@@ -531,9 +532,41 @@ function _getTsFilteredPeople() {
     people = people.filter(p => personInActiveTeam(p.id));
   }
   if (grpFilter) people = people.filter(p => p.group === grpFilter);
+  // v3.10.86: agency filter (manager-side) — narrow to one labour-hire business
+  // so their sheet can be printed / exported and sent. Case-folded so any stray
+  // case variants still match.
+  if (agencyFilter) {
+    const _af = agencyFilter.toLowerCase();
+    people = people.filter(p => (p.agency || '').trim().toLowerCase() === _af);
+  }
   if (search)    people = people.filter(p => p.name.toLowerCase().includes(search));
 
   return people.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+}
+
+// v3.10.86: populate the timesheet Agency dropdown from the distinct agencies
+// on active labour-hire workers (case-folded to merge stray case variants),
+// preserving the current selection. Called each render so new agencies appear.
+function _populateTsAgencyFilter() {
+  const sel = document.getElementById('ts-agency-filter');
+  if (!sel) return;
+  const prev = sel.value;
+  const seen = new Map();                       // lowerKey -> display value
+  (STATE.people || []).forEach(p => {
+    if (p.archived || p.group !== 'Labour Hire') return;
+    const a = (p.agency || '').trim();
+    if (!a) return;
+    const k = a.toLowerCase();
+    if (!seen.has(k)) seen.set(k, a);
+  });
+  const agencies = [...seen.values()].sort((a, b) => a.localeCompare(b));
+  const sig = agencies.join('|');
+  if (sel.dataset.sig === sig) { return; }       // unchanged — leave selection alone
+  sel.dataset.sig = sig;
+  sel.innerHTML = '<option value="">All agencies</option>' +
+    agencies.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  const match = agencies.find(a => a.toLowerCase() === prev.toLowerCase());
+  sel.value = match || '';
 }
 
 // v3.4.82 — Phase 3: Accounts Review mode
@@ -1199,6 +1232,7 @@ function _tsRowStatus(person, week, entry) {
 }
 
 function renderTimesheets() {
+  _populateTsAgencyFilter();          // v3.10.86: keep the agency dropdown in sync
   const allPeople = _getTsFilteredPeople();
 
   if (!allPeople.length) {
@@ -1854,9 +1888,9 @@ async function runTsBatch() {
 // ── Exports ───────────────────────────────────────────────────
 
 function exportTsCSV() {
-  const people = [...STATE.people]
-    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct')
-    .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+  // v3.10.86: honour the on-screen filters (group / agency / team / search) so
+  // "pick agency → export → send" gives just that business's sheet.
+  const people = _getTsFilteredPeople();
   const week   = STATE.currentWeek;
   const header = 'Name,Group,Week,Mon Job,Mon Hrs,Tue Job,Tue Hrs,Wed Job,Wed Hrs,Thu Job,Thu Hrs,Fri Job,Fri Hrs,Sat Job,Sat Hrs,Sun Job,Sun Hrs,Total Hrs';
   const rows   = people.map(p => {
@@ -1869,14 +1903,19 @@ function exportTsCSV() {
       e?.sun_job || '', e?.sun_hrs || '', total || ''
     ].map(v => `"${v}"`).join(',');
   });
-  downloadCSV(header + '\n' + rows.join('\n'), 'EQ_Timesheets_' + week.replace(/\./g, '-') + '.csv');
+  downloadCSV(header + '\n' + rows.join('\n'), 'EQ_Timesheets_' + week.replace(/\./g, '-') + _tsExportSuffix() + '.csv');
   showToast('CSV exported');
 }
 
+// v3.10.86: filename suffix from the active agency filter (e.g. "_Atom") so a
+// per-agency export is self-labelled for sending. Empty when no agency active.
+function _tsExportSuffix() {
+  const a = (document.getElementById('ts-agency-filter') || {}).value || '';
+  return a ? '_' + a.replace(/[^A-Za-z0-9]+/g, '') : '';
+}
+
 function exportTsPayroll() {
-  const people = [...STATE.people]
-    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire' || p.group === 'Direct')
-    .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+  const people = _getTsFilteredPeople();   // v3.10.86: honour on-screen filters
   const week   = STATE.currentWeek;
   const rows   = [
     ['"EQ Solves — Field · Timesheet Report"'],
@@ -1893,7 +1932,7 @@ function exportTsPayroll() {
     if (!hasData) rows.push([`"${p.name}"`, `"${p.group}"`, '"—"', '"No data"', '""']);
     rows.push(['']);
   });
-  downloadCSV(rows.map(r => r.join(',')).join('\n'), 'EQ_Payroll_' + week.replace(/\./g, '-') + '.csv');
+  downloadCSV(rows.map(r => r.join(',')).join('\n'), 'EQ_Payroll_' + week.replace(/\./g, '-') + _tsExportSuffix() + '.csv');
   showToast('Payroll report exported');
 }
 

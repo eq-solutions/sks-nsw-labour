@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.86 — Timesheets: filter by labour-hire agency (for sending to each business)
+
+**Date:** 2026-07-08
+**Scope:** `scripts/timesheets.js`, `index.html`
+
+- New **Agency** dropdown on the Timesheets filter bar (next to Group). Pick a labour-hire business (Atom, Cranfield, DL Electrical, …) and the list narrows to just their people — so you can print or export that agency's sheet to send to them. Options are built from the `agency` tag on active Labour Hire workers (case-folded to merge stray case variants), and the selection persists across re-renders.
+- **Exports now honour the on-screen filters.** `↓ Export CSV` and `↓ Payroll Report` previously dumped everyone regardless of the filter; both now use the same filtered set (group / agency / team / search), and the filename gains an agency suffix (e.g. `EQ_Timesheets_06-07-26_Atom.csv`) so a per-agency file is self-labelled. The top-right `🖨 Print` already prints the filtered view.
+- Data tidy (SKS): merged two look-alike agency tags — `Madigans`→`Madagins` and `core`→`Core` — so each business shows once. Ported to EQ Field.
+
+---
+
 # v3.10.85 — Timesheets: TAFE prefill driven by each apprentice's nominated day
 
 **Date:** 2026-07-08
