@@ -121,6 +121,7 @@ function openAddPerson() {
   document.getElementById('person-group').value   = 'Direct';
   refreshPersonLicenceField('Direct', '');
   document.getElementById('person-agency').value  = '';
+  _syncAgencyField('Direct');   // v3.10.87: hide agency for the default (Direct)
   document.getElementById('person-email').value   = '';
   const tafeEl = document.getElementById('person-tafe-day');
   if (tafeEl) tafeEl.value = '';
@@ -153,6 +154,7 @@ function editPerson(id) {
   document.getElementById('person-group').value   = p.group;
   refreshPersonLicenceField(p.group, p.licence || '');
   document.getElementById('person-agency').value  = p.agency  || '';
+  _syncAgencyField(p.group);   // v3.10.87: show agency for LH only
   document.getElementById('person-email').value   = p.email   || '';
   const tafeEl = document.getElementById('person-tafe-day');
   if (tafeEl) tafeEl.value = p.tafe_day || '';
@@ -179,6 +181,18 @@ function onPersonGroupChange() {
   // Carry over current value so typed text isn't lost when toggling back.
   const current = (document.getElementById('person-licence') || {}).value || '';
   refreshPersonLicenceField(group, current);
+  _syncAgencyField(group);
+}
+
+// v3.10.87: agency is Labour-Hire-only. Show the field for LH; hide + clear it
+// for every other group so a stale agency can't linger when someone changes
+// group (the save path enforces the same rule regardless of the field state).
+function _syncAgencyField(group) {
+  const wrap = document.getElementById('person-agency-group');
+  const inp  = document.getElementById('person-agency');
+  const isLH = group === 'Labour Hire';
+  if (wrap) wrap.style.display = isLH ? '' : 'none';
+  if (inp && !isLH) inp.value = '';
 }
 
 function savePerson() {
@@ -188,7 +202,10 @@ function savePerson() {
   const phone   = document.getElementById('person-phone').value.trim();
   const group   = document.getElementById('person-group').value;
   const licence = document.getElementById('person-licence').value.trim();
-  const agency  = document.getElementById('person-agency').value.trim();
+  // v3.10.87: agency belongs to Labour Hire only. Force it empty for any other
+  // group so moving someone off an agency (e.g. LH → Direct) doesn't leave a
+  // stale tag that makes them still read as labour hire.
+  const agency  = group === 'Labour Hire' ? document.getElementById('person-agency').value.trim() : '';
   const email   = document.getElementById('person-email').value.trim().toLowerCase();
   const tafeEl  = document.getElementById('person-tafe-day');
   const tafeDay = tafeEl ? (tafeEl.value || null) : null;

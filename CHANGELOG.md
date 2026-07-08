@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.87 — People: agency is Labour-Hire-only (auto-clears on group change)
+
+**Date:** 2026-07-08
+**Scope:** `scripts/people.js`, `index.html`
+
+- **Fix:** an `agency` tag no longer lingers when someone is moved off Labour Hire. `savePerson()` now forces `agency` empty for any group other than Labour Hire, so a person changed from LH → Direct/Apprentice no longer keeps a stale agency that made them still read as labour hire (shown against them + leaking into the v3.10.86 Timesheets agency filter).
+- The **Agency** field in the Add/Edit Person form is now hidden (and cleared) for non-Labour-Hire groups — shown only when Group = Labour Hire (`_syncAgencyField()`, wired into the group toggle + add + edit). Belt-and-braces with the save-side guard.
+- Data: the one record that surfaced this (Jose Quintanilla Rodriguez — was "SKS Direct" with agency "Madagins") was cleared manually. Ported to EQ Field.
+
+---
+
 # v3.10.86 — Timesheets: filter by labour-hire agency (for sending to each business)
 
 **Date:** 2026-07-08
