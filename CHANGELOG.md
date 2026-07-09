@@ -1,5 +1,13 @@
 # EQ Solves Field — Changelog
 
+# v3.10.88 — Roster: self-heal duplicate-key race on first save of a week
+
+**Date:** 2026-07-10
+**Scope:** `scripts/supabase.js`
+
+- **Fix:** editing a roster cell for a person/week that already had a server-side row (stale local cache, race with another device/tab) hit the `UNIQUE (name, week, org_id)` constraint on insert, threw a 409, and surfaced as a misleading "Save failed — check connection" toast even though the connection was fine. `saveCellToSB()` now catches the 409, fetches the existing server row, and PATCHes the edited day onto it instead of failing outright.
+- Reported by Collin Toohey (roster save, 2026-07-10).
+
 # v3.10.87 — People: agency is Labour-Hire-only (auto-clears on group change)
 
 **Date:** 2026-07-08
