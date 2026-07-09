@@ -160,7 +160,7 @@ let showArchivedLeave = false;
 async function loadLeaveRequests() {
   try {
     const archiveFilter = showArchivedLeave ? '' : '&archived=eq.false';
-    leaveRequests = await sbFetch('leave_requests?select=*&order=created_at.desc' + archiveFilter);
+    leaveRequests = await sbFetchAll('leave_requests?select=*&order=created_at.desc' + archiveFilter);
   } catch (e) {
     leaveRequests = [];
   }

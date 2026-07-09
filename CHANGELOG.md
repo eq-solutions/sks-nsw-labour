@@ -1,5 +1,13 @@
 # EQ Solves Field — Changelog
 
+# v3.10.90 — Timesheets/team_members/timesheet_locks/leave_requests: same silent 1000-row cap as v3.10.89
+
+**Date:** 2026-07-10
+**Scope:** `index.html`, `scripts/timesheets.js`, `scripts/leave.js`
+
+- **Fix:** v3.10.89 paginated the `schedule` load with `sbFetchAll()` but left its sibling `timesheets?select=*` load (same `loadFromSupabase()` function, same per-person-per-week growth shape) on the old unbounded `sbFetch()`. Same silent-truncation risk, just hasn't crossed 1000 rows yet. Also paginated `team_members`, `timesheet_locks` (both in `loadFromSupabase()`), the standalone `timesheets.js` full-table load, and `leave_requests` (`scripts/leave.js`) — all unbounded `select=*` fetches with no evidence yet of exceeding 1000 rows, fixed proactively rather than waiting for a repeat of the v3.10.89 incident.
+- Audit/pipeline/safety fetches that already cap with an explicit `limit=` (audit_log, prestarts, toolbox_talks, tender_enrichment, nominations, pending_schedule) were left as-is — different failure mode (predictable cap vs. silent drop), out of scope here.
+
 # v3.10.89 — Roster: full-table schedule load was silently capped at 1000 rows
 
 **Date:** 2026-07-10
