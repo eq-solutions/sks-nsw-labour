@@ -912,6 +912,29 @@ async function saveCellToSB(name, week, day, val, _opts) {
       if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
     }
     if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = existing || res[0];
+  } catch (e) {
+    // UNIQUE (name, week, org_id) hit — a server row already exists that
+    // STATE didn't know about (stale cache / another device wrote first).
+    // Self-heal: fetch it and PATCH our day's value onto it instead of
+    // surfacing a false "check connection" error for what's really a
+    // duplicate-key conflict.
+    if (/^409:/.test(String(e && e.message || e))) {
+      const found = await sbFetch(`schedule?name=eq.${encodeURIComponent(name)}&week=eq.${encodeURIComponent(week)}&select=*`);
+      const server = found && found[0];
+      if (!server) throw e;
+      const patch = {}; patch[day] = val || null;
+      const patched = await sbFetch(`schedule?id=eq.${server.id}`, 'PATCH', patch, 'return=representation');
+      const target = existing || STATE.schedule.find(r => r.name === name && r.week === week);
+      if (target && Array.isArray(patched) && patched[0]) {
+        target.id = patched[0].id;
+        target.updated_at = patched[0].updated_at;
+        ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].forEach(d => { if (d !== day) target[d] = patched[0][d] || ''; });
+        if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = target;
+        if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(target.id);
+      }
+    } else {
+      throw e;
+    }
   } finally {
     delete _sbPendingRows[lockKey];
   }
