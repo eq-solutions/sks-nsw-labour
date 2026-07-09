@@ -482,6 +482,32 @@ function _setSaveIndicator(state) {
   }
 }
 
+// ── Paginated GET ────────────────────────────────────────────
+// PostgREST silently caps an unbounded `select=*` at its default max-rows
+// (1000 on Supabase). A table that grows past that — schedule crossed it
+// 2026-07 — loses its highest-id rows on every full-table load, since no
+// explicit order is requested. That's not "some rows missing at random":
+// the newest inserts (which, for schedule, skew toward far-future weeks
+// people roster ahead of time) are the ones silently dropped, so clients
+// never see them until something else touches that exact row. Page through
+// with an explicit order so a full fetch is actually full.
+async function sbFetchAll(path, pageSize) {
+  pageSize = pageSize || 1000;
+  const sep = path.includes('?') ? '&' : '?';
+  const orderedPath = /(^|[?&])order=/.test(path) ? path : path + sep + 'order=id';
+  const pageSep = orderedPath.includes('?') ? '&' : '?';
+  let all = [];
+  let offset = 0;
+  while (true) {
+    const page = await sbFetch(`${orderedPath}${pageSep}limit=${pageSize}&offset=${offset}`, 'GET');
+    if (!Array.isArray(page) || page.length === 0) break;
+    all = all.concat(page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  return all;
+}
+
 // ── Core fetch wrapper ────────────────────────────────────────
 async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minimal') {
   // Demo / EQ tenant short-circuit — no network, in-memory only.

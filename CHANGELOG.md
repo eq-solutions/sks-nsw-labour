@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.89 — Roster: full-table schedule load was silently capped at 1000 rows
+
+**Date:** 2026-07-10
+**Scope:** `scripts/supabase.js`, `index.html`
+
+- **Fix:** the initial `schedule?select=*` load had no `order=`/pagination, so once the table crossed Supabase's default 1000-row cap (it hit 1,069 on 2026-07-10) PostgREST silently truncated the response — dropping the highest-id (newest) rows. Because far-future weeks are naturally the newest inserts, this meant STATE.schedule was missing far-future roster data for every user, and any first edit to one of those weeks collided with the untracked server row (the v3.10.88 409 self-heal papered over the save symptom but not the read gap). New `sbFetchAll()` pages through with an explicit `order=id` so the full table actually loads.
+- Root cause of Simon Bramall's "roster entries more than a month away" report — the far-future skew wasn't coincidence, it's exactly which rows get cut by an unordered capped fetch.
+- Windowed lazy-load (per `MELBOURNE-SCALE-DESIGN.md`) is still the long-term fix as the table keeps growing; this closes the immediate data-gap without the UX change.
+
 # v3.10.88 — Roster: self-heal duplicate-key race on first save of a week
 
 **Date:** 2026-07-10

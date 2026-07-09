@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.88
+  EQ Solves — Field  v3.10.89
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3930,7 +3930,7 @@ async function loadFromSupabase() {
     const [people, sites, schedule, managers, tsRows, teams, teamMembers, tsLocks] = await Promise.all([
       sbFetch('people?select=*&order=name'),
       sbFetch('sites?select=*&order=name'),
-      sbFetch('schedule?select=*'),
+      sbFetchAll('schedule?select=*'),
       sbFetch('managers?select=*&order=name'),
       sbFetch('timesheets?select=*'),
       sbFetch('teams?select=*&order=name'),
