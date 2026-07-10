@@ -152,7 +152,7 @@
       // below_threshold=eq.false: compare like-for-like (above-threshold xlsx rows vs
       // above-threshold DB rows). Without this, any below-threshold tender previously
       // imported with "Include anyway" shows as MISSING every subsequent run.
-      var rows = await sbFetch('tenders?select=external_ref,probability_pct,quote_value,stage,missing_import_count&below_threshold=eq.false&limit=5000');
+      var rows = await sbFetchAll('tenders?select=external_ref,probability_pct,quote_value,stage,missing_import_count&below_threshold=eq.false');
       existing = Array.isArray(rows) ? rows : [];
     } catch (e) { /* non-fatal — diff will show all as new */ }
 

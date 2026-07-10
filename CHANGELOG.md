@@ -1,5 +1,13 @@
 # EQ Solves Field — Changelog
 
+# v3.10.91 — Pipeline: tender_enrichment/nominations/pending_schedule/tenders-diff no longer cap-and-truncate
+
+**Date:** 2026-07-10
+**Scope:** `scripts/pipeline.js`, `scripts/pipeline-resource.js`, `scripts/pipeline-import.js`, `scripts/supabase.js`
+
+- **Fix:** `sbFetchAll()` gained an `orderBy` param (defaults `id`) for tables without an `id` PK — `tender_enrichment` has none, only `tender_id` (confirmed live). Applied to the 4 remaining full-table pipeline reads that were capped with a generous but still-truncatable `limit=N` as their only guard against the same silent-drop pattern as v3.10.89/90: `tender_enrichment` + `nominations` (both `pipeline.js` and `pipeline-resource.js`), `pending_schedule`, and the tender-import diff read in `pipeline-import.js`.
+- **Deliberately left alone:** `audit_log` (limit 500), `prestarts`/`toolbox_talks` (limit 200) are recency-scoped UI displays by design ("show the most recent N"), not full-table loads that are supposed to be complete — converting them to `sbFetchAll` would change intended behaviour (load entire history into the browser) rather than fix a bug. If older audit/prestart/toolbox history needs to be reachable, that's a pagination-UI or date-filter feature, not this fix.
+
 # v3.10.90 — Timesheets/team_members/timesheet_locks/leave_requests: same silent 1000-row cap as v3.10.89
 
 **Date:** 2026-07-10
