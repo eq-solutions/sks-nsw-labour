@@ -42,8 +42,8 @@
         // tenders is in ORG_TABLES — org_id filter auto-applied
         sbFetch('tenders?stage=in.(watch,likely,won,confirmed)&archived_at=is.null' +
           '&order=quote_value.desc.nullslast&limit=500'),
-        sbFetch('tender_enrichment?select=*&limit=1000'),
-        sbFetch('nominations?select=*&limit=2000')
+        sbFetchAll('tender_enrichment?select=*', 'tender_id'),
+        sbFetchAll('nominations?select=*')
       ]);
 
       _tenders = Array.isArray(tRows) ? tRows : [];

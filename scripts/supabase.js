@@ -491,10 +491,14 @@ function _setSaveIndicator(state) {
 // people roster ahead of time) are the ones silently dropped, so clients
 // never see them until something else touches that exact row. Page through
 // with an explicit order so a full fetch is actually full.
-async function sbFetchAll(path, pageSize) {
+//
+// orderBy defaults to 'id' — pass a different column for tables without
+// an `id` PK (e.g. tender_enrichment, keyed on tender_id).
+async function sbFetchAll(path, orderBy, pageSize) {
+  orderBy  = orderBy  || 'id';
   pageSize = pageSize || 1000;
   const sep = path.includes('?') ? '&' : '?';
-  const orderedPath = /(^|[?&])order=/.test(path) ? path : path + sep + 'order=id';
+  const orderedPath = /(^|[?&])order=/.test(path) ? path : path + sep + 'order=' + orderBy;
   const pageSep = orderedPath.includes('?') ? '&' : '?';
   let all = [];
   let offset = 0;
