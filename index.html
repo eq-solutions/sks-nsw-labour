@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.89
+  EQ Solves — Field  v3.10.90
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3932,10 +3932,10 @@ async function loadFromSupabase() {
       sbFetch('sites?select=*&order=name'),
       sbFetchAll('schedule?select=*'),
       sbFetch('managers?select=*&order=name'),
-      sbFetch('timesheets?select=*'),
+      sbFetchAll('timesheets?select=*'),
       sbFetch('teams?select=*&order=name'),
-      sbFetch('team_members?select=*'),
-      sbFetch('timesheet_locks?select=*'),
+      sbFetchAll('team_members?select=*'),
+      sbFetchAll('timesheet_locks?select=*'),
     ]);
 
     STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));
