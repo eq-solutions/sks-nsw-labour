@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.92
+  EQ Solves — Field  v3.10.93
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3871,6 +3871,42 @@ function hideLoadingOverlay() {
   if (el) el.classList.add('hidden');
 }
 
+// ── Sync-health signal (v3.10.93) ─────────────────────────────
+// Makes a degraded sync observable instead of silent. The v3.10.90→.92
+// freeze taught us the failure mode: one table's 4xx rejected the whole
+// Promise.all, dropped every user onto their last IDB snapshot, and the
+// only "symptom" was the "Cached …" banner quietly not advancing — a
+// multi-day outage nobody could see. This emits a queryable PostHog event
+// + a console breadcrumb whenever the sync degrades or fully fails.
+//
+// Transition-guarded: refreshData() re-runs loadFromSupabase() on the 30s
+// poll, so a *persistent* failure must fire ONCE (on the ok→degraded edge),
+// not every tick. `_lastSyncHealthSig` tracks the last reported state; the
+// reporter returns true only on a real transition so the caller can toast.
+// Analytics is best-effort and must never throw into the sync path.
+let _lastSyncHealthSig = 'ok:';
+function _emitSyncHealth(kind, tables, detail) {
+  const labels = (tables || []).slice().sort();
+  const sig = kind + ':' + labels.join(',');
+  if (sig === _lastSyncHealthSig) return false;      // no change → stay quiet
+  _lastSyncHealthSig = sig;
+  if (typeof _sbLog === 'function') {
+    _sbLog(kind === 'ok' ? 'info' : 'warn', 'sync-health', sig + (detail ? ' — ' + detail : ''));
+  }
+  try {
+    // Operational telemetry — one event, `kind` (partial|failed) and the
+    // affected `tables` distinguish a soft degrade from a full sync failure.
+    if (kind !== 'ok' && window.EQ_ANALYTICS && typeof window.EQ_ANALYTICS.track === 'function') {
+      window.EQ_ANALYTICS.track('sync_degraded', {
+        kind:   kind,
+        tables: labels.join(','),
+        detail: String(detail || '').slice(0, 200),
+      });
+    }
+  } catch (_) { /* analytics must never break the sync */ }
+  return true;                                        // transitioned → caller may toast
+}
+
 // ── Load all data from Supabase ───────────────────────────────
 async function loadFromSupabase() {
   showLoadingOverlay('Loading…');
@@ -3921,27 +3957,46 @@ async function loadFromSupabase() {
     } catch (e) { console.warn('EQ[idb] state hydrate failed:', e && e.message || e); }
   }
 
+  // v3.10.93 — resilient sync. Split the load into load-critical tables
+  // (people/sites/schedule/managers/timesheets — the app is unusable without
+  // them) and optional enhancement tables (teams/team_members/timesheet_locks
+  // — filter chips, team memberships, the accounts-review lock banner). A
+  // rejected fetch inside a Promise.all fails the WHOLE sync and silently
+  // drops every user onto their last IDB snapshot: this is exactly the
+  // v3.10.90→.92 freeze, where two id-less tables 400'd on order=id and froze
+  // the fleet on 4-day-old data. The root 400 is fixed (v3.10.92 #59), but the
+  // fragility isn't — any future single-table failure (a new id-less table, an
+  // RLS regression, a renamed column, a transient 500) would freeze the app
+  // the same way. Now: optional tables .catch(() => []) so one table's failure
+  // degrades that one feature, not the whole app (same pattern as the Tier-2
+  // tables in apprentices.js). Critical tables still reject → the genuine
+  // full-offline snapshot fallback in the catch below (unchanged). Either way
+  // the failure is surfaced (toast + analytics + console), never silent again.
+  // NOTE: sbFetch/sbFetchAll still throw on 4xx GETs — other callers rely on
+  // that. We only soften failure here, at these specific call sites.
+  const _degraded = [];   // [{ table, msg }] — optional tables that failed
+  const _optional = (table, promise) => promise.catch(err => {
+    _degraded.push({ table: table, msg: String(err && err.message || err) });
+    return [];
+  });
+
   try {
-    // v3.4.78 — also fetch teams + team_members. teams won't be in
-    // TENANT_DISABLED_TABLES for SKS. NOTE: sbFetch does NOT swallow 4xx on
-    // GETs (only disabled tables short-circuit to []); a 4xx here rejects
-    // this Promise.all and drops the app back to its cached snapshot.
-    // v3.4.82 — additionally fetch timesheet_locks for Accounts
-    // Review mode. Empty array is the open-week state.
     const [people, sites, schedule, managers, tsRows, teams, teamMembers, tsLocks] = await Promise.all([
+      // Load-critical — a rejection here aborts the sync and keeps the last
+      // known-good IDB snapshot (see catch). Do NOT wrap these.
       sbFetch('people?select=*&order=name'),
       sbFetch('sites?select=*&order=name'),
       sbFetchAll('schedule?select=*'),
       sbFetch('managers?select=*&order=name'),
       sbFetchAll('timesheets?select=*'),
-      sbFetch('teams?select=*&order=name'),
-      // team_members + timesheet_locks have no `id` column, so sbFetchAll's
-      // default order=id 400s ("column id does not exist") and — because a
-      // rejected fetch here fails the whole Promise.all — freezes the app on
-      // its last cached snapshot. Pass each table's real PK. (regression from
-      // v3.10.90 #57, which paginated these without an orderBy.)
-      sbFetchAll('team_members?select=*', 'team_id,person_id'),
-      sbFetchAll('timesheet_locks?select=*', 'week_key'),
+      // Optional — enhancement layers; empty is already a valid state on
+      // pre-migration tenants. A failure degrades the feature to empty, it
+      // never freezes the whole app. team_members + timesheet_locks have no
+      // `id` column so they pass their real PK to sbFetchAll (order=id would
+      // 400) — but even if that regresses again, .catch keeps the app alive.
+      _optional('teams',           sbFetch('teams?select=*&order=name')),
+      _optional('team_members',    sbFetchAll('team_members?select=*', 'team_id,person_id')),
+      _optional('timesheet_locks', sbFetchAll('timesheet_locks?select=*', 'week_key')),
     ]);
 
     STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));
@@ -3961,17 +4016,42 @@ async function loadFromSupabase() {
 
     STATE.timesheets = tsRows;
     STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
+    // v3.10.93 — for an optional table that FAILED this sync, keep its
+    // last-known value instead of clobbering STATE (and, via the snapshot
+    // below, the offline cache) with an empty array on a transient blip.
+    // Pre-change, an optional 4xx froze the whole sync and never reached the
+    // snapshot save, so the old good cache survived; now the sync succeeds, so
+    // we must preserve here to keep that guarantee. First-ever load falls back
+    // to [] so downstream `(STATE.x||[])` guards stay happy.
+    const _failed = new Set(_degraded.map(d => d.table));
     // v3.4.78 — Teams: pure filter metadata, light mapping.
-    STATE.teams       = (teams       || []).map(r => ({ id: r.id, name: r.name, color: r.color || '#7C77B9', created_at: r.created_at }));
-    STATE.teamMembers = (teamMembers || []).map(r => ({ team_id: r.team_id, person_id: r.person_id }));
+    STATE.teams       = _failed.has('teams')        ? (STATE.teams       || [])
+                        : (teams       || []).map(r => ({ id: r.id, name: r.name, color: r.color || '#7C77B9', created_at: r.created_at }));
+    STATE.teamMembers = _failed.has('team_members') ? (STATE.teamMembers || [])
+                        : (teamMembers || []).map(r => ({ team_id: r.team_id, person_id: r.person_id }));
     // v3.4.82 — Timesheet locks: keyed by week_key. Tiny payload.
-    STATE.timesheetLocks = (tsLocks || []).map(r => ({
-      week_key: r.week_key, locked_at: r.locked_at, locked_by: r.locked_by, reason: r.reason
-    }));
+    STATE.timesheetLocks = _failed.has('timesheet_locks') ? (STATE.timesheetLocks || [])
+                        : (tsLocks || []).map(r => ({
+                            week_key: r.week_key, locked_at: r.locked_at, locked_by: r.locked_by, reason: r.reason
+                          }));
     STATE.cachedAt = null;
     hideLoadingOverlay();
     updateLastUpdated();
     if (typeof renderTeamPills === 'function') renderTeamPills();
+
+    // v3.10.93 — the core roster synced, but one or more optional tables
+    // failed. Surface it (toast, once per transition) instead of pretending
+    // the sync was clean. A fully-clean sync clears the flag so the next
+    // failure toasts again.
+    if (_degraded.length) {
+      const labels = _degraded.map(d => d.table);
+      const detail = _degraded.map(d => d.table + ': ' + d.msg).join(' | ');
+      if (_emitSyncHealth('partial', labels, detail)) {
+        showToast('⚠ Some data didn’t load (' + labels.join(', ') + '). Roster is up to date; try Sync again shortly.');
+      }
+    } else {
+      _emitSyncHealth('ok', [], '');
+    }
 
     // v3.4.75: persist a snapshot for next launch. Fire-and-forget;
     // a failed save (storage quota, private mode) must not impact the
@@ -3994,6 +4074,12 @@ async function loadFromSupabase() {
     return true;
   } catch(e) {
     hideLoadingOverlay();
+    // v3.10.93 — a load-critical table failed, so the whole sync aborted and
+    // we're falling back to the last IDB snapshot (the genuine full-offline
+    // path). Emit a queryable signal (once per transition) so a critical-table
+    // outage can't hide for days behind a stale "Cached …" banner the way the
+    // v3.10.90→.92 freeze did.
+    _emitSyncHealth('failed', [], String(e && e.message || e));
     if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
       // v3.4.75: friendlier toast — if we hydrated cached data above,
       // tell the user how stale it is and that edits will queue. Old

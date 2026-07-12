@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.93 — loadFromSupabase: one table's failure can no longer freeze the whole app
+
+**Date:** 2026-07-12
+**Scope:** `index.html`
+
+- **Resilience (follow-up to v3.10.92):** v3.10.92 fixed the *specific* `team_members`/`timesheet_locks` 400, but `loadFromSupabase()` was still all-or-nothing — its `Promise.all` over ~8 tables meant any single rejection (a new id-less table, an RLS regression, a renamed column, a transient 500) would fail the entire sync and silently drop every user onto their last IndexedDB snapshot, with the only symptom being the "Cached …" timestamp quietly not advancing. That's the exact shape of the v3.10.90→.92 outage, and it could recur invisibly. Tables are now split into **load-critical** (`people`, `sites`, `schedule`, `managers`, `timesheets` — the app is unusable without them; a failure still aborts the sync and keeps the last-good snapshot) and **optional** (`teams`, `team_members`, `timesheet_locks` — filter chips, memberships, the accounts-review lock banner). Optional fetches are wrapped in `.catch(() => [])` so one table's failure degrades that one feature instead of freezing the whole app (same pattern already used for the Tier-2 tables in `apprentices.js`).
+- **Preserve-on-failure:** a failed optional table keeps its last-known in-memory value rather than overwriting `STATE` (and the persisted offline snapshot) with an empty array on a transient blip.
+- **No longer silent:** a degraded sync (one or more optional tables failed) shows a user toast and, together with a full-sync failure, fires a `sync_degraded` PostHog event (`kind: partial|failed`) plus a console breadcrumb. Transition-guarded so the 30s background poll reports the failure once (on the healthy→degraded edge), not every tick.
+- `sbFetch`/`sbFetchAll` semantics are unchanged — they still throw on 4xx GETs (other callers depend on that); failure is softened only at these specific call sites. `index.html` only.
+
 # v3.10.92 — Roster/Timesheets: whole app frozen on cached data (team_members/timesheet_locks paginated without an order column)
 
 **Date:** 2026-07-12
