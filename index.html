@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.91
+  EQ Solves — Field  v3.10.92
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3922,9 +3922,10 @@ async function loadFromSupabase() {
   }
 
   try {
-    // v3.4.78 — also fetch teams + team_members. Empty arrays on
-    // pre-migration tenants since sbFetch swallows 4xx for GETs and
-    // returns []. teams won't be in TENANT_DISABLED_TABLES for SKS.
+    // v3.4.78 — also fetch teams + team_members. teams won't be in
+    // TENANT_DISABLED_TABLES for SKS. NOTE: sbFetch does NOT swallow 4xx on
+    // GETs (only disabled tables short-circuit to []); a 4xx here rejects
+    // this Promise.all and drops the app back to its cached snapshot.
     // v3.4.82 — additionally fetch timesheet_locks for Accounts
     // Review mode. Empty array is the open-week state.
     const [people, sites, schedule, managers, tsRows, teams, teamMembers, tsLocks] = await Promise.all([
@@ -3934,8 +3935,13 @@ async function loadFromSupabase() {
       sbFetch('managers?select=*&order=name'),
       sbFetchAll('timesheets?select=*'),
       sbFetch('teams?select=*&order=name'),
-      sbFetchAll('team_members?select=*'),
-      sbFetchAll('timesheet_locks?select=*'),
+      // team_members + timesheet_locks have no `id` column, so sbFetchAll's
+      // default order=id 400s ("column id does not exist") and — because a
+      // rejected fetch here fails the whole Promise.all — freezes the app on
+      // its last cached snapshot. Pass each table's real PK. (regression from
+      // v3.10.90 #57, which paginated these without an orderBy.)
+      sbFetchAll('team_members?select=*', 'team_id,person_id'),
+      sbFetchAll('timesheet_locks?select=*', 'week_key'),
     ]);
 
     STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));

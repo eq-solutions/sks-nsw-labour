@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.92 — Roster/Timesheets: whole app frozen on cached data (team_members/timesheet_locks paginated without an order column)
+
+**Date:** 2026-07-12
+**Scope:** `index.html`
+
+- **Fix (production outage):** v3.10.90 wrapped the `team_members` and `timesheet_locks` loads in `loadFromSupabase()` with `sbFetchAll()` but passed no `orderBy`, so both defaulted to `order=id` — and neither table has an `id` column (`team_members` PK is `team_id,person_id`; `timesheet_locks` PK is `week_key,org_id`). PostgREST rejected every load with `400: column "id" does not exist`. Because both fetches sit inside the `Promise.all` in `loadFromSupabase()`, the rejection failed the **entire** sync, so the app fell back to its last IndexedDB snapshot and the "Cached …" timestamp never advanced. Every user was stuck on stale data (last good sync 08/07). Fixed by passing each table's real PK: `sbFetchAll('team_members?select=*', 'team_id,person_id')` and `sbFetchAll('timesheet_locks?select=*', 'week_key')`. Verified live: `order=id` errors, both patched orderings succeed.
+- Also corrected a stale comment in `loadFromSupabase()` that claimed `sbFetch` swallows 4xx on GETs — it does not (only disabled tables short-circuit to `[]`); a 4xx GET rejects and takes the whole `Promise.all` down. That false assumption is what made the v3.10.90 pagination change look safe.
+- Sibling `sbFetchAll` callers audited — `nominations`, `pending_schedule`, `tenders` all have `id`; `tender_enrichment` already passes `tender_id`. No other id-less callers.
+
 # v3.10.91 — Pipeline: tender_enrichment/nominations/pending_schedule/tenders-diff no longer cap-and-truncate
 
 **Date:** 2026-07-10
