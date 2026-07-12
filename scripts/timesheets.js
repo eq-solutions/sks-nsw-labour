@@ -155,7 +155,7 @@ window.addEventListener('resize', closeJobCombobox);
 
 async function loadTimesheets() {
   try {
-    const rows = await sbFetchAll('timesheets?select=*');
+    const rows = await sbFetchAll('timesheets?select=*', 'id');
     STATE.timesheets = rows;
   } catch (e) {
     STATE.timesheets = [];

@@ -1,0 +1,23 @@
+name: bootstrap-smoke
+
+# Post-merge smoke test — hits every table loadFromSupabase() reads and fails on
+# any non-2xx. This repo had NO CI when the v3.10.90-92 order=id outage shipped;
+# this is the minimum gate that would have caught it. The anon key + org id are
+# public (read from scripts/app-state.js at runtime), so no secrets are needed.
+# Netlify still deploys on push independently — this runs alongside as a canary.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bootstrap smoke test against the live SKS DB
+        run: node scripts/smoke/bootstrap-smoke.mjs
