@@ -33,6 +33,15 @@ field-by-field instead of wholesale.
       analytics event + toast.
 - [x] **`order=id` fix for id-less tables** — `team_members` / `timesheet_locks` — EQ Field v3.5.305 (#460).
 
+## Login / role parity
+
+- [ ] **Durable supervisor role across reload** — SKS v3.10.96. SKS held supervisor status in a one-shot
+      `eq_auto_admin` flag that `initApp` consumed, so the SW auto-reload dropped supervisors to view-only.
+      Fixed by writing a durable `eq_role` at every login path + deferring the SW reload. **EQ Field's login
+      model differs** (Shell JWT handoff / canonical, not name+code), so this is **not a copy** — verify at
+      merge whether EQ Field's role is re-derived on every boot or has the same one-shot-consume trap, and
+      fix in EQ Field's own terms. Do NOT port the SKS code verbatim.
+
 ## How to use
 
 The full feature-sync ledger lives in the `project-sks-eqfield-sync` memory and `sks/pending.md`.
