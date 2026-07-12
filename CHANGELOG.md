@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.96 — Login: supervisors no longer drop to view-only after a reload
+
+**Date:** 2026-07-12
+**Scope:** `scripts/auth.js`, `index.html`
+
+Fixes the reported bug where logging in as a supervisor flashed a "logout" and came back **view-only**, every time.
+
+- **Root cause.** Supervisor status was held in a *one-shot* sessionStorage flag (`eq_auto_admin`) that `initApp()` read once and then deleted. The "you're logged in" flag (`eq_access_v1`) is durable across reloads; the supervisor flag was not. Any same-tab reload — most often the service-worker auto-reload that fires on every deploy — re-ran `initApp()` with the flag already consumed, so it fell through to view-only. `checkAccess()` also early-returned on `eq_access_v1` *before* the durable "remember me" restore, so even a remembered supervisor login was bypassed on reload. Staff never noticed (they're view-only anyway), so it looked account-specific to supervisors.
+- **Durable role (Option 1).** Role is now written to a durable `eq_role` key at every login path (tenant-code gate, demo, production verify-pin, shell-token SSO, both remember-me restores) and read by `initApp()` on **every** boot — so supervisor status survives a reload. The old `eq_auto_admin` flag is kept only to fire the login-moment UX (welcome toast + jump to the dashboard), never the role. "Switch to view only" and mid-session unlock both update `eq_role`, so that choice also survives a reload; logout clears it. Back-compat: sessions already open across the upgrade still resolve correctly from the legacy flag.
+- **Calmer update reload (Option 3).** The SW-activated reload no longer fires the instant a new build lands (which is what made the flip visible on every deploy). It now defers to a non-disruptive moment — the moment the tab is backgrounded, or the first safe moment while foreground (never mid-edit, mid-type, or with queued writes) — with a 5-minute hard cap so a busy tab still updates.
+
 # v3.10.95 — Resilience hardening: sbFetchAll fails loud + degrade alert + bootstrap smoke test
 
 **Date:** 2026-07-12

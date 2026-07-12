@@ -72,6 +72,10 @@ async function _consumeShellToken() {
     }
     sessionStorage.setItem(ACCESS_KEY, '1');
     sessionStorage.setItem('eq_logged_in_name', data.name || '');
+    // v3.10.96 — durable role: written at every login path, read by initApp on
+    // every boot so supervisor status survives a same-tab reload (the SW
+    // auto-reload used to drop supervisors to view-only).
+    sessionStorage.setItem('eq_role', data.role === 'supervisor' ? 'supervisor' : 'staff');
     // Phase C1: stash the canonical identity id so initApp can resolve the
     // person deterministically by people.canonical_id (not by name string).
     // Absent on legacy shell tokens — resolver no-ops and name resolution
@@ -310,6 +314,7 @@ async function checkPin() {
       sessionStorage.setItem(ACCESS_KEY, '1');
       sessionStorage.setItem('eq_logged_in_name', name);
       if (role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+      sessionStorage.setItem('eq_role', role);   // v3.10.96 — durable role
       // Persistent "remember me" for tenant-code gate (no server token).
       try {
         const remember = document.getElementById('gate-remember');
@@ -368,6 +373,7 @@ async function checkPin() {
       sessionStorage.setItem(ACCESS_KEY, '1');
       sessionStorage.setItem('eq_logged_in_name', name);
       if (role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+      sessionStorage.setItem('eq_role', role);   // v3.10.96 — durable role
       // Mint a server-side session token so demo can call protected
       // endpoints (send-email etc). Demo only — eq tenant has no backend.
       // v3.4.59: BATTLE-TEST #45 — await (was IIFE fire-and-forget).
@@ -416,6 +422,7 @@ async function checkPin() {
       sessionStorage.setItem(ACCESS_KEY, '1');
       sessionStorage.setItem('eq_logged_in_name', name);
       if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+      sessionStorage.setItem('eq_role', data.role === 'supervisor' ? 'supervisor' : 'staff');   // v3.10.96 — durable role
       if (data.token) localStorage.setItem('eq_remember_token', data.token);
       if (data.sessionToken) {
         sessionStorage.setItem('eq_session_token', data.sessionToken);
@@ -451,7 +458,9 @@ async function checkAccess() {
     _postHandoffStatus({
       kind: 'accepted',
       name: sessionStorage.getItem('eq_logged_in_name') || '',
-      role: sessionStorage.getItem('eq_auto_admin') === '1' ? 'supervisor' : 'staff'
+      // v3.10.96 — read the durable role; fall back to the legacy one-shot flag
+      // for sessions that were open across the upgrade.
+      role: sessionStorage.getItem('eq_role') || (sessionStorage.getItem('eq_auto_admin') === '1' ? 'supervisor' : 'staff')
     });
     return true;
   }
@@ -467,6 +476,7 @@ async function checkAccess() {
       if (p && p.exp && Date.now() < p.exp && p.slug === TENANT.ORG_SLUG) {
         sessionStorage.setItem(ACCESS_KEY, '1');
         sessionStorage.setItem('eq_logged_in_name', p.name || '');
+        sessionStorage.setItem('eq_role', p.role === 'supervisor' ? 'supervisor' : 'staff');   // v3.10.96 — durable role
         if (p.role === 'supervisor') {
           sessionStorage.setItem('eq_auto_admin', '1');
           // v3.4.79: pre-set the manager state so the sidebar paints
@@ -525,6 +535,7 @@ async function checkAccess() {
           sessionStorage.setItem(ACCESS_KEY, '1');
           sessionStorage.setItem('eq_logged_in_name', data.name);
           if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+          sessionStorage.setItem('eq_role', data.role === 'supervisor' ? 'supervisor' : 'staff');   // v3.10.96 — durable role
           // Phase C1: preserve the canonical identity across remember-me
           // restores so SSO users keep deterministic person resolution.
           if (data.canonical_id) sessionStorage.setItem('eq_canonical_id', data.canonical_id);
@@ -550,6 +561,7 @@ function logoutUser() {
   sessionStorage.removeItem('eq_canonical_id');
   sessionStorage.removeItem('eq_canonical_phone');
   sessionStorage.removeItem('eq_auto_admin');
+  sessionStorage.removeItem('eq_role');   // v3.10.96 — clear durable role on logout
   sessionStorage.removeItem('eq_agency');
   sessionStorage.removeItem('eq_session_token');
   localStorage.removeItem('eq_remember_token');
@@ -567,6 +579,7 @@ function toggleManagerMode() {
     auditLog('Locked manager mode', 'Access', null, null);
     isManager          = false;
     currentManagerName = '';
+    sessionStorage.setItem('eq_role', 'staff');   // v3.10.96 — view-only choice survives a reload
     applyManagerMode();
     // v3.10.41: re-render so the current page drops edit affordances
     // (re-disables inputs, hides supervisor-only chips) immediately.
@@ -665,6 +678,7 @@ async function submitManagerPassword() {
   if (validPw) {
     isManager          = true;
     currentManagerName = name;
+    sessionStorage.setItem('eq_role', 'supervisor');   // v3.10.96 — mid-session unlock survives a reload
     applyManagerMode();
     // v3.10.41: re-render the page you're already on so edit affordances
     // (disabled job/hours inputs, supervisor-only chips) switch on

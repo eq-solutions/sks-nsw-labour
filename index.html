@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.95
+  EQ Solves — Field  v3.10.96
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -4634,17 +4634,35 @@ async function initApp() {
   updateTopStats();
   if (typeof applyManagerMode === 'function') applyManagerMode();
 
-  // Auto-admin if logged in with supervisor password at gate
-  if (sessionStorage.getItem('eq_auto_admin') === '1') {
+  // v3.10.96 — durable role. Supervisor status is read from sessionStorage
+  // `eq_role` (written at every login path in auth.js), so it survives a
+  // same-tab reload. Previously this read the ONE-SHOT `eq_auto_admin` flag and
+  // deleted it — so the service-worker auto-reload on deploy (or any refresh)
+  // re-ran initApp with the flag already gone and silently dropped supervisors
+  // to view-only. `eq_auto_admin` now only fires the login-moment UX (welcome
+  // toast + jump to the dashboard), never the role itself.
+  let _durableRole   = sessionStorage.getItem('eq_role');
+  const _justLoggedIn = sessionStorage.getItem('eq_auto_admin') === '1';
+  // Back-compat: a session already open before this release only carries the
+  // one-shot flag — treat it as supervisor, then migrate it to eq_role below.
+  if (!_durableRole && _justLoggedIn) _durableRole = 'supervisor';
+  if (!_durableRole) _durableRole = 'staff';
+  sessionStorage.setItem('eq_role', _durableRole);
+
+  if (_durableRole === 'supervisor') {
     const loggedInName = sessionStorage.getItem('eq_logged_in_name') || 'Admin';
     isManager = true;
     currentManagerName = loggedInName;
     if (typeof applyManagerMode === 'function') applyManagerMode();
-    showToast('Supervision mode — ' + loggedInName);
-    sessionStorage.removeItem('eq_auto_admin');
-    showPage('dashboard');
-    mobileNav('dashboard');
+    if (_justLoggedIn) {
+      // Login-moment UX only — not on a reload.
+      showToast('Supervision mode — ' + loggedInName);
+      showPage('dashboard');
+      mobileNav('dashboard');
+    }
   }
+  // Consume the one-shot flag once its login-moment UX has fired.
+  if (_justLoggedIn) sessionStorage.removeItem('eq_auto_admin');
 
   // Restore agency session
   const savedAgency = sessionStorage.getItem('eq_agency');
@@ -4763,6 +4781,36 @@ function stopPolling() {
   if (el && typeof APP_VERSION !== 'undefined') el.textContent = 'v' + APP_VERSION;
 })();
 
+// ── Service-worker reload scheduler ───────────────────────────
+// v3.10.96 — a new SW means the page must reload to run the fresh JS. Doing it
+// the instant the SW activates flashed a jarring reload mid-session (right after
+// login it looked like being logged out — and, before the durable-role fix, it
+// dropped supervisors to view-only). Defer instead: reload the moment the tab is
+// backgrounded (the user isn't looking), or the first safe moment while it's
+// foreground — never mid-edit, mid-type, or with queued writes. Hard cap so a
+// perpetually-busy tab still updates.
+let _swReloadPending = false;
+function _scheduleSwReload() {
+  if (_swReloadPending) return;
+  _swReloadPending = true;
+  let done = false;
+  const go = () => { if (done) return; done = true; window.location.reload(); };
+  const safeNow = () => {
+    if (typeof currentPage !== 'undefined' && currentPage === 'editor') return false;
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return false;
+    if (typeof _pendingWriteCount !== 'undefined' && _pendingWriteCount > 0) return false;
+    return true;
+  };
+  // Primary: reload as soon as the tab is backgrounded — invisible to the user.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) go(); });
+  // Foreground fallback: leave the active session alone briefly (no yank right
+  // after login), then reload the first safe moment.
+  const settle = setInterval(() => { if (safeNow()) { clearInterval(settle); go(); } }, 20000);
+  // Cap the wait so a perpetually-busy foreground tab still picks up the build.
+  setTimeout(() => { clearInterval(settle); go(); }, 5 * 60 * 1000);
+}
+
 // ── Service worker ────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -4777,10 +4825,11 @@ if ('serviceWorker' in navigator) {
     if (e.data && e.data.type === 'FLUSH_WRITE_QUEUE' && typeof flushWriteQueue === 'function') {
       flushWriteQueue();
     }
-    // New SW activated — reload immediately so updated JS runs rather than
-    // the old scripts that skipWaiting left in memory.
+    // New SW activated — reload so the updated JS runs rather than the old
+    // scripts skipWaiting left in memory. v3.10.96: deferred to a
+    // non-disruptive moment (see _scheduleSwReload) instead of an instant flash.
     if (e.data && e.data.type === 'SW_ACTIVATED') {
-      window.location.reload();
+      _scheduleSwReload();
     }
   });
 }
