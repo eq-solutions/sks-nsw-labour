@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.95 — Resilience hardening: sbFetchAll fails loud + degrade alert + bootstrap smoke test
+
+**Date:** 2026-07-12
+**Scope:** `scripts/supabase.js`, `index.html`, pipeline/timesheets loaders, `scripts/smoke/`, `.github/workflows/smoke.yml`
+
+Three prevention layers on top of the v3.10.93 resilience work, so the v3.10.90–92 outage class can't recur silently:
+
+- **`sbFetchAll` now fails loud.** Dropped the silent `orderBy = orderBy || 'id'` default that 400'd on id-less tables (`team_members`/`timesheet_locks`) and caused the outage. Every caller must now pass an explicit `orderBy` (or have `order=` in the path); a missing ordering throws with a pointed message instead of guessing a column that may not exist. All callers that relied on the default now pass `'id'` explicitly.
+- **Degrade alert.** The v3.10.93 `sync_degraded` PostHog event only helps if someone watches PostHog. `_emitSyncHealth` now also fires a throttled (one per device per day) best-effort email to the ops list on a real degrade transition, so a silent multi-day outage can't recur. sks tenant only; self-guarded, never throws into the sync path.
+- **Bootstrap smoke test (scaffold).** `scripts/smoke/bootstrap-smoke.mjs` hits every table `loadFromSupabase()` reads, the way the app reads it, and fails on any non-2xx — plus a guard asserting `team_members`/`timesheet_locks` still 400 on `order=id` (so a revert to the old default is caught). Runs on push to `main` via `.github/workflows/smoke.yml` — the first CI this repo has.
+
 # v3.10.94 — Timesheets: hours-missing flag + weekend auto-show + Sunday week-rollover fix
 
 **Date:** 2026-07-12

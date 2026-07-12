@@ -110,9 +110,9 @@
       var results = await Promise.all([
         sbFetch('tenders?stage=in.(won,confirmed)&archived_at=is.null&below_threshold=eq.false&order=quote_value.desc.nullslast&limit=500'),
         sbFetchAll('tender_enrichment?select=*', 'tender_id'),
-        sbFetchAll('nominations?select=*'),
+        sbFetchAll('nominations?select=*', 'id'),
         sbFetch('people?select=id,name&archived=eq.false&order=name&limit=1000'),
-        sbFetchAll('pending_schedule?select=*&confirmed_at=is.null'),
+        sbFetchAll('pending_schedule?select=*&confirmed_at=is.null', 'id'),
         // Non-fatal: a roster-fetch failure must not blank the whole planning page —
         // degrade to "0 on the roster" rather than killing the load.
         sbFetch('schedule?week=eq.' + _thisWeekStr + '&select=name,mon,tue,wed,thu,fri&limit=5000')

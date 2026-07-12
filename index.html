@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.94
+  EQ Solves — Field  v3.10.95
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3884,6 +3884,34 @@ function hideLoadingOverlay() {
 // not every tick. `_lastSyncHealthSig` tracks the last reported state; the
 // reporter returns true only on a real transition so the caller can toast.
 // Analytics is best-effort and must never throw into the sync path.
+// v3.10.95 — page a human on a real degrade transition. sync_degraded (below)
+// only helps if someone is watching PostHog; this fires a throttled (one per
+// device per day) best-effort email to the ops list so a silent multi-day
+// outage — the v3.10.90–92 failure mode — can't recur. sks tenant only;
+// self-guards so it never throws into the sync path.
+function _alertSyncDegraded(kind, labels, detail) {
+  try {
+    if (typeof TENANT === 'undefined' || TENANT.ORG_SLUG !== 'sks') return;
+    if (typeof leaveCCList === 'undefined' || !Array.isArray(leaveCCList) || !leaveCCList.length) return;
+    const key = 'eq_sync_alert_' + new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(key)) return;            // already alerted today on this device
+    localStorage.setItem(key, '1');
+    const token = sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_agent_token') || '';
+    if (!token) return;                               // send-email needs a token; PostHog event still fired
+    const subject = 'SKS Field — data sync ' + (kind === 'failed' ? 'FAILED' : 'degraded') + ' (' + APP_VERSION + ')';
+    const html = '<p>The SKS Field app reported a <b>' + kind + '</b> data sync.</p>'
+      + '<p>Affected tables: <code>' + ((labels && labels.join(', ')) || '(core)') + '</code></p>'
+      + (detail ? '<p>Detail: <code>' + String(detail).slice(0, 300) + '</code></p>' : '')
+      + '<p>Users may be seeing stale / cached data — check the app and Supabase. '
+      + 'Throttled to one alert per device per day.</p>';
+    fetch('/.netlify/functions/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-eq-token': token },
+      body: JSON.stringify({ to: leaveCCList, subject: subject, html: html })
+    }).catch(function () {});
+  } catch (_) { /* alerting must never break the sync */ }
+}
+
 let _lastSyncHealthSig = 'ok:';
 function _emitSyncHealth(kind, tables, detail) {
   const labels = (tables || []).slice().sort();
@@ -3904,6 +3932,7 @@ function _emitSyncHealth(kind, tables, detail) {
       });
     }
   } catch (_) { /* analytics must never break the sync */ }
+  if (kind !== 'ok') _alertSyncDegraded(kind, labels, detail);   // v3.10.95 — page a human
   return true;                                        // transitioned → caller may toast
 }
 
@@ -3986,9 +4015,9 @@ async function loadFromSupabase() {
       // known-good IDB snapshot (see catch). Do NOT wrap these.
       sbFetch('people?select=*&order=name'),
       sbFetch('sites?select=*&order=name'),
-      sbFetchAll('schedule?select=*'),
+      sbFetchAll('schedule?select=*', 'id'),
       sbFetch('managers?select=*&order=name'),
-      sbFetchAll('timesheets?select=*'),
+      sbFetchAll('timesheets?select=*', 'id'),
       // Optional — enhancement layers; empty is already a valid state on
       // pre-migration tenants. A failure degrades the feature to empty, it
       // never freezes the whole app. team_members + timesheet_locks have no

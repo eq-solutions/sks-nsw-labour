@@ -43,7 +43,7 @@
         sbFetch('tenders?stage=in.(watch,likely,won,confirmed)&archived_at=is.null' +
           '&order=quote_value.desc.nullslast&limit=500'),
         sbFetchAll('tender_enrichment?select=*', 'tender_id'),
-        sbFetchAll('nominations?select=*')
+        sbFetchAll('nominations?select=*', 'id')
       ]);
 
       _tenders = Array.isArray(tRows) ? tRows : [];

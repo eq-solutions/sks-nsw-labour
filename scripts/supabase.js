@@ -492,13 +492,20 @@ function _setSaveIndicator(state) {
 // never see them until something else touches that exact row. Page through
 // with an explicit order so a full fetch is actually full.
 //
-// orderBy defaults to 'id' — pass a different column for tables without
-// an `id` PK (e.g. tender_enrichment, keyed on tender_id).
+// v3.10.95 — fail loud instead of silently defaulting order=id. The old
+// `orderBy = orderBy || 'id'` default 400'd on id-less tables (team_members /
+// timesheet_locks, PKs team_id,person_id / week_key,org_id) — the v3.10.90–92
+// outage that froze the app on cached data for ~2 days. Every caller must now
+// state an ordering (a real column, or an `order=` already in the path); we
+// throw rather than guess a column that may not exist.
 async function sbFetchAll(path, orderBy, pageSize) {
-  orderBy  = orderBy  || 'id';
   pageSize = pageSize || 1000;
+  const hasPathOrder = /(^|[?&])order=/.test(path);
+  if (!hasPathOrder && !orderBy) {
+    throw new Error('sbFetchAll("' + path + '") needs an explicit orderBy or order= in the path — the silent order=id default caused the v3.10.90–92 outage.');
+  }
   const sep = path.includes('?') ? '&' : '?';
-  const orderedPath = /(^|[?&])order=/.test(path) ? path : path + sep + 'order=' + orderBy;
+  const orderedPath = hasPathOrder ? path : path + sep + 'order=' + orderBy;
   const pageSep = orderedPath.includes('?') ? '&' : '?';
   let all = [];
   let offset = 0;
