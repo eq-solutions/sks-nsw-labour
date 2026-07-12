@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.93
+  EQ Solves — Field  v3.10.94
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -4530,7 +4530,11 @@ async function initApp() {
     // selector is built.
     if (!STATE.currentWeek) {
       const _d = new Date(), _m = new Date(_d);
-      _m.setDate(_d.getDate() - _d.getDay() + 1);
+      // v3.10.94 — ISO Monday: Sunday belongs to the week that just ended, so
+      // the app stays on the current Mon–Sun week through Sunday and only rolls
+      // to next week on Monday. (getDay() is 0 on Sunday; the old - getDay() + 1
+      // rolled a day early every Sunday, mismatching the "(this week)" label.)
+      _m.setDate(_d.getDate() - ((_d.getDay() + 6) % 7));
       STATE.currentWeek = String(_m.getDate()).padStart(2,'0') + '.' +
                           String(_m.getMonth()+1).padStart(2,'0') + '.' +
                           String(_m.getFullYear()).slice(-2);
@@ -4556,7 +4560,7 @@ async function initApp() {
   const weekSet = new Set(STATE.schedule.map(r => r.week));
   const today   = new Date();
   for (let i = 0; i < 16; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - d.getDay() + 1 + i*7);
+    const d = new Date(today); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + i*7);  // v3.10.94 ISO Monday (was - getDay() + 1)
     const dd = String(d.getDate()).padStart(2,'0'), mm = String(d.getMonth()+1).padStart(2,'0'), yy = String(d.getFullYear()).slice(-2);
     weekSet.add(`${dd}.${mm}.${yy}`);
   }
@@ -4585,7 +4589,7 @@ async function initApp() {
   // Set current week to this Monday
   const todayStr = (() => {
     const d = new Date(), mon = new Date(d);
-    mon.setDate(d.getDate() - d.getDay() + 1);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));  // v3.10.94 ISO Monday — matches _thisMonday so open-week == "(this week)" on Sundays
     return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
   })();
   // Always open on this week — never restore a stale saved week across sessions.

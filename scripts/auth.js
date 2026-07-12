@@ -963,7 +963,7 @@ async function initStaffTsApp() {
   const weekSet = new Set(STATE.schedule.map(r => r.week));
   const today   = new Date();
   for (let i = -4; i < 8; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - d.getDay() + 1 + i * 7);
+    const d = new Date(today); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + i * 7);  // v3.10.94 ISO Monday (was - getDay() + 1; rolled a day early on Sundays)
     weekSet.add(String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getFullYear()).slice(-2));
   }
   const allWeeks = [...weekSet].sort((a, b) => {

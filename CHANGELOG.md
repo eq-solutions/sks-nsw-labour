@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.94 — Timesheets: hours-missing flag + weekend auto-show + Sunday week-rollover fix
+
+**Date:** 2026-07-12
+**Scope:** `scripts/timesheets.js`, `styles/base.css`, `index.html`, `scripts/auth.js`
+
+Three timesheet/roster UX fixes:
+
+- **Hours-missing flag (the phantom "8").** The hours box used `placeholder="8"`, so an empty cell showed a greyed 8 that read as filled — people entered job numbers and left hours blank without noticing. Now, whenever a job is entered but the hours box is blank, the box turns red with a `?` placeholder (empty days with no job stay quiet). Empty boxes elsewhere show `hrs`/`h` instead of a fake `8`. Live-toggles via `_tsHrsMissing`/`_tsToggleHrsFlag` in `onTsCellChange` (typing, blur, quick-hours chip, split clear) across both the desktop table and the mobile card view. Nothing auto-writes hours — invoiced time stays human-entered.
+- **Weekend auto-show.** Weekend columns were gated behind the `Weekends` toggle (per-device), so hours entered for a non-rostered weekend worker were invisible unless someone manually flipped it on. Now any week that already has Sat/Sun data auto-reveals the weekend columns (`_showWE = tsShowWeekends || hasSat || hasSun`); the toggle still opens empty weekend cells for entry. The roster never gated weekend entry — `_tsDayStatus` returns workable for any day with no roster code — only the toggle did.
+- **Sunday week-rollover fix.** The app picked its default week with `getDate() - getDay() + 1`, which (because JS `getDay()` is 0 on Sunday) rolled to *next* week all day Sunday — bumping Sunday-night timesheet/schedule users onto an empty next week while the just-worked week showed faded/past, and mismatching the dropdown's own "(this week)" label. Aligned all four week-Monday formulas (`index.html` early-paint, week-selector range, default-open; `auth.js` gate week list) to the ISO formula `- ((getDay()+6)%7)` already used for the label — so Sunday counts as part of the current Mon–Sun week and the app only advances on Monday.
+
 # v3.10.93 — loadFromSupabase: one table's failure can no longer freeze the whole app
 
 **Date:** 2026-07-12

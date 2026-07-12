@@ -322,6 +322,25 @@ async function saveTsCell(name, grp, week, day, job, hrs) {
 
 // ── Cell change handler ───────────────────────────────────────
 
+// v3.10.94 — a day is "hours-missing" when a job number is entered but the
+// hours box is left blank (the classic "filled the job, forgot the hours"
+// slip the phantom-8 placeholder used to hide). Blank means empty string /
+// null — an explicit 0 counts as filled.
+function _tsHrsMissing(job, hrs) {
+  const j = job == null ? '' : String(job).trim();
+  const h = hrs == null ? '' : String(hrs).trim();
+  return j !== '' && h === '';
+}
+// Toggle the red flag + '?' placeholder on one hours input, live, without a
+// full re-render. Called from onTsCellChange so every edit path (typing,
+// blur, quick-hours chip, split clear) keeps the flag in sync.
+function _tsToggleHrsFlag(jobEl, hrsEl) {
+  if (!hrsEl) return;
+  const missing = _tsHrsMissing(jobEl ? jobEl.value : '', hrsEl.value);
+  hrsEl.classList.toggle('ts-hrs-missing', missing);
+  hrsEl.placeholder = missing ? '?' : 'hrs';
+}
+
 function onTsCellChange(el) {
   // TS-003: Validate hours
   if (el.dataset.type === 'hrs') {
@@ -349,6 +368,13 @@ function onTsCellChange(el) {
   const hrs1 = hrs1El ? parseFloat(hrs1El.value) || 0 : 0;
   const job2 = job2El ? job2El.value.trim() : '';
   const hrs2 = hrs2El ? parseFloat(hrs2El.value) || 0 : 0;
+
+  // v3.10.94 — refresh the hours-missing red flag for every slot in this day
+  // as soon as any of its fields changes (typing a job, entering hours, or
+  // clearing a split). Purely visual; runs before the save below.
+  _tsToggleHrsFlag(job0El, hrs0El);
+  _tsToggleHrsFlag(job1El, hrs1El);
+  _tsToggleHrsFlag(job2El, hrs2El);
 
   let combinedJob, combinedHrs;
   if (job2) {
@@ -1269,7 +1295,12 @@ function renderTimesheets() {
   if (STATE.tsShowWeekends === null) {
     STATE.tsShowWeekends = localStorage.getItem('eq_ts_show_weekends') === '1';
   }
-  const _showWE = STATE.tsShowWeekends;
+  // v3.10.94 — auto-reveal weekends whenever this week already has Sat/Sun
+  // hours, so entered weekend time is never hidden behind the toggle (a
+  // non-rostered weekend worker's hours used to be invisible unless someone
+  // manually flipped Weekends on). The toggle still lets you open empty
+  // weekend cells for entry.
+  const _showWE = STATE.tsShowWeekends || hasSat || hasSun;
   const days        = TS_DAYS.filter((_, i) => i < 5 || (_showWE && (i === 5 || i === 6)));
   const dlabels     = TS_LABELS.filter((_, i) => i < 5 || (_showWE && (i === 5 || i === 6)));
 
@@ -1541,12 +1572,16 @@ function renderTimesheets() {
         // like any other entry.
         const _tafeCls = _tafeDef ? ' ts-cell-tafedefault' : '';
         const _tafeTitle = _tafeDef ? ' title="TAFE day — prefilled 8h; type a job number over it if they worked instead"' : '';
+        // v3.10.94 — flag each slot whose job is filled but hours are blank.
+        const _miss1 = _tsHrsMissing(job1, hrs1);
+        const _miss2 = _tsHrsMissing(job2, hrs2);
+        const _miss3 = _tsHrsMissing(job3, hrs3);
         return `<td class="ts-input-cell${todayClass}${_tafeCls}" style="padding:5px 6px"${_tafeTitle}>
           <div class="ts-cell">
             <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
+            <input class="ts-hrs${_miss1 ? ' ts-hrs-missing' : ''}" type="number" value="${hrs1}" placeholder="${_miss1 ? '?' : 'hrs'}" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
               onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
               onchange="onTsCellChange(this)">
@@ -1557,7 +1592,7 @@ function renderTimesheets() {
             <input class="ts-job" type="text" value="${esc(String(job2))}" placeholder="Job 2"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+            <input class="ts-hrs${_miss2 ? ' ts-hrs-missing' : ''}" type="number" value="${hrs2}" placeholder="${_miss2 ? '?' : 'h'}" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
               onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
               onchange="onTsCellChange(this)">
@@ -1567,7 +1602,7 @@ function renderTimesheets() {
             <input class="ts-job" type="text" value="${esc(String(job3))}" placeholder="Job 3"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="2"
               oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
-            <input class="ts-hrs" type="number" value="${hrs3}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+            <input class="ts-hrs${_miss3 ? ' ts-hrs-missing' : ''}" type="number" value="${hrs3}" placeholder="${_miss3 ? '?' : 'h'}" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="2"
               onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
               onchange="onTsCellChange(this)">
@@ -2577,6 +2612,11 @@ function _renderTimesheetsMobile(opts) {
       const _tafeDef = dayStatus.tafePrefill && !rawJob && !(Number(rawHrs) > 0);
       if (_tafeDef) { job1 = dayStatus.tafeLabel || 'TAFE'; hrs1 = 8; }
 
+      // v3.10.94 — flag each slot whose job is filled but hours are blank.
+      const _miss1 = _tsHrsMissing(job1, hrs1);
+      const _miss2 = _tsHrsMissing(job2, hrs2);
+      const _miss3 = _tsHrsMissing(job3, hrs3);
+
       const bubble    = _tsScheduleBubble(p.name, week, d);
       const filled    = !!(job1 && Number(hrs1) > 0);
       const collapsed = filled ? ' ts-mday-collapsed' : '';
@@ -2618,7 +2658,7 @@ function _renderTimesheetsMobile(opts) {
             </div>
             <div class="ts-minput-hrswrap">
               <label class="ts-minput-label">Hours</label>
-              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs1}" placeholder="8" min="0" max="24" step="0.5"${disabled}
+              <input class="ts-hrs ts-minput-field ts-minput-hrs${_miss1 ? ' ts-hrs-missing' : ''}" type="number" value="${hrs1}" placeholder="${_miss1 ? '?' : 'hrs'}" min="0" max="24" step="0.5"${disabled}
                 data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
                 onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
                 onchange="onTsCellChange(this)">
@@ -2633,7 +2673,7 @@ function _renderTimesheetsMobile(opts) {
             </div>
             <div class="ts-minput-hrswrap">
               <label class="ts-minput-label">Hrs 2</label>
-              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+              <input class="ts-hrs ts-minput-field ts-minput-hrs${_miss2 ? ' ts-hrs-missing' : ''}" type="number" value="${hrs2}" placeholder="${_miss2 ? '?' : 'h'}" min="0" max="24" step="0.5"${disabled}
                 data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
                 onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
                 onchange="onTsCellChange(this)">
@@ -2648,7 +2688,7 @@ function _renderTimesheetsMobile(opts) {
             </div>
             <div class="ts-minput-hrswrap">
               <label class="ts-minput-label">Hrs 3</label>
-              <input class="ts-hrs ts-minput-field ts-minput-hrs" type="number" value="${hrs3}" placeholder="h" min="0" max="24" step="0.5"${disabled}
+              <input class="ts-hrs ts-minput-field ts-minput-hrs${_miss3 ? ' ts-hrs-missing' : ''}" type="number" value="${hrs3}" placeholder="${_miss3 ? '?' : 'h'}" min="0" max="24" step="0.5"${disabled}
                 data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="2"
                 onfocus="_showTsHoursChips(this)" onblur="setTimeout(_hideTsHoursChips,250)"
                 onchange="onTsCellChange(this)">

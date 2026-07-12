@@ -590,6 +590,13 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   transition: border-color .12s;
 }
 .ts-hrs:focus { border-color: var(--purple); }
+/* v3.10.94 — hours-missing flag: a job number is entered but the hours box
+   is blank. Kills the "phantom 8" confusion (an empty box used to show a
+   greyed 8 that read as filled). Red only when there's actually a job to
+   account for; genuinely empty days stay quiet. */
+.ts-hrs.ts-hrs-missing        { border-color: var(--red); background: var(--red-lt); }
+.ts-hrs.ts-hrs-missing:focus  { border-color: var(--purple); }
+.ts-hrs.ts-hrs-missing::placeholder { color: var(--red); opacity: 1; font-weight: 700; }
 
 /* ── Job Combobox Dropdown ───────────────────────── */
 .job-combobox-dropdown {
