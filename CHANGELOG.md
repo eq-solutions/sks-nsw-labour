@@ -1,5 +1,21 @@
 # EQ Solves Field — Changelog
 
+# v3.10.97 — Timesheets total double-count + invisible mobile Roster header
+
+**Date:** 2026-07-15
+**Scope:** `scripts/timesheets.js`, `styles/mobile.css`
+
+Two unrelated fixes bundled in the same unreleased version:
+
+**Timesheets: A/L day + a stale entry no longer double-counts the total.** Fixes a reported maths bug where a person's weekly total read higher than the visible cells (Jack Trusler, wk 13.07.26: row showed 43h then 52h for what should be 44h).
+- **Root cause.** A day's *leave* status comes from the **roster** (`schedule` table), while its *hours* come from the **timesheet**. When a day is marked A/L on the roster, the cell renders as a read-only 🌴 pill that **hides** any timesheet entry saved against it — but the total kept counting those hidden hours *and* added the paid-leave 8h, counting the same day twice. A stale entry lands there when a "Fill Week" writes a job across Mon–Fri and the day is set to A/L afterwards. TAFE days already guarded this (v3.10.84); paid leave never did.
+- **Fix.** New `_tsWorkedHrs(name, week, entry)` sums worked hours but skips any roster-leave day (its stored hours are stale and hidden), leaving the fixed 8h paid-leave contribution to stand alone. Routed through the row total, the apprentice total, the in-place cell-save update, and the CSV-export "Total Hrs". A leave cell is read-only so typed hours are always stale — the opposite of a TAFE cell, which is editable and lets a typed job win.
+- **Data.** Cleared the one stale entry in the DB (Jack's Fri 26184/8 behind an A/L) so the per-day CSV/payroll exports don't show it as a worked Friday. It was the only such occurrence across all weeks.
+
+**Weekly Roster: invisible header row on mobile.** The `Name` / day-of-week header cells were unreadable (white-on-near-white) below 768px.
+- **Root cause.** The base table style (`thead tr { color: white }`) sets white header text for the navy desktop header. Mobile's sticky-header CSS re-backgrounds `th.name-col` and `th.center` to a light `--surface-2` (so the header stays visible while scrolling) but never reset the inherited white text colour — same white text landed on a near-white background.
+- **Fix.** Added `color: var(--navy)` to both mobile sticky-header rules. Desktop (>768px) is untouched — verified the header still renders white-on-navy there; only the mobile sticky cells changed.
+
 # v3.10.96 — Login: supervisors no longer drop to view-only after a reload
 
 **Date:** 2026-07-12
