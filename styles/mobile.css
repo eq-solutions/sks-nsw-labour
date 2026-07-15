@@ -312,7 +312,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  #page-roster .roster-card th.name-col { z-index: 4; background: var(--surface-2); }
+  #page-roster .roster-card th.name-col { z-index: 4; background: var(--surface-2); color: var(--navy); }
   #page-roster .roster-card th.center,
   #page-roster .roster-card td.center {
     min-width: 58px;                          /* was 56 — slightly wider cells */
@@ -325,6 +325,7 @@
   #page-roster .roster-card th.center {
     font-size: 11px;                          /* was 10px */
     background: var(--surface-2);
+    color: var(--navy);                       /* v3.10.97: sticky bg overrode thead's white text — invisible header */
     position: sticky;
     top: 0;
     z-index: 2;

@@ -183,11 +183,42 @@ function tsTotalHrs(entry) {
   }, 0);
 }
 
+// v3.10.97: worked hours for the week, EXCLUDING any day the roster marks as
+// leave (A/L, SICK, RDO, OFF, U/L, PH …). Those days render as a read-only
+// muted pill — a supervisor CANNOT type into them — so any hours still stored
+// against them are stale (e.g. a Fill-Week wrote a job across Mon–Fri, then the
+// day was later set to leave on the roster) and are HIDDEN in the UI. Counting
+// them silently inflated the total, and for PAID leave double-counted against
+// the 8h added by _tsPaidLeaveHrs (Jack Trusler, wk 13.07.26: Fri A/L + a stale
+// 26184/8 entry → +8 phantom hours; row read 43h/52h instead of the correct
+// 35h/44h). This mirrors the TAFE hasEntry guard (v3.10.84) but resolves the
+// clash the opposite way: a TAFE cell is EDITABLE, so a typed job means real
+// work and wins; a leave cell is READ-ONLY, so typed hours are always stale and
+// are dropped in favour of the fixed 8h leave. Weekends carry no roster-leave
+// concept and are always counted.
+function _tsWorkedHrs(name, week, entry) {
+  if (!entry) return 0;
+  return TS_DAYS.reduce((s, d) => {
+    if (d !== 'sat' && d !== 'sun') {
+      const st = _tsDayStatus(name, week, d);
+      if (st.leaveLabel) return s;   // muted leave day — stored hours are stale/hidden
+    }
+    const jobStr = entry[d + '_job'] || '';
+    if (jobStr.includes('|')) {
+      return s + jobStr.split('|').reduce((sum, part) => {
+        return sum + (parseFloat(part.split(':')[1]) || 0);
+      }, 0);
+    }
+    const h = parseFloat(entry[d + '_hrs']) || 0;
+    return s + (jobStr && h ? h : 0);
+  }, 0);
+}
+
 // Adds rostered TAFE days (8h each) to the work total for apprentices.
 // TAFE days are muted in the timesheet and not entered as hours — but
 // they count toward the 40h weekly target on the employer portal.
 function _tsApprenticeTotal(personName, week, entry) {
-  const workHrs = tsTotalHrs(entry);
+  const workHrs = _tsWorkedHrs(personName, week, entry);
   let tafeHrs   = 0;
   ['mon','tue','wed','thu','fri'].forEach(d => {
     // v3.10.84: a TAFE day counts 8h only while it holds its default — once a
@@ -234,7 +265,7 @@ function updateTsRowTotal(name, week) {
   const person = (STATE.people || []).find(p => p.name === name);
   const base   = (person && person.group === 'Apprentice')
     ? _tsApprenticeTotal(name, week, entry)
-    : tsTotalHrs(entry);
+    : _tsWorkedHrs(name, week, entry);
   // v3.10.41: A/L + SICK days count as 8h toward the total.
   const total  = base + _tsPaidLeaveHrs(name, week);
   const id = 'tst-' + name.replace(/\W/g, '_');
@@ -1466,7 +1497,7 @@ function renderTimesheets() {
       : 0;
     // v3.10.41: A/L + SICK days count as 8h toward the total.
     const _leaveHrs        = _dayStats.filter(st => st.leaveLabel && _tsIsPaidLeave(st.leaveLabel)).length * 8;
-    const total            = tsTotalHrs(entry) + _tafeHrs + _leaveHrs;
+    const total            = _tsWorkedHrs(p.name, week, entry) + _tafeHrs + _leaveHrs;
     const _hasAnyHrs       = _workableHrs.some(h => h > 0);
     const _allDaysAt8Plus  = _workableHrs.every(h => h >= 8);
     const _isComplete      = _hasAnyHrs && _allDaysAt8Plus && total >= 40;
@@ -1930,7 +1961,7 @@ function exportTsCSV() {
   const header = 'Name,Group,Week,Mon Job,Mon Hrs,Tue Job,Tue Hrs,Wed Job,Wed Hrs,Thu Job,Thu Hrs,Fri Job,Fri Hrs,Sat Job,Sat Hrs,Sun Job,Sun Hrs,Total Hrs';
   const rows   = people.map(p => {
     const e     = getTsEntry(p.name, week);
-    const total = tsTotalHrs(e);
+    const total = _tsWorkedHrs(p.name, week, e);
     return [p.name, p.group, week,
       e?.mon_job || '', e?.mon_hrs || '', e?.tue_job || '', e?.tue_hrs || '',
       e?.wed_job || '', e?.wed_hrs || '', e?.thu_job || '', e?.thu_hrs || '',
