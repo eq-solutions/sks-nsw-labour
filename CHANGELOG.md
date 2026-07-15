@@ -1,5 +1,12 @@
 # EQ Solves Field — Changelog
 
+# v3.10.98 — Nav: hide Pipeline / Resources
+
+**Date:** 2026-07-15
+**Scope:** `index.html`
+
+Hides the "Pipeline" nav section (Pipeline + Resources buttons) from the desktop sidebar and the mobile drawer for everyone, including managers — previously visible to any manager-mode user via the `edit-only` class. Pages, data, and the underlying `scripts/pipeline*.js` are untouched; this only removes the nav entry points (no other links into these pages exist). Reversible by removing the added `display:none` styles.
+
 # v3.10.97 — Timesheets total double-count + invisible mobile Roster header
 
 **Date:** 2026-07-15

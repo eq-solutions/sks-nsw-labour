@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.97
+  EQ Solves — Field  v3.10.98
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3147,7 +3147,7 @@
       <button class="nav-item" onclick="showPage('safety')" id="nav-safety"><span class="nav-icon">🛡</span> Safety</button>
       <button class="nav-item edit-only" onclick="showPage('safety-dashboard')" id="nav-safety-dashboard"><span class="nav-icon">📊</span> Safety Report</button>
     </div>
-    <div class="nav-section">
+    <div class="nav-section" style="display:none"> <!-- v3.10.97: Pipeline/Resources hidden from nav (Royce's call) — pages + code untouched, re-show by removing this style -->
       <div class="nav-label">Pipeline</div>
       <button class="nav-item edit-only" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">◈</span> Pipeline</button>
       <button class="nav-item edit-only" onclick="showPage('pipeline-resource')" id="nav-pipeline-resource"><span class="nav-icon">⬦</span> Resources</button>
@@ -3640,8 +3640,8 @@
     <button class="drawer-item edit-only" onclick="openAddPerson();closeMobileDrawer()"><span class="d-icon">＋</span> Add Person</button>
     <button class="drawer-item manager-only" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
     <button class="drawer-item manager-only" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
-    <button class="drawer-item edit-only" onclick="mobileNav('pipeline');closeMobileDrawer()" id="ditem-pipeline"><span class="d-icon">◈</span> Pipeline <span class="beta-tag" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0">NEW</span></button>
-    <button class="drawer-item edit-only" onclick="mobileNav('pipeline-resource');closeMobileDrawer()" id="ditem-pipeline-resource"><span class="d-icon">⬦</span> Resources</button>
+    <button class="drawer-item edit-only" style="display:none" onclick="mobileNav('pipeline');closeMobileDrawer()" id="ditem-pipeline"><span class="d-icon">◈</span> Pipeline <span class="beta-tag" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0">NEW</span></button>
+    <button class="drawer-item edit-only" style="display:none" onclick="mobileNav('pipeline-resource');closeMobileDrawer()" id="ditem-pipeline-resource"><span class="d-icon">⬦</span> Resources</button>
     <div class="drawer-divider manager-only"></div>
     <div class="drawer-label manager-only">Beta</div>
     <button class="drawer-item manager-only" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
