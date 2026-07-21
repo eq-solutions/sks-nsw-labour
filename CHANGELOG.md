@@ -1,5 +1,17 @@
 # EQ Solves Field — Changelog
 
+# v3.10.99 — Mobile My Schedule: show Saturday/Sunday when rostered
+
+**Date:** 2026-07-21
+**Scope:** `scripts/roster.js`, `scripts/home.js`
+
+Mobile "My Schedule" day cards were hardcoded to Mon–Fri, so anyone rostered to work a weekend (labour hire crews, weekend shutdowns) had that day silently missing from their own schedule view — even though the underlying `schedule` table and the desktop roster grid already carry Sat/Sun data.
+
+- `renderSchedule()` (roster.js) now builds its day list from `getVisibleRosterDays()` — the same "only show Sat/Sun if the week actually has weekend work" rule the desktop roster grid already uses — instead of a hardcoded 5-day array. Date/day-offset math fixed to key off each day's fixed Mon=0..Sun=6 offset rather than array position, so a week with Sunday-only work (no Saturday) still lines up with the correct calendar date.
+- Home screen ("Next shift" pill, shift count, supervisor "Schedule" tile subtitle) updated the same way, so a weekend-only shift isn't missed as the "next shift" or excluded from the weekly shift count.
+
+No schema or data changes — this is display-logic only, reading fields (`sat`, `sun`) that were already being written.
+
 # v3.10.98 — Nav: hide Pipeline / Resources
 
 **Date:** 2026-07-15

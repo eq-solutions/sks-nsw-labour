@@ -110,28 +110,36 @@
     return true;
   }
 
+  // v3.10.99: include Sat/Sun whenever the roster has weekend work that
+  // week (same "only if used" rule as the desktop grid / My Schedule).
+  function shiftDayOrder() {
+    return (typeof getVisibleRosterDays === 'function') ? getVisibleRosterDays() : ['mon','tue','wed','thu','fri'];
+  }
+
   function countShiftsInWeek(week) {
     const row = getUserScheduleRow(week);
     if (!row) return 0;
-    return ['mon','tue','wed','thu','fri'].filter(d => isSiteCode(row[d])).length;
+    return shiftDayOrder().filter(d => isSiteCode(row[d])).length;
   }
 
   function findNextShiftInWeek(week) {
     try {
       const row = getUserScheduleRow(week);
       if (!row) return null;
-      const dayOrder = ['mon','tue','wed','thu','fri'];
+      const dayOrder = shiftDayOrder();
       const thisWk   = currentWeekKey();
       // For the current week start from today; for other weeks start Monday
       let start = 0;
       if (week === thisWk) {
         const todayIdx = (new Date().getDay() + 6) % 7;
-        // On weekdays start from today; on weekends (Sat/Sun) initApp already
-        // points STATE.currentWeek at next Monday, so all 5 days are upcoming —
+        // On weekdays/weekend-with-roster start from today's position in
+        // dayOrder; on weekends with no weekend roster initApp already
+        // points STATE.currentWeek at next Monday, so all days are upcoming —
         // start from 0 so Monday's shift is returned as the next shift.
-        if (todayIdx <= 4) start = todayIdx;
+        const idxInOrder = dayOrder.indexOf(['mon','tue','wed','thu','fri','sat','sun'][todayIdx]);
+        if (idxInOrder > 0) start = idxInOrder;
       }
-      for (let i = start; i < 5; i++) {
+      for (let i = start; i < dayOrder.length; i++) {
         const d = dayOrder[i];
         if (isSiteCode(row[d])) {
           const site = typeof getSiteName === 'function' ? getSiteName(row[d]) : row[d];
@@ -144,7 +152,7 @@
 
   function formatShiftDay(shift) {
     if (!shift) return '';
-    const dayMap = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday' };
+    const dayMap = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' };
     return (dayMap[shift.day] || shift.day) + ' · ' + (shift.site || '');
   }
 
@@ -163,7 +171,7 @@
       const ppl = new Set(), sites = new Set();
       rows.forEach(r => {
         if (wk && r.week !== wk) return;
-        ['mon','tue','wed','thu','fri'].forEach(d => {
+        shiftDayOrder().forEach(d => {
           if (isSiteCode(r[d])) { ppl.add(r.name); sites.add(r[d].trim()); }
         });
       });

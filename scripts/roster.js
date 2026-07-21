@@ -640,8 +640,13 @@ function renderSchedule() {
   }
 
   const week = STATE.currentWeek;
-  const days = ['mon','tue','wed','thu','fri'];
-  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  // v3.10.99: mobile My Schedule now shows Sat/Sun whenever the roster has
+  // weekend work that week — same "only if used" rule as the desktop grid
+  // (getVisibleRosterDays), so weekend-worked staff aren't missing days.
+  const days = getVisibleRosterDays();
+  const DAY_FULL   = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' };
+  const DAY_OFFSET = { mon:0, tue:1, wed:2, thu:3, fri:4, sat:5, sun:6 };
+  const dayLabels = days.map(d => DAY_FULL[d]);
   const colorMap = { blue:'#2563EB', green:'#16A34A', amber:'#D97706', red:'#DC2626', grey:'#94A3B8', purple:'#7C77B9', empty:'#CBD5E1' };
 
   if (!name) {
@@ -686,7 +691,7 @@ function renderSchedule() {
   // Show when Mon–Fri are all the same non-leave site
   const workSites = days.map(d => sched[d] || '').filter(s => s && !isLeave(s));
   const uniqueSites = [...new Set(workSites)];
-  const allSame = workSites.length === 5 && uniqueSites.length === 1;
+  const allSame = workSites.length === days.length && uniqueSites.length === 1;
   const allSameAbbr = allSame ? uniqueSites[0] : null;
   const allSameName = allSameAbbr ? getSiteName(allSameAbbr) : null;
   const allSameAddr = allSameAbbr ? getSiteAddress(allSameAbbr) : null;
@@ -702,7 +707,7 @@ function renderSchedule() {
     </div>` : '';
 
   const dayRows = days.map((d, i) => {
-    const dayDate = new Date(weekStart.getTime() + i * 86400000);
+    const dayDate = new Date(weekStart.getTime() + DAY_OFFSET[d] * 86400000);
     const isToday = dayDate.getTime() === today.getTime();
     const isPast  = dayDate < today;
 
@@ -758,7 +763,7 @@ function renderSchedule() {
     return `<div style="display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);${wrapExtra}">
       <div style="width:90px;flex-shrink:0;background:${isToday ? 'rgba(31,51,92,0.07)' : 'var(--surface-2)'};border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 10px;gap:4px">
         <div style="font-size:10px;font-weight:700;color:${isToday ? '#1F335C' : 'var(--ink-3)'};text-transform:uppercase;letter-spacing:.6px">${dayLabels[i]}</div>
-        <div style="font-size:10px;color:${isToday ? '#1F335C' : 'var(--ink-4)'};font-weight:${isToday ? '700' : 'normal'}">${weekDates[i]}</div>
+        <div style="font-size:10px;color:${isToday ? '#1F335C' : 'var(--ink-4)'};font-weight:${isToday ? '700' : 'normal'}">${weekDates[DAY_OFFSET[d]]}</div>
         ${isToday ? '<div style="font-size:8px;font-weight:700;color:#7C77B9;letter-spacing:.05em;margin-top:1px">TODAY</div>' : ''}
         <div style="width:8px;height:8px;border-radius:50%;background:${isOff ? 'var(--ink-4)' : color}"></div>
       </div>
