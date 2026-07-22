@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.99';
+const APP_VERSION = '3.10.101';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -79,7 +79,8 @@ const ORG_TABLES = [
   'teams', 'team_members',  // v3.4.78 — roster filter groups
   'timesheet_locks',  // v3.4.82 — per-week timesheet lock for accounts review
   'tenders', 'tender_import_runs', 'pending_schedule',  // v3.4.85/93 — pipeline tables (org_id auto-filter)
-  'prestarts', 'toolbox_talks'  // v3.10.24 — safety module
+  'prestarts', 'toolbox_talks',  // v3.10.24 — safety module
+  'incidents'  // v3.10.100 — safety module: incident / near-miss reporting
   // ── DO NOT ADD: tender_enrichment, nominations ──────────────────────────
   // These tables have no org_id column. Adding them here causes sbFetch to
   // append ?org_id=eq.UUID to GET requests → PostgREST 400 "column does not exist".

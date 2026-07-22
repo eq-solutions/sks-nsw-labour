@@ -1,5 +1,29 @@
 # EQ Solves Field — Changelog
 
+# v3.10.101 — Safety: Prestart copy-from-last-visit + Duplicate
+
+**Date:** 2026-07-22
+**Scope:** `scripts/safety.js`
+
+Two ways to skip re-typing a prestart's boilerplate (hazards, SWMS refs, HRCW/permit categories, scope, crew) on a site worked recently — no schema change, both reuse the existing draft object.
+
+- **Copy from last visit**: opening a New prestart and picking a site that has a submitted prestart within the last 7 days shows an inline "Copy from last visit — [date]?" prompt. Copy pulls scope/hazards/SWMS/HRCW/permits/crew across (crew signatures cleared — each day still needs its own sign-off); Dismiss hides it for this draft.
+- **Duplicate**: a "Duplicate" button on any saved prestart clones it into a fresh draft for today (date/time reset, status back to draft, signatures + photos cleared) — for when the site wasn't caught by the 7-day window or you're duplicating same-day.
+
+# v3.10.100 — Safety: Incident / Near Miss reporting
+
+**Date:** 2026-07-22
+**Scope:** `scripts/safety.js`, `scripts/app-state.js`, `index.html`, Supabase (`incidents` table)
+
+New 4th tab in the Safety module, alongside Prestart / Toolbox / Records: report an Incident, Near Miss, or Hazard Observation from site.
+
+- New `incidents` table (Supabase), same shape/RLS/offline-queue pattern as `prestarts`/`toolbox_talks`.
+- Form: type (Incident/Near Miss/Hazard Observation), severity (Low/Medium/High), site, date/time, reported by, description + immediate action (voice input), people involved/witnesses with individual sign-off (reuses the existing crew signature pad), photos.
+- Draft/submit workflow, offline queue + replay-on-reconnect, delete with two-tap confirm — identical UX to Prestart/Toolbox.
+- Word (.docx) export per record, same SKS-branded template kit as Prestart/Toolbox.
+- Wired into the Records tab: filter pill, ZIP batch export, search — alongside Prestarts/Toolboxes.
+- Submitting a High-severity incident (or any non-near-miss Incident) emails every manager with an address on file — fire-and-forget, never blocks the submit.
+
 # v3.10.99 — Mobile My Schedule: show Saturday/Sunday when rostered
 
 **Date:** 2026-07-21
