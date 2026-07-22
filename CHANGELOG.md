@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.103 — Leave: make the email-approval confirm step unmissable
+
+**Date:** 2026-07-22
+**Scope:** `scripts/leave.js`, `netlify/functions/approve-leave.js`
+
+A supervisor approving/rejecting leave from their email clicks the link, lands on a confirmation page, and must click a second button before anything is actually applied — deliberate, so email security scanners (Gmail, Outlook SafeLinks) that auto-follow links via GET can't silently auto-approve requests. The email itself undersold this: it said "One-click action" with a plain "✓ Approve" button, so a supervisor clicking through reasonably assumed they were done. Found live — 3 leave requests sat Pending with `responded_by`/`responded_at` both null despite the approver believing he'd actioned them.
+
+- Email copy changed: "One-click action" → "Review below, then confirm"; buttons relabelled "Review & Approve" / "Review & Reject"; added a line noting the link opens a confirmation page.
+- Confirm page: title/headline changed from "Approve leave" (reads as already-done) to "Confirm approval"; added a loud "⚠ Not yet approved — tap the button below to confirm" banner directly above the confirm button, reusing the existing warning-banner style already used elsewhere on this page.
+- No change to the GET/POST split, token verification, or any state-changing logic — copy/UX only.
+
 # v3.10.102 — Safety: Incidents wired into Safety Report + mobile fix
 
 **Date:** 2026-07-22

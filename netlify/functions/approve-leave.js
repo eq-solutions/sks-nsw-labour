@@ -285,12 +285,17 @@ exports.handler = async (event) => {
       : `<p>You're about to <strong style="color:#DC2626">reject</strong> this leave request.</p>`;
     const selfUrl = `${appOrigin}/.netlify/functions/approve-leave`;
 
+    // Deliberately loud: the email that led here says "Review & Approve", not
+    // "Approve", but people skim — this banner is the last chance to catch
+    // someone who thinks clicking the email link already finished the job.
+    const notYetWarning = `<div class="warn">⚠ Not yet ${isApprove ? 'approved' : 'rejected'} — tap the button below to confirm.</div>`;
+
     return { statusCode: 200, headers, body: renderPage({
-      title: isApprove ? 'Approve leave' : 'Reject leave',
-      headline: isApprove ? 'Approve leave' : 'Reject leave',
+      title: isApprove ? 'Confirm approval' : 'Confirm rejection',
+      headline: isApprove ? 'Confirm approval' : 'Confirm rejection',
       accent: btnAccent,
       appOrigin: '',   // suppress "Open app" here — we provide Cancel instead
-      body: `${confirmMsg}
+      body: `${confirmMsg}${notYetWarning}
         <div class="meta">
           <div><span class="lbl">Requester</span><br>${escHtml(req.requester_name)}</div>
           <div><span class="lbl">Type</span><br>${escHtml(typeLabel)}</div>
