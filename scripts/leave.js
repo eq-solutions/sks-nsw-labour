@@ -889,12 +889,12 @@ async function triggerLeaveEmail(type, record) {
             ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
           </table>
           <div style="margin:20px 0 8px;padding:14px;background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px">
-            <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600">One-click action — link is valid for 7 days</div>
+            <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600">Review below, then confirm — link is valid for 7 days</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <a href="{{APPROVE_URL}}" style="display:inline-block;background:#16A34A;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">✓ Approve</a>
-              <a href="{{REJECT_URL}}" style="display:inline-block;background:#DC2626;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">✕ Reject</a>
+              <a href="{{APPROVE_URL}}" style="display:inline-block;background:#16A34A;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review &amp; Approve</a>
+              <a href="{{REJECT_URL}}" style="display:inline-block;background:#DC2626;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review &amp; Reject</a>
             </div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:8px">Rejecting from email won't capture a reason — open the app to add one.</div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:8px">Opens a confirmation page — nothing is applied until you confirm there. Rejecting from email won't capture a reason — open the app to add one.</div>
           </div>
           <div style="margin-top:14px">
             <a href="${window.location.origin}" style="display:inline-block;background:transparent;color:#1F335C;padding:8px 0;text-decoration:none;font-size:12px;font-weight:600">Or review in app →</a>
