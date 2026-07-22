@@ -8,6 +8,7 @@
 
 let _sdPrestarts = [];
 let _sdToolboxes = [];
+let _sdIncidents = [];
 let _sdRange     = 30; // days lookback: 7 | 30 | 90 | 0 = all
 
 function _sdIsoMinus(days) {
@@ -53,17 +54,22 @@ async function loadSafetyDashboard() {
     + (cutoff ? '&briefing_date=gte.' + cutoff : '');
   const tbQ = 'toolbox_talks?select=*&order=meeting_date.desc&limit=500'
     + (cutoff ? '&meeting_date=gte.' + cutoff : '');
+  const incQ = 'incidents?select=*&order=incident_date.desc&limit=500'
+    + (cutoff ? '&incident_date=gte.' + cutoff : '');
 
   try {
-    const [ps, tb] = await Promise.all([
+    const [ps, tb, inc] = await Promise.all([
       sbFetch(psQ).catch(function() { return []; }),
-      sbFetch(tbQ).catch(function() { return []; })
+      sbFetch(tbQ).catch(function() { return []; }),
+      sbFetch(incQ).catch(function() { return []; })
     ]);
     _sdPrestarts = Array.isArray(ps) ? ps : [];
     _sdToolboxes = Array.isArray(tb) ? tb : [];
+    _sdIncidents = Array.isArray(inc) ? inc : [];
   } catch(e) {
     _sdPrestarts = [];
     _sdToolboxes = [];
+    _sdIncidents = [];
   }
   renderSafetyDashboard();
 }
@@ -74,16 +80,21 @@ function renderSafetyDashboard() {
 
   const subPS   = _sdPrestarts.filter(function(r) { return r.status === 'submitted'; });
   const subTB   = _sdToolboxes.filter(function(r) { return r.status === 'submitted'; });
+  const subINC  = _sdIncidents.filter(function(r) { return r.status === 'submitted'; });
   const draftPS = _sdPrestarts.filter(function(r) { return r.status !== 'submitted'; });
   const draftTB = _sdToolboxes.filter(function(r) { return r.status !== 'submitted'; });
+  const draftINC = _sdIncidents.filter(function(r) { return r.status !== 'submitted'; });
 
   // ── Stats ──────────────────────────────────────────────────────
-  const totalPS = subPS.length;
-  const totalTB = subTB.length;
+  const totalPS  = subPS.length;
+  const totalTB  = subTB.length;
+  const totalINC = subINC.length;
+  const highINC  = subINC.filter(function(r) { return r.severity === 'high'; }).length;
 
   const allSites = new Set();
   subPS.forEach(function(r) { if (r.site_abbr) allSites.add(r.site_abbr); });
   subTB.forEach(function(r) { if (r.site_abbr) allSites.add(r.site_abbr); });
+  subINC.forEach(function(r) { if (r.site_abbr) allSites.add(r.site_abbr); });
 
   const totalSignoffs =
     subPS.reduce(function(n, r) { return n + (r.crew || []).filter(function(c) { return c.signed_at; }).length; }, 0) +
@@ -113,17 +124,33 @@ function renderSafetyDashboard() {
     if (r.site_abbr) byPersonTB[who].sites.add(r.site_abbr);
   });
 
+  // ── By-person: incidents ────────────────────────────────────────
+  const byPersonINC = {};
+  subINC.forEach(function(r) {
+    const who = r.reported_by || r.submitted_by || r.created_by || 'Unknown';
+    if (!byPersonINC[who]) byPersonINC[who] = { count: 0, high: 0, lastDate: '', sites: new Set() };
+    byPersonINC[who].count++;
+    if (r.severity === 'high') byPersonINC[who].high++;
+    if ((r.incident_date || '') > byPersonINC[who].lastDate) byPersonINC[who].lastDate = r.incident_date || '';
+    if (r.site_abbr) byPersonINC[who].sites.add(r.site_abbr);
+  });
+
   // ── By-site ────────────────────────────────────────────────────
   const bySite = {};
   subPS.forEach(function(r) {
     const s = r.site_abbr || '—';
-    if (!bySite[s]) bySite[s] = { ps: 0, tb: 0 };
+    if (!bySite[s]) bySite[s] = { ps: 0, tb: 0, inc: 0 };
     bySite[s].ps++;
   });
   subTB.forEach(function(r) {
     const s = r.site_abbr || '—';
-    if (!bySite[s]) bySite[s] = { ps: 0, tb: 0 };
+    if (!bySite[s]) bySite[s] = { ps: 0, tb: 0, inc: 0 };
     bySite[s].tb++;
+  });
+  subINC.forEach(function(r) {
+    const s = r.site_abbr || '—';
+    if (!bySite[s]) bySite[s] = { ps: 0, tb: 0, inc: 0 };
+    bySite[s].inc++;
   });
 
   // ── Render ─────────────────────────────────────────────────────
@@ -143,11 +170,12 @@ function renderSafetyDashboard() {
   });
   h += '</div></div>';
 
-  // Stat cards — 2×2 grid
-  h += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">';
+  // Stat cards
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">';
   [
     { label: 'Prestarts submitted', value: totalPS, color: 'var(--blue)',   sub: draftPS.length ? draftPS.length + ' draft' : '' },
     { label: 'Toolbox talks submitted', value: totalTB, color: 'var(--green)',  sub: draftTB.length ? draftTB.length + ' draft' : '' },
+    { label: 'Incidents reported', value: totalINC, color: '#dc2626', sub: (highINC ? highINC + ' high sev' : '') + (draftINC.length ? (highINC ? ' · ' : '') + draftINC.length + ' draft' : '') },
     { label: 'Sites covered', value: allSites.size, color: 'var(--amber)',  sub: '' },
     { label: 'Total sign-offs', value: totalSignoffs, color: 'var(--ink-2)', sub: '' },
   ].forEach(function(c) {
@@ -225,11 +253,43 @@ function renderSafetyDashboard() {
         })()
   );
 
+  // ── Incidents by person ────────────────────────────────────────
+  const incRows = Object.entries(byPersonINC).sort(function(a, b) { return b[1].count - a[1].count; });
+  h += _sdCard('⚠ Incidents / near misses — by person (' + incRows.length + ')',
+    incRows.length === 0
+      ? '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:12px">No submitted incidents in this period.</div>'
+      : (function() {
+          const TH = 'padding:8px 12px;text-align:left;font-weight:700;color:var(--ink-3);font-size:10px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border-bottom:1px solid var(--border)';
+          let t = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+          t += '<thead><tr style="background:var(--surface-2)">';
+          t += '<th style="' + TH + '">Name</th>';
+          t += '<th style="' + TH + ';text-align:center">Reports</th>';
+          t += '<th style="' + TH + ';text-align:center">High severity</th>';
+          t += '<th style="' + TH + '">Sites</th>';
+          t += '<th style="' + TH + ';text-align:right">Last</th>';
+          t += '</tr></thead><tbody>';
+          incRows.forEach(function(row, i) {
+            const name = row[0], d = row[1];
+            const bg       = i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)';
+            const siteList = Array.from(d.sites).join(', ') || '—';
+            t += '<tr style="background:' + bg + ';border-bottom:1px solid var(--border)">';
+            t += '<td style="padding:9px 12px;font-weight:600;white-space:nowrap">' + esc(name) + '</td>';
+            t += '<td style="padding:9px 12px;text-align:center"><span style="background:#fee2e2;color:#dc2626;padding:2px 9px;border-radius:999px;font-weight:700;font-size:11px">' + d.count + '</span></td>';
+            t += '<td style="padding:9px 12px;text-align:center;color:var(--ink-3);font-size:11px">' + (d.high || '—') + '</td>';
+            t += '<td style="padding:9px 12px;color:var(--ink-3);font-size:11px">' + esc(siteList) + '</td>';
+            t += '<td style="padding:9px 12px;text-align:right;color:var(--ink-4);font-size:11px;white-space:nowrap">' + _sdFmtDate(d.lastDate) + '</td>';
+            t += '</tr>';
+          });
+          t += '</tbody></table></div>';
+          return t;
+        })()
+  );
+
   // ── Site coverage ──────────────────────────────────────────────
   const siteEntries = Object.entries(bySite).sort(function(a, b) {
     return (b[1].ps + b[1].tb) - (a[1].ps + a[1].tb);
   });
-  const maxSiteTotal = siteEntries.reduce(function(m, e) { return Math.max(m, e[1].ps + e[1].tb); }, 1);
+  const maxSiteTotal = siteEntries.reduce(function(m, e) { return Math.max(m, e[1].ps + e[1].tb + e[1].inc); }, 1);
 
   h += _sdCard('⬡ Site coverage (' + siteEntries.length + ' sites)',
     siteEntries.length === 0
@@ -240,20 +300,23 @@ function renderSafetyDashboard() {
             const abbr  = entry[0], d = entry[1];
             const sObj  = typeof STATE !== 'undefined' ? (STATE.sites || []).find(function(s) { return s.abbr === abbr; }) : null;
             const label = sObj ? sObj.name : abbr;
-            const total = d.ps + d.tb;
+            const total = d.ps + d.tb + d.inc;
             const fillW = Math.round(total / maxSiteTotal * 100);
             const psW   = total > 0 ? Math.round(d.ps / total * fillW) : 0;
-            const tbW   = total > 0 ? (fillW - psW) : 0;
+            const tbW   = total > 0 ? Math.round(d.tb / total * fillW) : 0;
+            const incW  = total > 0 ? (fillW - psW - tbW) : 0;
             t += '<div style="display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">';
             t += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(label) + '">' + esc(label) + '</div>';
             t += '<div style="background:var(--surface-2);border-radius:4px;overflow:hidden;height:8px">';
             t += '<div style="display:flex;height:100%">';
             if (psW) t += '<div style="width:' + psW + '%;background:var(--blue)"></div>';
             if (tbW) t += '<div style="width:' + tbW + '%;background:var(--green)"></div>';
+            if (incW) t += '<div style="width:' + incW + '%;background:#dc2626"></div>';
             t += '</div></div>';
             t += '<div style="font-size:11px;white-space:nowrap"><span style="color:var(--blue);font-weight:600">' + d.ps + ' PS</span>'
               + ' <span style="color:var(--ink-4)">·</span>'
-              + ' <span style="color:var(--green);font-weight:600">' + d.tb + ' TB</span></div>';
+              + ' <span style="color:var(--green);font-weight:600">' + d.tb + ' TB</span>'
+              + (d.inc ? ' <span style="color:var(--ink-4)">·</span> <span style="color:#dc2626;font-weight:600">' + d.inc + ' INC</span>' : '') + '</div>';
             t += '</div>';
           });
           return t;
@@ -264,6 +327,7 @@ function renderSafetyDashboard() {
   h += '<div style="display:flex;gap:14px;font-size:11px;color:var(--ink-3);margin-bottom:4px">';
   h += '<span><span style="display:inline-block;width:10px;height:10px;background:var(--blue);border-radius:2px;vertical-align:middle;margin-right:4px"></span>Prestart (PS)</span>';
   h += '<span><span style="display:inline-block;width:10px;height:10px;background:var(--green);border-radius:2px;vertical-align:middle;margin-right:4px"></span>Toolbox talk (TB)</span>';
+  h += '<span><span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;vertical-align:middle;margin-right:4px"></span>Incident / near miss (INC)</span>';
   h += '</div>';
 
   el.innerHTML = h;

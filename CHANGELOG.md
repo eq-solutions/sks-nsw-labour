@@ -1,5 +1,13 @@
 # EQ Solves Field — Changelog
 
+# v3.10.102 — Safety: Incidents wired into Safety Report + mobile fix
+
+**Date:** 2026-07-22
+**Scope:** `scripts/safety-dashboard.js`, `scripts/safety.js`
+
+- Safety Report (manager-only dashboard) now includes Incidents: a stat card (submitted count + high-severity/draft sub-line), an "Incidents / near misses — by person" table, and a 3-way Prestart/Toolbox/Incident split in the per-site coverage bars + legend.
+- Fixed a mobile CSS gap from the Incidents tab build: `#modal-incident`, `#modal-incident-sig`, and `#incident-form-body` were missing from `_injectSafetyStyle()`'s `@media(max-width:640px)` rule, so on phones the Incident modal wasn't going full-screen, its inputs weren't getting the 16px iOS-anti-zoom fix, and its two-column fields weren't collapsing to one column — Prestart/Toolbox already had this, Incidents didn't. Also added `flex-wrap` to the "copy from last visit" banner so it stacks instead of squeezing on narrow screens.
+
 # v3.10.101 — Safety: Prestart copy-from-last-visit + Duplicate
 
 **Date:** 2026-07-22

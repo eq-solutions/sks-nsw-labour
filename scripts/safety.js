@@ -444,11 +444,11 @@ function _injectSafetyStyle() {
   const s = document.createElement('style');
   s.id = 'safety-responsive-style';
   s.textContent = '@media(max-width:640px){'
-    + '#modal-prestart .modal,#modal-toolbox .modal{max-width:100vw!important;width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important}'
-    + '#modal-prestart-sig .modal,#modal-toolbox-sig .modal{max-width:100vw!important;width:100vw!important}'
-    + '#modal-prestart-sig canvas,#modal-toolbox-sig canvas{height:260px!important}'
-    + '#prestart-form-body .grid2,#toolbox-form-body .grid2{grid-template-columns:1fr!important}'
-    + '#prestart-form-body input,#prestart-form-body textarea,#toolbox-form-body input,#toolbox-form-body textarea{font-size:16px!important}'
+    + '#modal-prestart .modal,#modal-toolbox .modal,#modal-incident .modal{max-width:100vw!important;width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important}'
+    + '#modal-prestart-sig .modal,#modal-toolbox-sig .modal,#modal-incident-sig .modal{max-width:100vw!important;width:100vw!important}'
+    + '#modal-prestart-sig canvas,#modal-toolbox-sig canvas,#modal-incident-sig canvas{height:260px!important}'
+    + '#prestart-form-body .grid2,#toolbox-form-body .grid2,#incident-form-body .grid2{grid-template-columns:1fr!important}'
+    + '#prestart-form-body input,#prestart-form-body textarea,#toolbox-form-body input,#toolbox-form-body textarea,#incident-form-body input,#incident-form-body textarea{font-size:16px!important}'
     + '}';
   document.head.appendChild(s);
 }
@@ -580,7 +580,7 @@ function renderPrestartForm() {
   if (!_prestartId && !_psCopyDismissed && d.site_abbr) {
     var _psCopyMatch = _psFindRecentForSite(d.site_abbr);
     if (_psCopyMatch) {
-      h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--blue-lt);border:1px solid var(--blue);border-radius:8px;margin:2px 0 12px;font-size:12px">'
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:9px 12px;background:var(--blue-lt);border:1px solid var(--blue);border-radius:8px;margin:2px 0 12px;font-size:12px">'
         + '<span>Copy from last visit — <strong>' + _fmtDate(_psCopyMatch.briefing_date) + '</strong>?</span>'
         + '<span style="display:flex;gap:6px;flex-shrink:0">'
         + '<button class="btn btn-secondary btn-sm" onclick="_psDismissCopyPrompt()">Dismiss</button>'
