@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.99
+  EQ Solves — Field  v3.10.102
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3593,15 +3593,18 @@
   <!-- Safety page (v3.10.24) — Prestarts + Toolbox Talks -->
   <div class="page hidden" id="page-safety">
     <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface)">
-      <button id="safety-tab-btn-prestart" onclick="showSafetyTab('prestart')" style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid var(--blue);color:var(--blue);font-family:inherit">Prestart</button>
-      <button id="safety-tab-btn-toolbox"  onclick="showSafetyTab('toolbox')"  style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit">Toolbox</button>
-      <button id="safety-tab-btn-records"  onclick="showSafetyTab('records')"  style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit">Records</button>
+      <button id="safety-tab-btn-prestart"  onclick="showSafetyTab('prestart')"  style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid var(--blue);color:var(--blue);font-family:inherit">Prestart</button>
+      <button id="safety-tab-btn-toolbox"   onclick="showSafetyTab('toolbox')"   style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit">Toolbox</button>
+      <button id="safety-tab-btn-incidents" onclick="showSafetyTab('incidents')" style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit">Incidents</button>
+      <button id="safety-tab-btn-records"   onclick="showSafetyTab('records')"   style="flex:1;padding:11px 12px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit">Records</button>
     </div>
-    <div id="prestart-offline-pill" style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
-    <div id="toolbox-offline-pill"  style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
+    <div id="prestart-offline-pill"  style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
+    <div id="toolbox-offline-pill"   style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
+    <div id="incident-offline-pill"  style="display:none;padding:6px 16px;background:#fef3c7;color:#92400e;font-size:11px;text-align:center;border-bottom:1px solid #fde68a"></div>
     <div id="safety-tab-content-prestart"><div id="page-prestart-list"></div></div>
-    <div id="safety-tab-content-toolbox"  style="display:none"><div id="page-toolbox-list"></div></div>
-    <div id="safety-tab-content-records"  style="display:none"><div id="page-safety-records"></div></div>
+    <div id="safety-tab-content-toolbox"   style="display:none"><div id="page-toolbox-list"></div></div>
+    <div id="safety-tab-content-incidents" style="display:none"><div id="page-incident-list"></div></div>
+    <div id="safety-tab-content-records"   style="display:none"><div id="page-safety-records"></div></div>
   </div>
 
   <div class="page hidden" id="page-pipeline-resource">
@@ -3682,6 +3685,16 @@
       <button class="modal-close" onclick="closeModal('modal-toolbox')">✕</button>
     </div>
     <div id="toolbox-form-body" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-incident">
+  <div class="modal" style="max-width:580px;width:92vw;max-height:92vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <h3 id="incident-modal-title">New Incident / Near Miss</h3>
+      <button class="modal-close" onclick="closeModal('modal-incident')">✕</button>
+    </div>
+    <div id="incident-form-body" style="overflow-y:auto;flex:1"></div>
   </div>
 </div>
 

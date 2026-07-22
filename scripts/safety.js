@@ -13,11 +13,17 @@ let _prestartCache = [];
 let _prestartDraft = null;
 let _prestartId    = null;
 const _prestartInflight = new Set();
+let _psCopyDismissed = false; // hides the "copy from last visit" prompt for the current draft
 
 let _toolboxCache = [];
 let _toolboxDraft = null;
 let _toolboxId    = null;
 const _toolboxInflight = new Set();
+
+let _incidentCache = [];
+let _incidentDraft = null;
+let _incidentId    = null;
+const _incidentInflight = new Set();
 
 let _safetyTab = 'prestart';
 const _safetyArmed = new Set();
@@ -57,6 +63,18 @@ const PERMITS_CATS = [
   { id: 'harness',  label: 'Harness' },
   { id: 'roof',     label: 'Roof Access' },
   { id: 'other',    label: 'Other (please list)' },
+];
+
+// ── Incident / Near Miss types + severity ──────────────────────
+const INCIDENT_TYPES = [
+  { id: 'incident',           label: 'Incident' },
+  { id: 'near_miss',          label: 'Near Miss' },
+  { id: 'hazard_observation', label: 'Hazard Observation' },
+];
+const SEVERITY_LEVELS = [
+  { id: 'low',    label: 'Low' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'high',   label: 'High' },
 ];
 
 // ── Shared helpers ─────────────────────────────────────────────
@@ -273,6 +291,8 @@ function modal_prestart_sig_clear() { _sigClear(); }
 function modal_prestart_sig_save()  { _sigSave(); }
 function modal_toolbox_sig_clear()  { _sigClear(); }
 function modal_toolbox_sig_save()   { _sigSave(); }
+function modal_incident_sig_clear() { _sigClear(); }
+function modal_incident_sig_save()  { _sigSave(); }
 
 // ── Offline queue ──────────────────────────────────────────────
 function _qRead(key) { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) { return []; } }
@@ -424,11 +444,11 @@ function _injectSafetyStyle() {
   const s = document.createElement('style');
   s.id = 'safety-responsive-style';
   s.textContent = '@media(max-width:640px){'
-    + '#modal-prestart .modal,#modal-toolbox .modal{max-width:100vw!important;width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important}'
-    + '#modal-prestart-sig .modal,#modal-toolbox-sig .modal{max-width:100vw!important;width:100vw!important}'
-    + '#modal-prestart-sig canvas,#modal-toolbox-sig canvas{height:260px!important}'
-    + '#prestart-form-body .grid2,#toolbox-form-body .grid2{grid-template-columns:1fr!important}'
-    + '#prestart-form-body input,#prestart-form-body textarea,#toolbox-form-body input,#toolbox-form-body textarea{font-size:16px!important}'
+    + '#modal-prestart .modal,#modal-toolbox .modal,#modal-incident .modal{max-width:100vw!important;width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important}'
+    + '#modal-prestart-sig .modal,#modal-toolbox-sig .modal,#modal-incident-sig .modal{max-width:100vw!important;width:100vw!important}'
+    + '#modal-prestart-sig canvas,#modal-toolbox-sig canvas,#modal-incident-sig canvas{height:260px!important}'
+    + '#prestart-form-body .grid2,#toolbox-form-body .grid2,#incident-form-body .grid2{grid-template-columns:1fr!important}'
+    + '#prestart-form-body input,#prestart-form-body textarea,#toolbox-form-body input,#toolbox-form-body textarea,#incident-form-body input,#incident-form-body textarea{font-size:16px!important}'
     + '}';
   document.head.appendChild(s);
 }
@@ -439,7 +459,7 @@ function _injectSafetyStyle() {
 
 function showSafetyTab(tab) {
   _safetyTab = tab;
-  ['prestart', 'toolbox', 'records'].forEach(function(t) {
+  ['prestart', 'toolbox', 'incidents', 'records'].forEach(function(t) {
     const content = document.getElementById('safety-tab-content-' + t);
     const btn     = document.getElementById('safety-tab-btn-' + t);
     if (content) content.style.display = t === tab ? '' : 'none';
@@ -449,9 +469,10 @@ function showSafetyTab(tab) {
       btn.style.fontWeight   = t === tab ? '700' : '500';
     }
   });
-  if (tab === 'prestart')      renderPrestart();
-  else if (tab === 'toolbox')  renderToolbox();
-  else                         renderSafetyRecords();
+  if (tab === 'prestart')        renderPrestart();
+  else if (tab === 'toolbox')    renderToolbox();
+  else if (tab === 'incidents')  renderIncidents();
+  else                           renderSafetyRecords();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -516,6 +537,7 @@ function openPrestartForm(id) {
     _prestartId    = existing.id;
   } else {
     _prestartId   = null;
+    _psCopyDismissed = false;
     _prestartDraft = {
       briefing_date:    _todayIso(),
       briefing_time:    _nowTime(),
@@ -551,9 +573,21 @@ function renderPrestartForm() {
   let h = '<div style="padding:14px 16px">';
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  h += _fld('Site', '<div style="position:relative"><input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" list="ps-site-dl" placeholder="Select or type…" style="' + _I + ';padding-right:28px"><span style="position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--ink-3);font-size:12px">▾</span></div>' + _siteDatalist('ps-site-dl'));
+  h += _fld('Site', '<div style="position:relative"><input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_psField(\'site_abbr\',this.value)" onchange="_psField(\'site_abbr\',this.value);renderPrestartForm()" list="ps-site-dl" placeholder="Select or type…" style="' + _I + ';padding-right:28px"><span style="position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--ink-3);font-size:12px">▾</span></div>' + _siteDatalist('ps-site-dl'));
   h += _fld('Project Number', '<input type="text" value="' + esc(d.project_number || '') + '" oninput="_psField(\'project_number\',this.value)" placeholder="e.g. 26184" style="' + _I + '">');
   h += '</div>';
+
+  if (!_prestartId && !_psCopyDismissed && d.site_abbr) {
+    var _psCopyMatch = _psFindRecentForSite(d.site_abbr);
+    if (_psCopyMatch) {
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:9px 12px;background:var(--blue-lt);border:1px solid var(--blue);border-radius:8px;margin:2px 0 12px;font-size:12px">'
+        + '<span>Copy from last visit — <strong>' + _fmtDate(_psCopyMatch.briefing_date) + '</strong>?</span>'
+        + '<span style="display:flex;gap:6px;flex-shrink:0">'
+        + '<button class="btn btn-secondary btn-sm" onclick="_psDismissCopyPrompt()">Dismiss</button>'
+        + '<button class="btn btn-sm" onclick="_psCopyFrom(\'' + esc(_psCopyMatch.id) + '\')">Copy</button>'
+        + '</span></div>';
+    }
+  }
 
   h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   h += _fld('Date', '<input type="date" value="' + esc(d.briefing_date || '') + '" onchange="_psField(\'briefing_date\',this.value)" style="' + _I + '">');
@@ -622,6 +656,7 @@ function renderPrestartForm() {
 
   h += '<div style="display:flex;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap">';
   if (_prestartId) {
+    h += '<button class="btn btn-secondary btn-sm" onclick="_psDuplicate()" title="Start a new prestart pre-filled from this one">Duplicate</button>';
     h += '<button class="btn btn-secondary btn-sm" onclick="_psArmDelete()" style="margin-right:auto'
       + (armed ? ';background:var(--red,#dc2626);color:#fff;border-color:var(--red,#dc2626)' : '') + '">'
       + (armed ? 'Tap again to delete' : 'Delete') + '</button>';
@@ -672,6 +707,69 @@ function _psAddCrew() {
 function _psRemoveCrew(i) {
   if (!_prestartDraft || !_prestartDraft.crew) return;
   _prestartDraft.crew.splice(i, 1);
+  renderPrestartForm();
+}
+
+// ── Copy from last visit + Duplicate (v3.10.101 — speed up repeat entry) ──
+// Most recent SUBMITTED prestart at this site in the last 7 days (today excluded).
+function _psFindRecentForSite(siteAbbr) {
+  if (!siteAbbr) return null;
+  var cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - 7);
+  var cutoff = _safetyDateIso(cutoffDate);
+  var today  = _todayIso();
+  var matches = (_prestartCache || []).filter(function(r) {
+    return r.site_abbr === siteAbbr && r.status === 'submitted' && r.briefing_date && r.briefing_date < today && r.briefing_date >= cutoff;
+  });
+  matches.sort(function(a, b) { return b.briefing_date.localeCompare(a.briefing_date); });
+  return matches[0] || null;
+}
+
+function _psDismissCopyPrompt() { _psCopyDismissed = true; renderPrestartForm(); }
+
+// Pull the reusable fields (hazards, SWMS, scope, HRCW/permits, crew) from a
+// past prestart into the current draft. Date/time/status/signatures stay as-is —
+// crew signatures are cleared since each day needs its own sign-off.
+function _psCopyFrom(id) {
+  var src = (_prestartCache || []).find(function(r) { return String(r.id) === String(id); });
+  if (!src || !_prestartDraft) return;
+  _prestartDraft.subcontractor        = src.subcontractor || '';
+  _prestartDraft.works_scope          = src.works_scope || '';
+  _prestartDraft.affects_other_trades = src.affects_other_trades || '';
+  _prestartDraft.hrcw_categories      = (src.hrcw_categories || []).slice();
+  _prestartDraft.swms_refs            = src.swms_refs || '';
+  _prestartDraft.hazards              = src.hazards || '';
+  _prestartDraft.permits_categories   = (src.permits_categories || []).slice();
+  _prestartDraft.permits              = src.permits || '';
+  _prestartDraft.crew = (src.crew || []).map(function(m) {
+    return { name: m.name, person_id: m.person_id || null, signed_at: null, signed_by: null, signature_image: null };
+  });
+  _psCopyDismissed = true;
+  showToast('Copied from ' + _fmtDate(src.briefing_date) + ' — review and save');
+  renderPrestartForm();
+}
+
+// Clone the open record into a fresh draft for today — one tap instead of
+// re-typing hazards/SWMS/scope/crew for a site worked yesterday.
+function _psDuplicate() {
+  if (!_prestartDraft) return;
+  var clone = JSON.parse(JSON.stringify(_prestartDraft));
+  delete clone.id;
+  clone.briefing_date = _todayIso();
+  clone.briefing_time = _nowTime();
+  clone.status         = 'draft';
+  clone.submitted_at   = null;
+  clone.submitted_by   = null;
+  clone.photos         = [];
+  clone.crew = (clone.crew || []).map(function(m) {
+    return { name: m.name, person_id: m.person_id || null, signed_at: null, signed_by: null, signature_image: null };
+  });
+  _prestartId      = null;
+  _prestartDraft   = clone;
+  _psCopyDismissed = true;
+  _safetyArmed.delete('prestart-delete');
+  var titleEl = document.getElementById('prestart-modal-title');
+  if (titleEl) titleEl.textContent = 'New Prestart';
+  showToast('Duplicated — review and save');
   renderPrestartForm();
 }
 
@@ -1405,6 +1503,102 @@ async function _tbExportDocx(recArg, opts) {
   });
 }
 
+// Incident / Near Miss .docx — mirrors the toolbox export, incident template.
+async function _incExportDocx(recArg, opts) {
+  var d = recArg || (typeof _incidentDraft !== 'undefined' ? _incidentDraft : null);
+  if (!d) { showToast('No incident to export'); return; }
+  if (typeof JSZip === 'undefined') { showToast('Export requires internet connection'); return; }
+
+  var K = _safetyDocxKit();
+  var xe = K.xe, arial = K.arial, tcN = K.tcN, tcL = K.tcL, secHead = K.secHead,
+      tblOpen1 = K.tblOpen1, tblOpen2 = K.tblOpen2, tblOpen4 = K.tblOpen4,
+      spacer = K.spacer, imgRun = K.imgRun, fmtTime12 = K.fmtTime12,
+      NAVY = K.NAVY, LBLUE = K.LBLUE, LGRAY = K.LGRAY, GBORD = K.GBORD, RMAR = K.RMAR;
+
+  var siteObj  = ((typeof STATE !== 'undefined' && STATE.sites) || []).find(function(s) { return s.abbr === d.site_abbr; });
+  var siteName = siteObj ? siteObj.name : (d.site_abbr || '');
+  var siteAddr = siteObj ? (siteObj.address || '') : '';
+  var typeLbl  = (INCIDENT_TYPES.find(function(t) { return t.id === d.incident_type; }) || {}).label || d.incident_type || '';
+  var sevLbl   = (SEVERITY_LEVELS.find(function(s) { return s.id === d.severity; }) || {}).label || d.severity || '';
+
+  var sigMap = {};
+  var nextRid = 2;
+  (d.people_involved || []).forEach(function(m, i) {
+    if (m.signature_image) {
+      sigMap[i] = {
+        rId: 'rId' + nextRid++,
+        base64: m.signature_image.replace(/^data:image\/[^;]+;base64,/, ''),
+        fileName: 'sig' + i + '.png'
+      };
+    }
+  });
+
+  var logoBase64 = await _safetyLogoB64();
+
+  var body = '';
+
+  body += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="200"/></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Roboto" w:hAnsi="Roboto" w:cs="Roboto"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>'
+    + '<w:t>SKS INCIDENT / NEAR MISS REPORT</w:t></w:r></w:p>';
+
+  body += tblOpen4();
+  body += '<w:tr>' + tcN(2340,'Project Name:') + tcL(2340,siteName) + tcN(2340,'Type:') + tcL(2340,typeLbl) + '</w:tr>';
+  if (siteAddr) body += '<w:tr>' + tcN(2340,'Project Address:') + tcL(7020,siteAddr,3) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Date:') + tcL(2340,_fmtDate(d.incident_date)) + tcN(2340,'Time:') + tcL(2340,fmtTime12(d.incident_time)) + '</w:tr>';
+  body += '<w:tr>' + tcN(2340,'Reported By:') + tcL(2340,d.reported_by) + tcN(2340,'Severity:') + tcL(2340,sevLbl) + '</w:tr>';
+  body += '</w:tbl>';
+
+  body += spacer();
+
+  function block(label, text) {
+    return tblOpen1()
+      + '<w:tr>' + tcN(9360,label) + '</w:tr>'
+      + '<w:tr>' + tcL(9360, text || '—') + '</w:tr>'
+      + '</w:tbl>';
+  }
+
+  body += block('Description', d.description);
+  body += spacer();
+  body += block('Immediate Action Taken', d.immediate_action);
+
+  body += secHead('People Involved / Witnesses');
+  var people = d.people_involved || [];
+  if (people.length) {
+    body += tblOpen2(4680,4680);
+    body += '<w:tr>' + tcN(4680,'Name & Signature') + tcN(4680,'Name & Signature') + '</w:tr>';
+    function personCell(m, sig, w) {
+      var nameP = '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="' + NAVY + '"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + xe(m.name || '') + '</w:t></w:r></w:p>';
+      var sigP = sig
+        ? '<w:p><w:pPr><w:spacing w:before="20" w:after="80"/></w:pPr>' + imgRun(sig) + '</w:p>'
+        : '<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr></w:p>';
+      return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + GBORD
+        + '<w:shd w:val="clear" w:color="auto" w:fill="' + LBLUE + '"/>' + RMAR
+        + '</w:tcPr>' + nameP + sigP + '</w:tc>';
+    }
+    for (var pi = 0; pi < people.length; pi += 2) {
+      var mL = people[pi], mR = people[pi + 1];
+      body += '<w:tr>' + personCell(mL, sigMap[pi], 4680)
+        + (mR ? personCell(mR, sigMap[pi + 1], 4680) : tcL(4680,''))
+        + '</w:tr>';
+    }
+    body += '</w:tbl>';
+  } else {
+    body += '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' + arial('No people involved recorded.', false, LGRAY) + '</w:p>';
+  }
+
+  var siteStr = _fnSafe(d.site_abbr || siteName || 'Site');
+  var dayStr  = _safetyWeekday(d.incident_date);
+  var repStr  = _fnSafe(d.reported_by || 'Reporter');
+  var fileName = 'Incident_' + siteStr + '_' + (d.incident_date || '') + (dayStr ? '_' + dayStr : '') + '_' + repStr + '.docx';
+
+  return await _safetyDocxPackage({
+    body: body, sigMap: sigMap, logoBase64: logoBase64,
+    footerLabel: 'Incident / Near Miss Report', fileName: fileName, returnBlob: opts && opts.returnBlob
+  });
+}
+
 // ════════════════════════════════════════════════════════════════
 // TOOLBOX TALKS
 // ════════════════════════════════════════════════════════════════
@@ -1665,6 +1859,330 @@ async function submitToolbox() {
   } finally { _toolboxInflight.delete('submit'); }
 }
 
+// ════════════════════════════════════════════════════════════════
+// INCIDENTS / NEAR MISS
+// ════════════════════════════════════════════════════════════════
+
+const _INC_QKEY = 'sks_incident_offline_queue_v1';
+const _INC_PILL = 'incident-offline-pill';
+
+async function loadIncidents() {
+  try {
+    const rows = await sbFetch('incidents?select=*&order=incident_date.desc,incident_time.desc&limit=200');
+    _incidentCache = Array.isArray(rows) ? rows : [];
+  } catch(e) {
+    console.warn('EQ[safety/incident] load failed:', e && e.message || e);
+    _incidentCache = [];
+  }
+}
+
+function renderIncidents() {
+  const el = document.getElementById('page-incident-list');
+  if (!el) return;
+  _injectSafetyStyle();
+  const today  = _todayIso();
+  const todays = _incidentCache.filter(function(r) { return r.incident_date === today; });
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+  const recent = _incidentCache.filter(function(r) { return r.incident_date !== today && new Date(r.incident_date) >= cutoff; });
+
+  let h = '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">'
+    + '<div><div style="font-size:13px;font-weight:700">Incidents &amp; Near Misses</div>'
+    + '<div style="font-size:11px;color:var(--ink-3);margin-top:1px">' + todays.length + ' today · ' + _incidentCache.length + ' total</div></div>'
+    + '<button class="btn" onclick="openIncidentForm()">＋ New</button></div>';
+
+  h += todays.length
+    ? todays.map(_incidentRow).join('')
+    : '<div style="padding:12px 16px;font-size:12px;color:var(--ink-3);background:var(--surface-2);border-bottom:1px solid var(--border)">No incidents today — tap <strong>New</strong> to report one.</div>';
+
+  if (recent.length) {
+    h += '<div style="padding:5px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);background:var(--surface-2);border-bottom:1px solid var(--border);border-top:1px solid var(--border)">Past 2 weeks</div>';
+    h += recent.map(_incidentRow).join('');
+  }
+  el.innerHTML = h;
+}
+
+function _incSeverityPill(sev) {
+  const c = sev === 'high' ? { bg: '#fee2e2', fg: '#dc2626' } : sev === 'medium' ? { bg: '#fef3c7', fg: '#b45309' } : { bg: 'var(--surface-2)', fg: 'var(--ink-3)' };
+  const lbl = (SEVERITY_LEVELS.find(function(s) { return s.id === sev; }) || {}).label || sev || '';
+  return '<span style="background:' + c.bg + ';color:' + c.fg + ';font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px">' + esc(lbl) + '</span>';
+}
+
+function _incidentRow(r) {
+  const site  = (typeof STATE !== 'undefined' && STATE.sites || []).find(function(s) { return s.abbr === r.site_abbr; });
+  const sName = site ? site.name : (r.site_abbr || 'No site');
+  const typeLbl = (INCIDENT_TYPES.find(function(t) { return t.id === r.incident_type; }) || {}).label || r.incident_type || '';
+  return '<div onclick="openIncidentForm(\'' + esc(r.id) + '\')" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:var(--surface)" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+    + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(sName) + ' · ' + esc(typeLbl) + '</div>'
+    + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + _fmtDate(r.incident_date) + (r.incident_time ? ' · ' + r.incident_time.slice(0, 5) : '') + (r.reported_by ? ' · ' + esc(r.reported_by) : '') + '</div></div>'
+    + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' + _statusPill(r.status) + _incSeverityPill(r.severity) + '</div></div>';
+}
+
+function openIncidentForm(id) {
+  _safetyArmed.delete('incident-delete');
+  const existing = id ? _incidentCache.find(function(r) { return r.id === id; }) : null;
+  if (existing) {
+    _incidentDraft = JSON.parse(JSON.stringify(existing));
+    _incidentId    = existing.id;
+  } else {
+    _incidentId   = null;
+    _incidentDraft = {
+      incident_date:     _todayIso(),
+      incident_time:     _nowTime(),
+      site_abbr:         '',
+      reported_by:       _currentUser(),
+      incident_type:     'near_miss',
+      severity:          'low',
+      description:       '',
+      immediate_action:  '',
+      people_involved:   [],
+      photos:            [],
+      status:            'draft',
+    };
+  }
+  document.getElementById('incident-modal-title').textContent = existing ? 'Edit Incident' : 'New Incident / Near Miss';
+  openModal('modal-incident');
+  renderIncidentForm();
+}
+
+function renderIncidentForm() {
+  const el = document.getElementById('incident-form-body');
+  if (!el || !_incidentDraft) return;
+  const d = _incidentDraft;
+  const submitted = d.status === 'submitted';
+  const armed     = _safetyArmed.has('incident-delete');
+
+  let h = '<div style="padding:14px 16px">';
+
+  h += _lbl('Type');
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+    + INCIDENT_TYPES.map(function(t) {
+        var sel = d.incident_type === t.id;
+        return '<button type="button" onclick="_incField(\'incident_type\',\'' + t.id + '\');renderIncidentForm()" '
+          + 'style="padding:7px 14px;border:1px solid ' + (sel ? 'var(--blue)' : 'var(--border)') + ';border-radius:7px;font-size:12px;cursor:pointer;'
+          + 'background:' + (sel ? 'var(--blue)' : 'var(--surface)') + ';color:' + (sel ? '#fff' : 'var(--ink)') + '">' + t.label + '</button>';
+      }).join('')
+    + '</div>';
+
+  h += _lbl('Severity');
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+    + SEVERITY_LEVELS.map(function(s) {
+        var sel = d.severity === s.id;
+        return '<button type="button" onclick="_incField(\'severity\',\'' + s.id + '\');renderIncidentForm()" '
+          + 'style="padding:7px 14px;border:1px solid ' + (sel ? 'var(--blue)' : 'var(--border)') + ';border-radius:7px;font-size:12px;cursor:pointer;'
+          + 'background:' + (sel ? 'var(--blue)' : 'var(--surface)') + ';color:' + (sel ? '#fff' : 'var(--ink)') + '">' + s.label + '</button>';
+      }).join('')
+    + '</div>';
+
+  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  h += _fld('Site', '<input type="text" value="' + esc(d.site_abbr || '') + '" oninput="_incField(\'site_abbr\',this.value)" list="inc-site-dl" placeholder="Select or type…" style="' + _I + '">' + _siteDatalist('inc-site-dl'));
+  h += _fld('Date', '<input type="date" value="' + esc(d.incident_date || '') + '" onchange="_incField(\'incident_date\',this.value)" style="' + _I + '">');
+  h += '</div>';
+
+  h += '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  h += _fld('Time', '<input type="time" value="' + esc(d.incident_time || '') + '" onchange="_incField(\'incident_time\',this.value)" style="' + _I + '">');
+  h += _fld('Reported by', '<input type="text" value="' + esc(d.reported_by || '') + '" oninput="_incField(\'reported_by\',this.value)" placeholder="Name" style="' + _I + '">');
+  h += '</div>';
+
+  h += _fld('Description', _taWithMic('inc', 'description', d.description, 'What happened?'));
+  h += _fld('Immediate action taken', _taWithMic('inc', 'immediate_action', d.immediate_action, 'What was done straight away?'));
+
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3)">People involved / witnesses</div>'
+    + (d.site_abbr ? '<button class="btn btn-secondary btn-sm" onclick="_incRosterPull()">Pull from roster</button>' : '')
+    + '</div>';
+  (d.people_involved || []).forEach(function(m, i) {
+    const sigStatus = m.signed_at
+      ? '<span style="color:#15803d;font-size:11px;font-weight:600">✓ Signed</span>'
+      : '<button class="btn btn-secondary btn-sm" onclick="incidentSig(' + i + ')">Sign</button>';
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
+      + '<div style="flex:1;font-size:13px">' + esc(m.name || '') + '</div>'
+      + sigStatus
+      + (m.signature_image ? '<img src="' + esc(m.signature_image) + '" style="height:28px;border:1px solid var(--border);border-radius:4px">' : '')
+      + '<button onclick="_incRemovePerson(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:15px;padding:0 4px;line-height:1" title="Remove">✕</button>'
+      + '</div>';
+  });
+  h += '<div style="display:flex;gap:8px;margin-top:8px">'
+    + '<input type="text" id="inc-person-input" list="inc-person-dl" placeholder="Name or select…" style="' + _I + ';flex:1">'
+    + _peopleDatalist('inc-person-dl')
+    + '<button class="btn btn-secondary btn-sm" onclick="_incAddPerson()">Add</button></div>';
+
+  h += _lbl('Photos (optional)');
+  h += _photoRenderList(d, 'incident');
+
+  h += '<div style="display:flex;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap">';
+  if (_incidentId) {
+    h += '<button class="btn btn-secondary btn-sm" onclick="_incArmDelete()" style="margin-right:auto'
+      + (armed ? ';background:var(--red,#dc2626);color:#fff;border-color:var(--red,#dc2626)' : '') + '">'
+      + (armed ? 'Tap again to delete' : 'Delete') + '</button>';
+  }
+  h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-incident\')">Close</button>';
+  h += '<button class="btn btn-secondary" onclick="_incExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
+  if (!submitted) h += '<button class="btn" onclick="saveIncidentDraft()">Save draft</button>';
+  h += !submitted
+    ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitIncident()">Submit</button>'
+    : '<span style="font-size:11px;color:var(--ink-3);align-self:center">Submitted ✓</span>';
+  h += '</div></div>';
+
+  el.innerHTML = h;
+}
+
+function _incField(key, val) { if (_incidentDraft) _incidentDraft[key] = val; }
+
+function _incAddPerson() {
+  const input = document.getElementById('inc-person-input');
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) { showToast('Enter a name first'); return; }
+  if (!_incidentDraft) return;
+  if (!Array.isArray(_incidentDraft.people_involved)) _incidentDraft.people_involved = [];
+  const people = (typeof STATE !== 'undefined' && STATE.people) || [];
+  const person = people.find(function(p) { return p.name === name; });
+  _incidentDraft.people_involved.push({ name: name, person_id: person ? (person.id || null) : null, signed_at: null, signed_by: null, signature_image: null });
+  input.value = '';
+  renderIncidentForm();
+}
+
+function _incRemovePerson(i) {
+  if (!_incidentDraft || !_incidentDraft.people_involved) return;
+  _incidentDraft.people_involved.splice(i, 1);
+  renderIncidentForm();
+}
+
+function _incRosterPull() {
+  if (!_incidentDraft || !_incidentDraft.site_abbr) return;
+  const names = _rosterPullNames(_incidentDraft.site_abbr);
+  if (!names.length) { showToast('No roster found for today at this site'); return; }
+  if (!Array.isArray(_incidentDraft.people_involved)) _incidentDraft.people_involved = [];
+  const existing = {};
+  _incidentDraft.people_involved.forEach(function(m) { existing[m.name] = true; });
+  const people = (typeof STATE !== 'undefined' && STATE.people) || [];
+  names.forEach(function(name) {
+    if (existing[name]) return;
+    const person = people.find(function(p) { return p.name === name; });
+    _incidentDraft.people_involved.push({ name: name, person_id: person ? (person.id || null) : null, signed_at: null, signed_by: null, signature_image: null });
+  });
+  renderIncidentForm();
+}
+
+function _incArmDelete() {
+  if (_safetyArmed.has('incident-delete')) {
+    _incDoDelete();
+  } else {
+    _safetyArmed.add('incident-delete');
+    renderIncidentForm();
+    setTimeout(function() { _safetyArmed.delete('incident-delete'); renderIncidentForm(); }, 3000);
+  }
+}
+
+async function _incDoDelete() {
+  if (!_incidentId || _isLocalId(_incidentId)) {
+    const idToRemove = _incidentId;
+    _incidentDraft = null; _incidentId = null;
+    if (idToRemove) _incidentCache = _incidentCache.filter(function(r) { return r.id !== idToRemove; });
+    closeModal('modal-incident'); renderIncidents(); return;
+  }
+  try {
+    await sbFetch('incidents?id=eq.' + encodeURIComponent(_incidentId), 'DELETE');
+    _incidentCache = _incidentCache.filter(function(r) { return r.id !== _incidentId; });
+    _incidentDraft = null; _incidentId = null;
+    _safetyArmed.delete('incident-delete');
+    closeModal('modal-incident'); showToast('Incident deleted'); renderIncidents();
+  } catch(e) { showToast('Delete failed — try again'); }
+}
+
+function incidentSig(i) {
+  if (_incidentDraft) _sigOpen(_incidentDraft, 'people_involved', i, 'modal-incident-sig', renderIncidentForm);
+}
+
+// Global shims for photo onclick= attributes
+function incidentPhotoAdd(input)    { _photoAdd(_incidentDraft, input, renderIncidentForm); }
+function incidentPhotoRemove(i)     { _photoRemove(_incidentDraft, i, renderIncidentForm); }
+function incidentPhotoCaption(i, v) { _photoSetCaption(_incidentDraft, i, v); }
+function incidentPhotoLightbox(i)   { _photoLightbox(_incidentDraft, i); }
+
+function _incBuildPayload() {
+  const p = Object.assign({}, _incidentDraft);
+  delete p.id;
+  if (!_incidentId || _isLocalId(_incidentId)) p.created_by = _currentUser();
+  else { delete p.created_by; delete p.created_at; }
+  return p;
+}
+
+async function saveIncidentDraft() {
+  if (_incidentInflight.has('save')) return;
+  _incidentInflight.add('save');
+  try {
+    const result = await _qPersist('incidents', _INC_QKEY, _INC_PILL, _incidentId, _incBuildPayload());
+    if (!result._offline && result.id) {
+      _incidentId = String(result.id);
+      const full = Object.assign({}, _incidentDraft, { id: _incidentId });
+      const idx  = _incidentCache.findIndex(function(r) { return String(r.id) === _incidentId; });
+      if (idx >= 0) _incidentCache[idx] = full; else _incidentCache.unshift(full);
+    }
+    showToast('Draft saved');
+    renderIncidents(); renderIncidentForm();
+  } finally { _incidentInflight.delete('save'); }
+}
+
+// Best-effort alert to managers with an email on file — fire-and-forget,
+// never blocks the submit toast. Only fires for a real Incident (not a
+// Near Miss / Hazard Observation) or when severity is High, so routine
+// low-risk observations don't spam every manager's inbox.
+async function _incNotifyManagers(d) {
+  try {
+    if (d.incident_type !== 'incident' && d.severity !== 'high') return;
+    const managers = ((typeof STATE !== 'undefined' && STATE.managers) || []).filter(function(m) { return m.email; });
+    if (!managers.length) return;
+    const site  = (typeof STATE !== 'undefined' && STATE.sites || []).find(function(s) { return s.abbr === d.site_abbr; });
+    const sName = site ? site.name : (d.site_abbr || 'No site');
+    const typeLbl = (INCIDENT_TYPES.find(function(t) { return t.id === d.incident_type; }) || {}).label || d.incident_type || '';
+    const sevLbl  = (SEVERITY_LEVELS.find(function(s) { return s.id === d.severity; }) || {}).label || d.severity || '';
+    const subject = (d.severity === 'high' ? 'HIGH SEVERITY: ' : '') + typeLbl + ' reported — ' + sName;
+    const html = '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;max-width:500px;margin:0 auto">'
+      + '<div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">'
+      + '<h2 style="color:white;margin:0;font-size:18px">' + esc(typeLbl) + ' Reported</h2>'
+      + '<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">EQ Solves — Field</p></div>'
+      + '<div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">'
+      + '<table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">'
+      + '<tr><td style="padding:8px 0;color:#6B7280;width:100px">Site</td><td style="padding:8px 0;font-weight:600">' + esc(sName) + '</td></tr>'
+      + '<tr><td style="padding:8px 0;color:#6B7280">Severity</td><td style="padding:8px 0;font-weight:600">' + esc(sevLbl) + '</td></tr>'
+      + '<tr><td style="padding:8px 0;color:#6B7280">Reported by</td><td style="padding:8px 0;font-weight:600">' + esc(d.reported_by || '') + '</td></tr>'
+      + '<tr><td style="padding:8px 0;color:#6B7280;vertical-align:top">Description</td><td style="padding:8px 0">' + esc(d.description || '') + '</td></tr>'
+      + '</table>'
+      + '<div style="margin-top:20px"><a href="' + window.location.origin + '" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a></div>'
+      + '</div></div>';
+    const eqToken = sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_agent_token') || '';
+    await fetch('/.netlify/functions/send-email', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-eq-token': eqToken },
+      body:    JSON.stringify({ to: managers.map(function(m) { return m.email; }), subject: subject, html: html })
+    });
+  } catch(e) {
+    console.warn('EQ[safety/incident] manager alert failed (non-blocking):', e && e.message || e);
+  }
+}
+
+async function submitIncident() {
+  if (_incidentInflight.has('submit')) return;
+  _incidentInflight.add('submit');
+  try {
+    if (!_incidentDraft) return;
+    _incidentDraft.status       = 'submitted';
+    _incidentDraft.submitted_at = new Date().toISOString();
+    _incidentDraft.submitted_by = _currentUser();
+    const result = await _qPersist('incidents', _INC_QKEY, _INC_PILL, _incidentId, _incBuildPayload());
+    if (!result._offline && result.id) {
+      _incidentId = String(result.id);
+      const full = Object.assign({}, _incidentDraft, { id: _incidentId });
+      const idx  = _incidentCache.findIndex(function(r) { return String(r.id) === _incidentId; });
+      if (idx >= 0) _incidentCache[idx] = full; else _incidentCache.unshift(full);
+    }
+    showToast('Incident submitted ✓');
+    renderIncidents(); renderIncidentForm();
+    if (!result._offline) _incNotifyManagers(_incidentDraft);
+  } finally { _incidentInflight.delete('submit'); }
+}
+
 // ── Page entry point ───────────────────────────────────────────
 let _safetyOnlineHandler = null;
 let _safetyLoaded = false;
@@ -1673,14 +2191,14 @@ let _safetyLoaded = false;
 // RECORDS — filter, multi-select and batch download (prestarts + toolboxes)
 // ════════════════════════════════════════════════════════════════
 
-let _safetyRecType   = 'all';   // 'all' | 'ps' | 'tb'
+let _safetyRecType   = 'all';   // 'all' | 'ps' | 'tb' | 'in'
 let _safetyRecDays   = 30;      // 7 | 30 | 90 | 0 (all) — null when an explicit From/To range is active
 let _safetyRecStatus = 'all';   // 'all' | 'submitted' | 'draft'
 let _safetyRecSite   = '';      // '' = all (holds site abbr)
 let _safetyRecSearch = '';
 let _safetyRecFrom   = '';      // explicit range start (YYYY-MM-DD), '' = open
 let _safetyRecTo     = '';      // explicit range end (YYYY-MM-DD), '' = open
-let _safetyRecSel    = new Set(); // keys: 'ps:<id>' / 'tb:<id>'
+let _safetyRecSel    = new Set(); // keys: 'ps:<id>' / 'tb:<id>' / 'in:<id>'
 
 function _safetyIsoMinus(days) {
   var d = new Date(); d.setDate(d.getDate() - days);
@@ -1715,7 +2233,7 @@ function _safetyRecSiteName(abbr) {
   return s ? s.name : abbr;
 }
 
-// Unified list of every cached prestart + toolbox, normalised for filtering.
+// Unified list of every cached prestart + toolbox + incident, normalised for filtering.
 function _safetyRecAll() {
   var rows = [];
   (_prestartCache || []).forEach(function(r) {
@@ -1725,6 +2243,11 @@ function _safetyRecAll() {
   (_toolboxCache || []).forEach(function(r) {
     rows.push({ type: 'tb', id: r.id, date: r.meeting_date || '', time: r.meeting_time || '',
       site: r.site_abbr || '', who: r.facilitator || r.submitted_by || r.created_by || '', topic: r.topic || '', status: r.status || 'draft' });
+  });
+  (_incidentCache || []).forEach(function(r) {
+    var typeLbl = (INCIDENT_TYPES.find(function(t) { return t.id === r.incident_type; }) || {}).label || '';
+    rows.push({ type: 'in', id: r.id, date: r.incident_date || '', time: r.incident_time || '',
+      site: r.site_abbr || '', who: r.reported_by || r.submitted_by || r.created_by || '', topic: typeLbl, status: r.status || 'draft' });
   });
   return rows;
 }
@@ -1787,6 +2310,7 @@ function _safetyRecControlsHTML() {
     + pill(_safetyRecType === 'all', 'All', "_safetyRecSetType('all')")
     + pill(_safetyRecType === 'ps', 'Prestarts', "_safetyRecSetType('ps')")
     + pill(_safetyRecType === 'tb', 'Toolboxes', "_safetyRecSetType('tb')")
+    + pill(_safetyRecType === 'in', 'Incidents', "_safetyRecSetType('in')")
     + '</div>';
 
   var thisWk = _safetyWeekRange(0), lastWk = _safetyWeekRange(-1);
@@ -1870,10 +2394,12 @@ function _safetyRecRow(x) {
   var sName = _safetyRecSiteName(x.site) || 'No site';
   var badge = x.type === 'ps'
     ? '<span style="background:var(--blue-lt);color:var(--blue);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">PS</span>'
-    : '<span style="background:var(--green-lt,#e8f5ee);color:var(--green,#15803d);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">TB</span>';
+    : x.type === 'tb'
+    ? '<span style="background:var(--green-lt,#e8f5ee);color:var(--green,#15803d);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">TB</span>'
+    : '<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">INC</span>';
   var title = esc(sName) + (x.topic ? ' · ' + esc(x.topic) : '');
   var meta = _fmtDate(x.date) + (x.time ? ' · ' + x.time.slice(0, 5) : '') + (x.who ? ' · ' + esc(x.who) : '');
-  var openFn = x.type === 'ps' ? 'openPrestartForm' : 'openToolboxForm';
+  var openFn = x.type === 'ps' ? 'openPrestartForm' : x.type === 'tb' ? 'openToolboxForm' : 'openIncidentForm';
   return '<div onclick="_safetyRecToggle(\'' + x.type + '\',\'' + esc(x.id) + '\')" style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:' + (sel ? 'var(--blue-lt)' : 'var(--surface)') + '">'
     + '<input type="checkbox"' + (sel ? ' checked' : '') + ' onclick="event.stopPropagation();_safetyRecToggle(\'' + x.type + '\',\'' + esc(x.id) + '\')" style="width:17px;height:17px;flex-shrink:0">'
     + '<div style="flex:1;min-width:0">'
@@ -1889,7 +2415,7 @@ function _safetyRecRow(x) {
 // active. Coverage is a prestart concept (daily), so it's hidden for toolbox-only.
 function _safetyCoverageHTML() {
   if (!_safetyRecSite || !_safetyRecFrom || !_safetyRecTo) return '';
-  if (_safetyRecType === 'tb') return '';
+  if (_safetyRecType === 'tb' || _safetyRecType === 'in') return '';
   var days = _safetyWeekdaysBetween(_safetyRecFrom, _safetyRecTo);
   if (!days.length || days.length > 6) return '';
   var have = {};
@@ -1960,7 +2486,7 @@ async function _safetyRecDownloadAll() {
 // Audit-friendly zip name derived from the active filter, e.g.
 // Prestarts_SYD53_2026-06-22_to_2026-06-26.zip
 function _safetyZipName() {
-  var typeLabel = _safetyRecType === 'ps' ? 'Prestarts' : _safetyRecType === 'tb' ? 'Toolboxes' : 'Safety_Records';
+  var typeLabel = _safetyRecType === 'ps' ? 'Prestarts' : _safetyRecType === 'tb' ? 'Toolboxes' : _safetyRecType === 'in' ? 'Incidents' : 'Safety_Records';
   var parts = [typeLabel];
   if (_safetyRecSite) parts.push(_fnSafe(_safetyRecSite));
   if (_safetyRecFrom && _safetyRecTo) parts.push(_safetyRecFrom + '_to_' + _safetyRecTo);
@@ -1976,15 +2502,18 @@ async function _safetyRecDownloadKeys(keys) {
 
   var docs = [];
   for (var i = 0; i < keys.length; i++) {
-    var type = keys[i].slice(0, 2);            // 'ps' | 'tb'
+    var type = keys[i].slice(0, 2);            // 'ps' | 'tb' | 'in'
     var id = keys[i].slice(3);                 // remainder after 'xx:'
     var res = null;
     if (type === 'ps') {
       var pr = (_prestartCache || []).find(function(r) { return String(r.id) === id; });
       if (pr) res = await _psExportDocx(pr, { returnBlob: true });
-    } else {
+    } else if (type === 'tb') {
       var tr = (_toolboxCache || []).find(function(r) { return String(r.id) === id; });
       if (tr) res = await _tbExportDocx(tr, { returnBlob: true });
+    } else {
+      var ir = (_incidentCache || []).find(function(r) { return String(r.id) === id; });
+      if (ir) res = await _incExportDocx(ir, { returnBlob: true });
     }
     if (res && res.blob) docs.push(res);
   }
@@ -2012,17 +2541,19 @@ async function _safetyRecDownloadKeys(keys) {
 async function loadSafety() {
   if (_safetyLoaded) { showSafetyTab(_safetyTab); return; }
   _safetyLoaded = true;
-  await Promise.all([loadPrestarts(), loadToolboxTalks()]);
+  await Promise.all([loadPrestarts(), loadToolboxTalks(), loadIncidents()]);
   showSafetyTab(_safetyTab);
   // Register online replay once
   if (!_safetyOnlineHandler) {
     _safetyOnlineHandler = function() {
       _qReplay(_PS_QKEY, _PS_PILL, function() { loadPrestarts().then(renderPrestart); });
       _qReplay(_TB_QKEY, _TB_PILL, function() { loadToolboxTalks().then(renderToolbox); });
+      _qReplay(_INC_QKEY, _INC_PILL, function() { loadIncidents().then(renderIncidents); });
     };
     window.addEventListener('online', _safetyOnlineHandler);
     // Replay any queued writes from before this page load
     _qReplay(_PS_QKEY, _PS_PILL, function() { loadPrestarts().then(renderPrestart); });
     _qReplay(_TB_QKEY, _TB_PILL, function() { loadToolboxTalks().then(renderToolbox); });
+    _qReplay(_INC_QKEY, _INC_PILL, function() { loadIncidents().then(renderIncidents); });
   }
 }
