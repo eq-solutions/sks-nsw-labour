@@ -32,6 +32,20 @@ field-by-field instead of wholesale.
       v3.5.304 (#459). One table's failure can't freeze the app; degraded syncs emit a `sync_degraded`
       analytics event + toast.
 - [x] **`order=id` fix for id-less tables** — `team_members` / `timesheet_locks` — EQ Field v3.5.305 (#460).
+- [ ] **Fail-loud `sbFetchAll`** — SKS v3.10.95 (#63). The helper throws when a caller passes no
+      `orderBy` and the path has no `order=`, instead of silently defaulting to `order=id` (the latent
+      trap behind the v3.10.90–92 outage). **Deliberately NOT ported to EQ Field now** — audited
+      2026-07-12: EQ Field can't freeze (core boot wraps every fetch in `_loadSafe` → `.catch([])`, so a
+      stray 400 degrades one feature, observably, not the whole app), and its only un-`orderBy`'d id-less
+      caller (`project_targets`, `scripts/supabase.js`) is `try/catch`-guarded, Enterprise-tier-only, and
+      the table doesn't exist on eq-canonical or ehow. Land it at the codebase-merge phase (SKS code
+      carries it across); do the fail-loud sweep against EQ Field's own callers then, not speculatively now.
+- [ ] **Degrade email alert** — SKS v3.10.95 (#63). `_alertSyncDegraded` sends a throttled
+      (1/device/day) email to `leaveCCList` via the `send-email` function when a sync degrades, SKS-tenant
+      only, self-guarded. **Deliberately NOT ported to EQ Field now** — no live users to alert
+      (deploy-preview traffic only) and degrades are already observable via `sync_degraded` (#459). It
+      earns its keep the moment SKS users are on EQ Field — wire it (tenant-gated, EQ ops distribution)
+      at cutover.
 
 ## Login / role parity
 
