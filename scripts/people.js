@@ -331,23 +331,107 @@ function removePerson(id, name) {
 // v3.4.70: archive — reversible soft-hide. Sets archived=true, keeps row +
 // schedule entries intact. Different from the delete path (which wipes the
 // person + clears schedule entries permanently).
-function archivePerson(id, name) {
+// v3.10.104: optional `rating` (1–5, "would rehire") captured at archive
+// time — Labour Hire only, via the roster-grid archive button. Left
+// undefined for the existing People-page archive path so it never touches
+// an existing rating.
+function archivePerson(id, name, rating) {
   if (!isManager) { showToast('Supervision access required'); return; }
   const p = STATE.people.find(x => String(x.id) === String(id));
   if (!p) return;
+  const prevRating = p.rating;
   p.archived = true;
+  if (rating !== undefined) p.rating = rating || null;
   document.getElementById('badge-contacts').textContent =
     STATE.people.filter(x => !x.archived).length;
   renderCurrentPage();
-  archivePersonInSB(id, true).catch(() => {
+  archivePersonInSB(id, true, rating).catch(() => {
     p.archived = false;
+    if (rating !== undefined) p.rating = prevRating;
     document.getElementById('badge-contacts').textContent =
       STATE.people.filter(x => !x.archived).length;
     renderCurrentPage();
     showToast('Archive failed — check connection');
   });
-  showToast(`${name} archived`);
-  auditLog(`Archived: ${name}`, 'People', null, null);
+  showToast(rating ? `${name} archived · rated ${rating}/5` : `${name} archived`);
+  auditLog(`Archived: ${name}`, 'People', rating ? `Rating: ${rating}/5` : null, null);
+}
+
+// v3.10.104: update just the rating on an already-archived Labour Hire
+// person — reachable from the People page so a rating can be added or
+// corrected after the fact, not only at the moment of archiving.
+function savePersonRating(id, name, rating) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const p = STATE.people.find(x => String(x.id) === String(id));
+  if (!p) return;
+  const prevRating = p.rating;
+  p.rating = rating || null;
+  renderCurrentPage();
+  archivePersonInSB(id, p.archived, rating).catch(() => {
+    p.rating = prevRating;
+    renderCurrentPage();
+    showToast('Rating save failed — check connection');
+  });
+  showToast(rating ? `${name} rated ${rating}/5` : `${name} rating cleared`);
+  auditLog(`Rated: ${name}`, 'People', rating ? `Rating: ${rating}/5` : 'Cleared', null);
+}
+
+// v3.10.104: shared modal driving both the roster-grid "archive & rate" flow
+// and the People-page "edit rating on an archived row" flow. Mode lives in
+// #lh-archive-mode so one confirm handler can branch to the right action.
+function _setLHStarsVisual(val) {
+  document.querySelectorAll('#lh-archive-stars .lh-star').forEach((s, i) => {
+    s.style.color = i < val ? '#F59E0B' : '#E5E7EB';
+  });
+  const labels = ['Would you rehire them?', 'Would not rehire', 'Unlikely', 'Maybe', 'Good', 'Rehire immediately'];
+  document.getElementById('lh-archive-star-label').textContent = labels[val] || labels[0];
+}
+
+function setLHArchiveStar(val) {
+  document.getElementById('lh-archive-rating').value = val;
+  _setLHStarsVisual(val);
+}
+
+function openLHArchiveModal(id, name) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  document.getElementById('lh-archive-id').value = id;
+  document.getElementById('lh-archive-name').value = name;
+  document.getElementById('lh-archive-mode').value = 'archive';
+  document.getElementById('lh-archive-rating').value = '';
+  document.getElementById('lh-archive-title').textContent = `Archive ${name}`;
+  document.getElementById('lh-archive-msg').textContent = 'Rate this worker before archiving — helps decide who to bring back next time. Rating is optional.';
+  document.getElementById('lh-archive-confirm-btn').textContent = 'Archive';
+  _setLHStarsVisual(0);
+  openModal('modal-lh-archive');
+}
+
+function openLHRateModal(id, name) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const p = STATE.people.find(x => String(x.id) === String(id));
+  const current = (p && p.rating) || 0;
+  document.getElementById('lh-archive-id').value = id;
+  document.getElementById('lh-archive-name').value = name;
+  document.getElementById('lh-archive-mode').value = 'rate';
+  document.getElementById('lh-archive-rating').value = current || '';
+  document.getElementById('lh-archive-title').textContent = `Rate ${name}`;
+  document.getElementById('lh-archive-msg').textContent = 'Would you rehire them?';
+  document.getElementById('lh-archive-confirm-btn').textContent = 'Save Rating';
+  _setLHStarsVisual(current);
+  openModal('modal-lh-archive');
+}
+
+function confirmLHModal() {
+  const id     = document.getElementById('lh-archive-id').value;
+  const name   = document.getElementById('lh-archive-name').value;
+  const mode   = document.getElementById('lh-archive-mode').value;
+  const ratingRaw = document.getElementById('lh-archive-rating').value;
+  const rating = ratingRaw ? parseInt(ratingRaw, 10) : null;
+  closeModal('modal-lh-archive');
+  if (mode === 'rate') {
+    savePersonRating(id, name, rating);
+  } else {
+    archivePerson(id, name, rating);
+  }
 }
 
 function restorePerson(id, name) {
@@ -378,7 +462,14 @@ function _personActions(p) {
   // v3.4.70: archived rows show Restore + Delete (no edit). Active rows show
   // Edit + Archive + Delete. Archive = reversible; Delete = permanent.
   if (p.archived) {
-    return `<button class="btn-icon" title="Restore from archive"
+    // v3.10.104: Labour Hire archived rows get a rate/re-rate action —
+    // the star shows filled once a rating exists, hollow while unrated.
+    const rateBtn = p.group === 'Labour Hire'
+      ? `<button class="btn-icon" title="${p.rating ? 'Rated ' + p.rating + '/5 — tap to change' : 'Rate this worker'}"
+          data-pid="${p.id}" data-pname="${esc(p.name)}"
+          onclick="openLHRateModal(this.dataset.pid, this.dataset.pname)" style="color:#F59E0B">${p.rating ? '★' : '☆'}</button>`
+      : '';
+    return `${rateBtn}<button class="btn-icon" title="Restore from archive"
         data-pid="${p.id}" data-pname="${esc(p.name)}"
         onclick="restorePerson(this.dataset.pid, this.dataset.pname)" style="color:var(--green)">↺</button>
       <button class="btn-icon" style="color:var(--red)" title="Delete permanently"
@@ -460,6 +551,12 @@ function renderContacts() {
     'Labour Hire': '<span style="background:var(--navy-3);color:white;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700">LH</span>'
   };
 
+  // v3.10.104: Labour Hire "would rehire" rating chip — shown wherever a
+  // rating is set, so it's visible when deciding who to bring back.
+  const ratingChip = (p) => p.group === 'Labour Hire' && p.rating
+    ? `<span title="Rating: ${p.rating}/5" style="margin-left:6px;font-size:10px;font-weight:700;color:#F59E0B;white-space:nowrap">${'★'.repeat(p.rating)}<span style="color:#E5E7EB">${'★'.repeat(5 - p.rating)}</span></span>`
+    : '';
+
   const tafeDayLabel = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri' };
   const tafeBadge = (p) => p.tafe_day && tafeDayLabel[p.tafe_day]
     ? `<span title="TAFE day" style="background:#EEEDF8;color:#7C77B9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎓 ${tafeDayLabel[p.tafe_day]}</span>`
@@ -505,7 +602,7 @@ function renderContacts() {
           : '';
         html += `<div style="${archStyle};border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}${todayBadges(p)}${archChip}</div>
+            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}${todayBadges(p)}${archChip}${ratingChip(p)}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               ${_personPhone(p, 'mobile')}
               ${_personEmail(p, 'mobile')}
@@ -538,7 +635,7 @@ function renderContacts() {
         : '';
       return `
       <tr style="${rowStyle}">
-        <td class="name-col">${esc(p.name)}${archChip}</td>
+        <td class="name-col">${esc(p.name)}${archChip}${ratingChip(p)}</td>
         <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}${todayBadges(p)}</td>
         <td class="phone-col">${_personPhone(p, 'desktop')}</td>
         <td class="meta-col">${_personEmail(p, 'desktop')}</td>

@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.103
+  EQ Solves — Field  v3.10.104
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3754,6 +3754,25 @@
 
 <!-- Confirm modal -->
 <div class="modal-overlay" id="modal-confirm" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="confirm-title">Confirm</h3><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div><div class="modal-body"><p id="confirm-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6"></p></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancel</button><button class="btn btn-danger" id="confirm-action">Confirm</button></div></div></div>
+
+<!-- Labour Hire archive / rate modal — dual-purpose: archives+rates from the
+     roster grid, or just updates the rating from an already-archived row on
+     the People page (mode set in #lh-archive-mode) -->
+<div class="modal-overlay" id="modal-lh-archive" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="lh-archive-title">Archive</h3><button class="modal-close" onclick="closeModal('modal-lh-archive')">✕</button></div><div class="modal-body">
+  <input type="hidden" id="lh-archive-id">
+  <input type="hidden" id="lh-archive-name">
+  <input type="hidden" id="lh-archive-rating" value="">
+  <input type="hidden" id="lh-archive-mode" value="archive">
+  <p id="lh-archive-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6;margin-bottom:14px">Rate this worker before archiving — helps decide who to bring back next time. Rating is optional.</p>
+  <div style="display:flex;gap:4px;justify-content:center;margin-bottom:6px" id="lh-archive-stars">
+    <button type="button" class="lh-star" data-val="1" onclick="setLHArchiveStar(1)" style="background:none;border:none;cursor:pointer;font-size:30px;padding:2px 4px;color:#E5E7EB;min-width:40px;min-height:40px">★</button>
+    <button type="button" class="lh-star" data-val="2" onclick="setLHArchiveStar(2)" style="background:none;border:none;cursor:pointer;font-size:30px;padding:2px 4px;color:#E5E7EB;min-width:40px;min-height:40px">★</button>
+    <button type="button" class="lh-star" data-val="3" onclick="setLHArchiveStar(3)" style="background:none;border:none;cursor:pointer;font-size:30px;padding:2px 4px;color:#E5E7EB;min-width:40px;min-height:40px">★</button>
+    <button type="button" class="lh-star" data-val="4" onclick="setLHArchiveStar(4)" style="background:none;border:none;cursor:pointer;font-size:30px;padding:2px 4px;color:#E5E7EB;min-width:40px;min-height:40px">★</button>
+    <button type="button" class="lh-star" data-val="5" onclick="setLHArchiveStar(5)" style="background:none;border:none;cursor:pointer;font-size:30px;padding:2px 4px;color:#E5E7EB;min-width:40px;min-height:40px">★</button>
+  </div>
+  <div id="lh-archive-star-label" style="text-align:center;font-size:11px;color:var(--ink-3);min-height:14px">Would you rehire them?</div>
+</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-lh-archive')">Cancel</button><button class="btn btn-danger" id="lh-archive-confirm-btn" onclick="confirmLHModal()">Archive</button></div></div></div>
 
 <!-- Cell edit conflict modal -->
 <div class="modal-overlay" id="modal-cell-conflict" style="z-index:450">

@@ -529,7 +529,7 @@ function renderEditor() {
     + '<div style="flex:1;display:flex">'
     + days.map((d, i) => `<div style="flex:1;text-align:center;font-size:9px;font-weight:700;color:var(--ink-3);letter-spacing:.6px;text-transform:uppercase;padding:4px 0;border-right:1px solid var(--border)">${dayLabels[d]}<br><span style="font-weight:400;letter-spacing:0">${weekDatesE[i]}</span></div>`).join('')
     + '</div>'
-    + '<div style="width:80px;flex-shrink:0"></div>'
+    + '<div style="width:104px;flex-shrink:0"></div>'
     + '</div>';
 
   let html = dayHeaderHtml;
@@ -582,6 +582,9 @@ function renderEditor() {
           <button class="btn-icon" style="color:var(--red)" title="Clear week"
             data-pname="${esc(p.name)}" data-week="${week}"
             onclick="confirmClearWeek(this.dataset.pname, this.dataset.week)">⌫</button>
+          ${g === 'Labour Hire' ? `<button class="btn-icon" title="Archive &amp; rate"
+            data-pid="${p.id}" data-pname="${esc(p.name)}"
+            onclick="openLHArchiveModal(this.dataset.pid, this.dataset.pname)" style="color:var(--ink-3)">📦</button>` : ''}
         </div>
       </div>`;
     });
