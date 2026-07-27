@@ -1094,8 +1094,13 @@ async function archiveManagerInSB(id, archived = true) {
 }
 
 // v3.4.70: same pattern for people. Archive vs the existing deleted_at soft-delete.
-async function archivePersonInSB(id, archived = true) {
-  await sbFetch(`people?id=eq.${id}`, 'PATCH', { archived: !!archived });
+// v3.10.104: optional 3rd arg patches `rating` alongside (or instead of, when
+// `archived` is passed as the person's current value) the archive flag —
+// Labour Hire's "would rehire" signal, captured at archive time or later.
+async function archivePersonInSB(id, archived = true, rating) {
+  const body = { archived: !!archived };
+  if (rating !== undefined) body.rating = rating;
+  await sbFetch(`people?id=eq.${id}`, 'PATCH', body);
 }
 
 // ── Bulk import helpers ───────────────────────────────────────

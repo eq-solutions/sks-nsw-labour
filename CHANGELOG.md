@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.104 — Roster: archive Labour Hire straight from the grid, with a rating
+
+**Date:** 2026-07-28
+**Scope:** `scripts/roster.js`, `scripts/people.js`, `scripts/supabase.js`, `styles/base.css`, `index.html`, migration `2026-07-28_people_labour_hire_rating.sql`
+
+Labour Hire workers turn over fast — until now, archiving one meant leaving the roster grid for the People page, and there was nowhere to record whether you'd bring them back.
+
+- Roster editor: Labour Hire rows get a 📦 archive icon alongside the existing fill-week/edit/clear-week actions. Opens a small modal with an optional 1–5 star "would rehire" rating, then archives (reversible, same as the existing People-page archive).
+- People page: archived Labour Hire rows show the rating (★/☆, tap to set or change it later — not locked in at archive time) and a star chip next to the name wherever a rating is set.
+- New nullable `rating` column on `people` (`smallint`, 1–5, CHECK-constrained) — applied live to sks-labour. Not touched by the regular Add/Edit Person save path, so editing a person's details never clobbers their rating.
+
 # v3.10.103 — Leave: make the email-approval confirm step unmissable
 
 **Date:** 2026-07-22
