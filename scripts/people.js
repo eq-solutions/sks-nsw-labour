@@ -394,14 +394,21 @@ function setLHArchiveStar(val) {
 
 function openLHArchiveModal(id, name) {
   if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.10.105: prefill with any existing rating (e.g. a restored-then-
+  // re-archived worker) so leaving the stars untouched preserves it instead
+  // of silently wiping it to null — only an explicit tap overwrites.
+  const p = STATE.people.find(x => String(x.id) === String(id));
+  const current = (p && p.rating) || 0;
   document.getElementById('lh-archive-id').value = id;
   document.getElementById('lh-archive-name').value = name;
   document.getElementById('lh-archive-mode').value = 'archive';
-  document.getElementById('lh-archive-rating').value = '';
+  document.getElementById('lh-archive-rating').value = current || '';
   document.getElementById('lh-archive-title').textContent = `Archive ${name}`;
-  document.getElementById('lh-archive-msg').textContent = 'Rate this worker before archiving — helps decide who to bring back next time. Rating is optional.';
+  document.getElementById('lh-archive-msg').textContent = current
+    ? 'Rate this worker before archiving — helps decide who to bring back next time. Their existing rating is shown; change it or leave as-is.'
+    : 'Rate this worker before archiving — helps decide who to bring back next time. Rating is optional.';
   document.getElementById('lh-archive-confirm-btn').textContent = 'Archive';
-  _setLHStarsVisual(0);
+  _setLHStarsVisual(current);
   openModal('modal-lh-archive');
 }
 

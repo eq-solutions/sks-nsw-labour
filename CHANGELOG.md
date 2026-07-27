@@ -1,5 +1,12 @@
 # EQ Solves Field — Changelog
 
+# v3.10.105 — Roster: archive modal preserves an existing Labour Hire rating
+
+**Date:** 2026-07-28
+**Scope:** `scripts/people.js`
+
+Follow-up to v3.10.104: the roster-grid archive modal always opened with the star picker blank, even for a worker who'd been rated on a previous archive cycle (e.g. restored, then re-archived later). Archiving without picking a star sent `rating: null`, silently erasing the earlier rating. The modal now prefills with the worker's existing rating (same as the People-page "rate" action) — leaving it untouched preserves it, and only an explicit tap changes it.
+
 # v3.10.104 — Roster: archive Labour Hire straight from the grid, with a rating
 
 **Date:** 2026-07-28
