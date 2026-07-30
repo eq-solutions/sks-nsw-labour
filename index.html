@@ -640,7 +640,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.105
+  EQ Solves — Field  v3.10.106
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -4045,7 +4045,11 @@ async function loadFromSupabase() {
     const [people, sites, schedule, managers, tsRows, teams, teamMembers, tsLocks] = await Promise.all([
       // Load-critical — a rejection here aborts the sync and keeps the last
       // known-good IDB snapshot (see catch). Do NOT wrap these.
-      sbFetch('people?select=*&order=name'),
+      // Explicit column list, no `pin` — the login PIN must never round-trip
+      // in the bulk roster load (every session, cached to IDB). The two real
+      // PIN-check paths (main gate → /verify-pin function; staff timesheet
+      // gate → its own single-row fetch in auth.js) don't read this array.
+      sbFetch('people?select=id,name,group,licence,agency,phone,created_at,org_id,email,deleted_at,updated_at,tafe_day,notify_roster,dob_day,dob_month,start_date,year_level,role,archived,canonical_id,canonical_synced_at,licence_expiry,employment_type,rto,hire_company,has_pin,emergency_contact,dob,rating&order=name'),
       sbFetch('sites?select=*&order=name'),
       sbFetchAll('schedule?select=*', 'id'),
       sbFetch('managers?select=*&order=name'),

@@ -1,5 +1,12 @@
 # EQ Solves Field — Changelog
 
+# v3.10.106 — Security: stop shipping the login PIN in the bulk roster load
+
+**Date:** 2026-07-30
+**Scope:** `index.html`
+
+The main roster/people sync (`loadFromSupabase`, every session, cached to IndexedDB for offline use) fetched `people?select=*` — including the plaintext 4-digit `pin` column — even though nothing downstream ever read it back out of that array (the app's own STATE.people mapper already dropped it before use). That meant every worker's login PIN round-tripped in cleartext over the wire on every app load, and was directly retrievable by anyone holding the public anon key via the same query. Neither real PIN-check path is affected: the main login gate goes through the server-side `/verify-pin` function, and the staff-timesheet PIN gate does its own single-row scoped fetch. Explicit column list now excludes `pin`; no other behavior changes.
+
 # v3.10.105 — Roster: archive modal preserves an existing Labour Hire rating
 
 **Date:** 2026-07-28
