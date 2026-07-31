@@ -1,5 +1,15 @@
 # EQ Solves Field — Changelog
 
+# v3.10.107 — Safety: photo picker allowed gallery photos again + submitted forms stay editable
+
+**Date:** 2026-07-31
+**Scope:** `scripts/safety.js`
+
+Two pieces of direct field feedback on Toolbox Talks:
+
+- The photo picker forced the camera open on mobile and skipped the "choose from library" option — `capture="environment"` was set alongside `accept="image/*"` on the shared photo input, so an existing JPEG already on the phone couldn't be selected, only a fresh photo taken. Dropped `capture`; camera and gallery are both available again. The input is shared by Prestart, Toolbox and Incident, so all three are fixed.
+- A submitted Prestart/Toolbox/Incident left every field, attendance row and photo fully editable in the UI, but the Save button disappeared the moment status flipped to `submitted` — any edit made after that point was silently discarded on close, with no save path to persist it. All three forms now show a "Save changes" button post-submit, reusing the same PATCH-by-id path that already worked for drafts; `status`/`submitted_at`/`submitted_by` are untouched by a post-submit save.
+
 # v3.10.106 — Security: stop shipping the login PIN in the bulk roster load
 
 **Date:** 2026-07-30
