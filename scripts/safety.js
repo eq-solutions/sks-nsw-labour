@@ -208,7 +208,7 @@ function _photoRenderList(draft, prefix) {
   const addBtn = photos.length < _PHOTO_MAX
     ? '<label style="width:80px;height:80px;border:1px dashed var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:10px;color:var(--ink-3);user-select:none">'
       + '<span style="font-size:20px">📷</span><span style="margin-top:2px">Add</span>'
-      + '<input type="file" accept="image/*" capture="environment" onchange="' + prefix + 'PhotoAdd(this)" style="display:none"></label>'
+      + '<input type="file" accept="image/*" onchange="' + prefix + 'PhotoAdd(this)" style="display:none"></label>'
     : '';
   const caps = photos.length
     ? '<div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px">'
@@ -663,7 +663,7 @@ function renderPrestartForm() {
   }
   h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-prestart\')">Close</button>';
   h += '<button class="btn btn-secondary" onclick="_psExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
-  if (!submitted) h += '<button class="btn" onclick="savePrestartDraft()">Save draft</button>';
+  h += '<button class="btn" onclick="savePrestartDraft()">' + (submitted ? 'Save changes' : 'Save draft') + '</button>';
   h += !submitted
     ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitPrestart()">Submit</button>'
     : '<span style="font-size:11px;color:var(--ink-3);align-self:center">Submitted ✓</span>';
@@ -828,7 +828,7 @@ async function savePrestartDraft() {
       const idx  = _prestartCache.findIndex(function(r) { return String(r.id) === _prestartId; });
       if (idx >= 0) _prestartCache[idx] = full; else _prestartCache.unshift(full);
     }
-    showToast('Draft saved');
+    showToast(_prestartDraft && _prestartDraft.status === 'submitted' ? 'Changes saved' : 'Draft saved');
     renderPrestart(); renderPrestartForm();
   } finally { _prestartInflight.delete('save'); }
 }
@@ -1747,7 +1747,7 @@ function renderToolboxForm() {
   }
   h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-toolbox\')">Close</button>';
   h += '<button class="btn btn-secondary" onclick="_tbExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
-  if (!submitted) h += '<button class="btn" onclick="saveToolboxDraft()">Save draft</button>';
+  h += '<button class="btn" onclick="saveToolboxDraft()">' + (submitted ? 'Save changes' : 'Save draft') + '</button>';
   h += !submitted
     ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitToolbox()">Submit</button>'
     : '<span style="font-size:11px;color:var(--ink-3);align-self:center">Submitted ✓</span>';
@@ -1834,7 +1834,7 @@ async function saveToolboxDraft() {
       const idx  = _toolboxCache.findIndex(function(r) { return String(r.id) === _toolboxId; });
       if (idx >= 0) _toolboxCache[idx] = full; else _toolboxCache.unshift(full);
     }
-    showToast('Draft saved');
+    showToast(_toolboxDraft && _toolboxDraft.status === 'submitted' ? 'Changes saved' : 'Draft saved');
     renderToolbox(); renderToolboxForm();
   } finally { _toolboxInflight.delete('save'); }
 }
@@ -2017,7 +2017,7 @@ function renderIncidentForm() {
   }
   h += '<button class="btn btn-secondary" onclick="closeModal(\'modal-incident\')">Close</button>';
   h += '<button class="btn btn-secondary" onclick="_incExportDocx()" title="Download as Word document" style="flex-shrink:0">&#8595;&nbsp;Word</button>';
-  if (!submitted) h += '<button class="btn" onclick="saveIncidentDraft()">Save draft</button>';
+  h += '<button class="btn" onclick="saveIncidentDraft()">' + (submitted ? 'Save changes' : 'Save draft') + '</button>';
   h += !submitted
     ? '<button class="btn" style="background:#15803d;color:#fff;border-color:#15803d" onclick="submitIncident()">Submit</button>'
     : '<span style="font-size:11px;color:var(--ink-3);align-self:center">Submitted ✓</span>';
@@ -2119,7 +2119,7 @@ async function saveIncidentDraft() {
       const idx  = _incidentCache.findIndex(function(r) { return String(r.id) === _incidentId; });
       if (idx >= 0) _incidentCache[idx] = full; else _incidentCache.unshift(full);
     }
-    showToast('Draft saved');
+    showToast(_incidentDraft && _incidentDraft.status === 'submitted' ? 'Changes saved' : 'Draft saved');
     renderIncidents(); renderIncidentForm();
   } finally { _incidentInflight.delete('save'); }
 }
