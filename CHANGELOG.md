@@ -1,5 +1,12 @@
 # EQ Solves Field — Changelog
 
+# v3.10.108 — Remove the "What's new" banner
+
+**Date:** 2026-08-04
+**Scope:** `index.html`, `sw.js`, `scripts/whatsnew.js` (deleted)
+
+Dropped the dismissible "What's new" release-notes banner entirely — the script (`scripts/whatsnew.js`), its `#whatsnew-banner` container div, the sidebar "What's new" link, and its precache entry in `sw.js`. Unrelated to the roster-change push-notification opt-in in `scripts/auth.js`, which stays.
+
 # v3.10.107 — Safety: photo picker allowed gallery photos again + submitted forms stay editable
 
 **Date:** 2026-07-31

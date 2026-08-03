@@ -80,7 +80,6 @@
 <script src="scripts/journal.js"></script>
 <script src="scripts/tafe.js"></script>
 <script src="scripts/digest-settings.js"></script>
-<script src="scripts/whatsnew.js"></script>
 <script src="scripts/tender-parser.js"></script>
 <script src="scripts/pipeline-import.js"></script>
 <script src="scripts/pipeline.js"></script>
@@ -640,7 +639,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.107
+  EQ Solves — Field  v3.10.108
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3177,8 +3176,6 @@
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
       &nbsp;·&nbsp;
       <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
-      &nbsp;·&nbsp;
-      <button onclick="openWhatsNew()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">What's new</button>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.32);font-size:9px;line-height:1.5">
         Property of EQ
       </div>
@@ -3233,8 +3230,6 @@
 
   <!-- Pages — content injected by render functions -->
   <div class="page print-active" id="page-dashboard">
-    <!-- v3.4.23: "What's new" banner — populated by scripts/whatsnew.js, dismissed via localStorage -->
-    <div id="whatsnew-banner" style="display:none"></div>
     <div class="stats-row">
       <div class="stat-card"><div class="stat-card-label">⚡ Direct</div><div class="stat-card-value" id="sc-direct">—</div><div class="stat-card-sub">employees</div><div class="stat-accent-bar" style="background:var(--navy)"></div></div>
       <div class="stat-card"><div class="stat-card-label">🎓 Apprentices</div><div class="stat-card-value" id="sc-app">—</div><div class="stat-card-sub">On roster</div><div class="stat-accent-bar" style="background:var(--purple)"></div></div>
