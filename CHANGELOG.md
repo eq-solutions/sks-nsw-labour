@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.110 — Remove the "turn on roster notifications" login popup
+
+**Date:** 2026-08-04
+**Scope:** `scripts/auth.js`
+
+Removed the banner that popped up 3 seconds after login asking staff to turn on push notifications ("Get notified when your roster changes" / Turn on / ×). It only stopped asking — anyone already subscribed keeps getting real push notifications when a supervisor rosters them onto tomorrow's schedule; `send-roster-push` (the Supabase edge function that actually sends them), `triggerRosterPush()`, and `_ensurePushSubscribed()`'s existing-grant refresh are all untouched.
+
+`_showPushBanner()` and `_requestAndSubscribe()` deleted outright — both were dead code the moment the banner that called them was gone, not left behind as an unused escape hatch.
+
 # v3.10.109 — Safety records: load the full history, not just the newest 200
 
 **Date:** 2026-08-04
