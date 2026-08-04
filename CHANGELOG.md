@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.109 — Safety records: load the full history, not just the newest 200
+
+**Date:** 2026-08-04
+**Scope:** `scripts/safety.js`
+
+The three safety loaders (`loadPrestarts`, `loadToolboxTalks`, `loadIncidents`) each fetched with a flat `&limit=200`, ordered newest-first. Once a table passes 200 rows the **oldest** records fall off the bottom of the cache — they disappear from the Records tab even with the range set to All, with no error, no console warning and nothing to indicate the list was truncated. It reads as data loss.
+
+Live check that prompted this: SKS has 138 prestarts and is adding roughly 25 a week, so the cap was two to three weeks out. No records have been lost yet.
+
+All three now use `sbFetchAll()` (`scripts/supabase.js`), which pages at 1000 rows per request until the table is exhausted. Each path already carries its own `order=`, so `sbFetchAll`'s explicit-order guard (the one added after the v3.10.90–92 outage) is satisfied without passing a second argument.
+
+Unchanged, and worth knowing when hunting for a prestart: the **Prestart tab** deliberately shows only today plus the past 7 days, and the **Records tab** defaults to the last 30 days. Full history has always been one filter click away under Records → All — this fix keeps that true as the table grows.
+
 # v3.10.108 — Remove the "What's new" banner
 
 **Date:** 2026-08-04

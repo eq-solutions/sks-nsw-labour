@@ -484,7 +484,11 @@ const _PS_PILL = 'prestart-offline-pill';
 
 async function loadPrestarts() {
   try {
-    const rows = await sbFetch('prestarts?select=*&order=briefing_date.desc,briefing_time.desc&limit=200');
+    // v3.10.109: paginate instead of a flat limit=200. The old cap silently
+    // dropped the OLDEST records once the table passed 200 rows — Records → All
+    // would quietly stop showing history with no error. order= is already in the
+    // path, so sbFetchAll's explicit-order guard is satisfied.
+    const rows = await sbFetchAll('prestarts?select=*&order=briefing_date.desc,briefing_time.desc');
     _prestartCache = Array.isArray(rows) ? rows : [];
   } catch(e) {
     console.warn('EQ[safety/prestart] load failed:', e && e.message || e);
@@ -1608,7 +1612,8 @@ const _TB_PILL = 'toolbox-offline-pill';
 
 async function loadToolboxTalks() {
   try {
-    const rows = await sbFetch('toolbox_talks?select=*&order=meeting_date.desc,meeting_time.desc&limit=200');
+    // v3.10.109: paginate — see loadPrestarts() for why the flat cap was unsafe.
+    const rows = await sbFetchAll('toolbox_talks?select=*&order=meeting_date.desc,meeting_time.desc');
     _toolboxCache = Array.isArray(rows) ? rows : [];
   } catch(e) {
     console.warn('EQ[safety/toolbox] load failed:', e && e.message || e);
@@ -1868,7 +1873,8 @@ const _INC_PILL = 'incident-offline-pill';
 
 async function loadIncidents() {
   try {
-    const rows = await sbFetch('incidents?select=*&order=incident_date.desc,incident_time.desc&limit=200');
+    // v3.10.109: paginate — see loadPrestarts() for why the flat cap was unsafe.
+    const rows = await sbFetchAll('incidents?select=*&order=incident_date.desc,incident_time.desc');
     _incidentCache = Array.isArray(rows) ? rows : [];
   } catch(e) {
     console.warn('EQ[safety/incident] load failed:', e && e.message || e);
