@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.111 — Delete an approved leave request, including its roster entry
+
+**Date:** 2026-08-10
+**Scope:** `scripts/leave.js`
+
+Leave requests had no delete path — only Archive (soft-hides from the Leave tab and calendar but leaves the roster untouched) and Withdraw (Pending only). If an Approved request needed to go away entirely, Archive alone left the leave code still sitting on the roster grid, main calendar and My Schedule tile, because those all read live `schedule` cells that `writeLeaveToSchedule()` stamped in on approval — archiving never touched that side.
+
+Added a manager-only **🗑 Delete** action (confirm modal, same pattern as Withdraw/Remove Person) on any resolved request (Approved/Rejected/Withdrawn). For an Approved request it first reverses the roster write-back — clearing each affected day's schedule cell via the same `saveCellToSB()` used everywhere else — but only where the cell still holds exactly that request's leave code, so a day a supervisor has since overwritten with a real shift is left alone. Then it hard-deletes the `leave_requests` row. `realtime.js` already had `DELETE` handling wired up for `leave_requests` (`_rtApplyLeaveChange`) — this was the missing UI action to trigger it, so other open sessions sync live with no further changes needed there.
+
 # v3.10.110 — Remove the "turn on roster notifications" login popup
 
 **Date:** 2026-08-04

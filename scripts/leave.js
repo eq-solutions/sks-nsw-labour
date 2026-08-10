@@ -746,6 +746,93 @@ async function unarchiveLeaveRequest(id) {
   }
 }
 
+// v3.10.111: Permanently delete a leave request. Unlike archive (soft-hide,
+// roster untouched) this also reverses the roster write-back for Approved
+// requests — writeLeaveToSchedule() stamped req.leave_type into STATE.schedule
+// cells on approval, and nothing before this existed to undo that half of the
+// record. Manager-only; hard DELETE is permitted by the existing leave_requests
+// RLS policy (anon_delete, same shape as anon_insert/anon_update), and
+// realtime.js._rtApplyLeaveChange already handles the DELETE event to sync
+// other open sessions — this just adds the UI path that was missing.
+function confirmDeleteLeaveRequest(id) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const req = leaveRequests.find(r => String(r.id) === String(id));
+  if (!req) return;
+  const typeLabels = { 'A/L': 'Annual Leave', 'U/L': 'Unpaid Leave', 'RDO': 'RDO' };
+  const rosterNote = req.status === 'Approved'
+    ? ' This also removes it from the roster and calendar.'
+    : '';
+  document.getElementById('confirm-title').textContent = 'Delete Leave Request';
+  document.getElementById('confirm-msg').textContent =
+    `Permanently delete ${req.requester_name}'s ${typeLabels[req.leave_type] || req.leave_type} for ${req.date_start} to ${req.date_end}? This cannot be undone.${rosterNote}`;
+  document.getElementById('confirm-action').textContent = 'Delete';
+  document.getElementById('confirm-action').onclick = async () => {
+    closeModal('modal-confirm');
+    await deleteLeaveRequest(id);
+  };
+  openModal('modal-confirm');
+}
+
+async function deleteLeaveRequest(id) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const req = leaveRequests.find(r => String(r.id) === String(id));
+  if (!req) return;
+  const lockKey = String(id);
+  if (_leaveInflight.has(lockKey)) return;    // v3.4.54-style guard
+  _leaveInflight.add(lockKey);
+  try {
+    if (req.status === 'Approved') {
+      try {
+        await clearLeaveFromSchedule(req);
+      } catch (clearErr) {
+        console.error('Leave roster clear failed:', clearErr);
+        showToast(`⚠ Deleting anyway, but couldn't clear ${req.requester_name}'s roster days — check manually`);
+      }
+    }
+    await sbFetch(`leave_requests?id=eq.${id}`, 'DELETE');
+    auditLog(`Deleted leave: ${req.requester_name} ${req.leave_type} (was ${req.status})`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
+    leaveRequests = leaveRequests.filter(r => String(r.id) !== String(id));
+    updateLeaveBadge();
+    renderLeave();
+    showToast(`Leave deleted for ${req.requester_name}`);
+  } catch (e) {
+    showToast('Delete failed — check connection');
+  } finally {
+    _leaveInflight.delete(lockKey);
+  }
+}
+
+// Inverse of writeLeaveToSchedule(): clears schedule cells that still show
+// this request's leave code. A day only clears if the cell still equals
+// req.leave_type exactly — if a supervisor has since overwritten it with a
+// real shift or a different code, that edit wins and is left alone.
+async function clearLeaveFromSchedule(req) {
+  const isOnRoster = (STATE.people || []).some(p => p.name === req.requester_name);
+  if (!isOnRoster) return; // supervisors were never written to the schedule
+
+  const dates  = _getLeaveDates(req);
+  const byWeek = {};
+  dates.forEach(ds => {
+    const dt     = new Date(ds + 'T00:00:00');
+    const wk     = getWeekForDate(dt);
+    const dayIdx = (dt.getDay() + 6) % 7;
+    const dayKey = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][dayIdx];
+    if (!byWeek[wk]) byWeek[wk] = [];
+    byWeek[wk].push(dayKey);
+  });
+
+  for (const [week, dayKeys] of Object.entries(byWeek)) {
+    const entry = STATE.schedule.find(r => r.name === req.requester_name && r.week === week);
+    if (!entry) continue;
+    for (const day of dayKeys) {
+      if (entry[day] !== req.leave_type) continue;
+      await saveCellToSB(req.requester_name, week, day, '');
+      entry[day] = '';
+    }
+    if (STATE.scheduleIndex) STATE.scheduleIndex[`${req.requester_name}||${week}`] = entry;
+  }
+}
+
 // v3.4.5 (L14): Withdraw a pending request. Available to the requester
 // themselves (matched via the auth-set sessionStorage name) or any supervisor.
 // Uses modal-confirm so people can't tap past it by accident on a small screen.
@@ -1103,6 +1190,7 @@ function renderLeave() {
         ${canWithdraw ? `<button class="btn btn-secondary btn-sm" onclick="withdrawLeaveRequest('${r.id}')" style="font-size:10px;color:var(--red);border-color:var(--red)">✕ Withdraw</button>` : ''}
         ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest('${r.id}')" style="font-size:10px">📦 Archive</button>` : ''}
         ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest('${r.id}')" style="font-size:10px">↩ Restore</button>` : ''}
+        ${isResolved && isManager ? `<button class="btn btn-secondary btn-sm" onclick="confirmDeleteLeaveRequest('${r.id}')" style="font-size:10px;color:var(--red);border-color:var(--red)">🗑 Delete</button>` : ''}
       </div>
     </div>`;
   });
