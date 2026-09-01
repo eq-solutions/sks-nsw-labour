@@ -1,5 +1,14 @@
 # EQ Solves Field — Changelog
 
+# v3.10.112 — Login screen: "moved to core.eq.solutions" notice
+
+**Date:** 2026-09-01
+**Scope:** `index.html`, `scripts/app-state.js`
+
+SKS ops is moving to `core.eq.solutions/sks/field`. Added a tenant-scoped notice at the top of the login gate — same mechanism as the existing privacy disclaimer (`TENANT_BRANDING.sks` in `applyTenantBranding()`), a new `gateMoveNoticeHtml` field rendered via `innerHTML` (the disclaimer is text-only; this one needs a real link).
+
+States plainly that this app is no longer being updated, links to the new URL, and gives a click-to-call/email fallback for anyone who gets stuck. Login itself is untouched — the PIN/name flow still works exactly as before, this is messaging only. EQ/demo tenant unaffected (confirmed live via `?tenant=eq`).
+
 # v3.10.111 — Delete an approved leave request, including its roster entry
 
 **Date:** 2026-08-10

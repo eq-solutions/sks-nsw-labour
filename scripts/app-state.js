@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.111';
+const APP_VERSION = '3.10.112';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -224,6 +224,7 @@ const TENANT_BRANDING = {
     whiteGateCard: true,
     rememberMeDays: 7,
     gateDisclaimer: 'This system stores employee names, contact details and work schedules. Access is restricted to authorised SKS Technologies staff only. Sharing this URL or access code outside the company is not permitted.',
+    gateMoveNoticeHtml: '⚠️ <strong>This app is no longer being updated.</strong><br>Go to <a href="https://core.eq.solutions/sks/field" target="_blank" rel="noopener" style="color:#B45309;font-weight:800;text-decoration:underline">core.eq.solutions/sks/field</a> instead.<br><span style="font-size:11px;font-weight:500;color:rgba(31,51,92,.65)">Trouble logging in? Call Royce on <a href="tel:+61432944014" style="color:#1F335C;font-weight:700">0432&nbsp;944&nbsp;014</a> or <a href="mailto:royce.milmlow@sks.com.au" style="color:#1F335C;font-weight:700">email</a></span>',
     // Client-side access codes — validated in auth.js without hitting the
     // Netlify verify-pin function (which isn't deployed to this repo).
     // Staff code logs in with view-only access; supervisor code additionally
@@ -311,6 +312,15 @@ function applyTenantBranding() {
     if (discEl) {
       discEl.textContent = brand.gateDisclaimer;
       discEl.style.display = 'block';
+    }
+  }
+
+  // "No longer updated — moved to core.eq.solutions" notice
+  if (brand.gateMoveNoticeHtml) {
+    const moveEl = document.getElementById('gate-move-notice');
+    if (moveEl) {
+      moveEl.innerHTML = brand.gateMoveNoticeHtml;
+      moveEl.style.display = 'block';
     }
   }
 
