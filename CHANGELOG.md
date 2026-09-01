@@ -1,5 +1,16 @@
 # EQ Solves Field — Changelog
 
+# v3.10.113 — Force-logout everyone on SKS + "don't fill this out" timesheet notice
+
+**Date:** 2026-09-02
+**Scope:** `scripts/auth.js`, `scripts/app-state.js`, `index.html`
+
+Royce has moved SKS ops over to EQ Field. Two changes:
+
+1. **Force logout.** `checkAccess()` now runs `_forceLogoutIfStale()` first, gated by a new `TENANT_BRANDING.sks.forceLogoutEpoch` (bumped to `1`). On mismatch it clears the current session (`sessionStorage`) and any "remember me" (`localStorage`, up to 7 days) — the same keys `logoutUser()` clears, plus the staff-timesheet session flag — then stamps a `localStorage` "seen" marker so it fires once per device, not on every tab/reload. Already-open tabs pick this up automatically via the existing SW_ACTIVATED reload (no manual close-and-reopen needed). Login itself is completely untouched — anyone who still needs this app just logs back in, same PIN/name flow as always. Bumping `forceLogoutEpoch` again in future forces everyone out a second time. `eq`/demo tenant unaffected.
+
+2. **Timesheet stop notice.** Both timesheet surfaces — the manager grid (`#page-timesheets`) and staff self-entry "My Timesheet" (`#page-staff-ts`) — get a new red, non-dismissible banner (`TENANT_BRANDING.sks.tsMoveNoticeHtml`, same `applyTenantBranding()` mechanism as the existing login notice from v3.10.112) telling people to enter timesheets in EQ Field instead, with the same call/email fallback. Message only — the timesheet form underneath is untouched and still works for anyone who genuinely needs it.
+
 # v3.10.112 — Login screen: "moved to core.eq.solutions" notice
 
 **Date:** 2026-09-01
