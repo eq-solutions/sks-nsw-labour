@@ -452,7 +452,38 @@ async function checkPin() {
   }
 }
 
+// One-time forced logout (v3.10.113): SKS ops moved to EQ Field. Bumping
+// TENANT_BRANDING.sks.forceLogoutEpoch boots every signed-in SKS session
+// (this tab's sessionStorage AND any remember-me in localStorage) back to
+// the gate — open tabs pick it up via the existing SW_ACTIVATED reload (see
+// _scheduleSwReload in index.html). Login itself is untouched, so anyone
+// who still needs this app just logs back in. Scoped to sks only; eq/demo
+// never affected. Uses localStorage (not sessionStorage) for the "seen"
+// marker so it fires once per device, not once per tab.
+function _forceLogoutIfStale() {
+  const brand = (typeof TENANT_BRANDING !== 'undefined') ? TENANT_BRANDING[TENANT.ORG_SLUG] : null;
+  const epoch = (brand && brand.forceLogoutEpoch) || 0;
+  if (!epoch) return;
+  const seenKey = 'eq_force_logout_seen_' + TENANT.ORG_SLUG;
+  const seen = parseInt(localStorage.getItem(seenKey) || '0', 10);
+  if (seen >= epoch) return;
+  sessionStorage.removeItem(ACCESS_KEY);
+  sessionStorage.removeItem('eq_logged_in_name');
+  sessionStorage.removeItem('eq_canonical_id');
+  sessionStorage.removeItem('eq_canonical_phone');
+  sessionStorage.removeItem('eq_auto_admin');
+  sessionStorage.removeItem('eq_role');
+  sessionStorage.removeItem('eq_agency');
+  sessionStorage.removeItem('eq_session_token');
+  sessionStorage.removeItem(STAFF_TS_SESSION);
+  localStorage.removeItem('eq_remember_token');
+  localStorage.removeItem('eq_agent_token');
+  try { localStorage.removeItem('eq_local_remember_' + TENANT.ORG_SLUG); } catch (e) {}
+  localStorage.setItem(seenKey, String(epoch));
+}
+
 async function checkAccess() {
+  _forceLogoutIfStale();
   if (sessionStorage.getItem(ACCESS_KEY) === '1') {
     // Already authenticated — tell the shell overlay to clear.
     _postHandoffStatus({

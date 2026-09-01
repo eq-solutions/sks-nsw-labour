@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.112';
+const APP_VERSION = '3.10.113';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -225,6 +225,17 @@ const TENANT_BRANDING = {
     rememberMeDays: 7,
     gateDisclaimer: 'This system stores employee names, contact details and work schedules. Access is restricted to authorised SKS Technologies staff only. Sharing this URL or access code outside the company is not permitted.',
     gateMoveNoticeHtml: '⚠️ <strong>This app is no longer being updated.</strong><br>Go to <a href="https://core.eq.solutions/sks/field" target="_blank" rel="noopener" style="color:#B45309;font-weight:800;text-decoration:underline">core.eq.solutions/sks/field</a> instead.<br><span style="font-size:11px;font-weight:500;color:rgba(31,51,92,.65)">Trouble logging in? Call Royce on <a href="tel:+61432944014" style="color:#1F335C;font-weight:700">0432&nbsp;944&nbsp;014</a> or <a href="mailto:royce.milmlow@sks.com.au" style="color:#1F335C;font-weight:700">email</a></span>',
+    // v3.10.113 — bump to force every signed-in SKS session back to the
+    // gate (see _forceLogoutIfStale in auth.js). Login itself is untouched —
+    // this only clears the session, so anyone who still needs this app can
+    // just log back in. One-shot per value: bump it again later to force
+    // everyone out a second time. Never applies to eq.
+    forceLogoutEpoch: 1,
+    // Stop notice on both timesheet surfaces (Timesheets grid + My Timesheet
+    // self-entry) — same red/"stop" framing, applied via applyTenantBranding().
+    // Message only, same as gateMoveNoticeHtml — the form underneath still
+    // works for anyone who genuinely needs it.
+    tsMoveNoticeHtml: '🛑 <strong>Don\'t fill this out — enter your timesheet in EQ Field instead.</strong><br>Go to <a href="https://core.eq.solutions/sks/field" target="_blank" rel="noopener" style="color:#B91C1C;font-weight:800;text-decoration:underline">core.eq.solutions/sks/field</a>.<br><span style="font-size:11px;font-weight:500;color:rgba(31,51,92,.65)">Trouble finding it? Call Royce on <a href="tel:+61432944014" style="color:#1F335C;font-weight:700">0432&nbsp;944&nbsp;014</a> or <a href="mailto:royce.milmlow@sks.com.au" style="color:#1F335C;font-weight:700">email</a></span>',
     // Client-side access codes — validated in auth.js without hitting the
     // Netlify verify-pin function (which isn't deployed to this repo).
     // Staff code logs in with view-only access; supervisor code additionally
@@ -322,6 +333,18 @@ function applyTenantBranding() {
       moveEl.innerHTML = brand.gateMoveNoticeHtml;
       moveEl.style.display = 'block';
     }
+  }
+
+  // "Don't fill this out — moved to EQ Field" stop notice on both
+  // timesheet surfaces (manager grid + staff self-entry).
+  if (brand.tsMoveNoticeHtml) {
+    ['ts-move-notice', 'staff-ts-move-notice'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerHTML = brand.tsMoveNoticeHtml;
+        el.style.display = 'block';
+      }
+    });
   }
 
   // White gate card styling is handled via body.tenant-sks CSS in base.css.
