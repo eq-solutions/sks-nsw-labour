@@ -482,6 +482,35 @@ function _forceLogoutIfStale() {
   localStorage.setItem(seenKey, String(epoch));
 }
 
+// "Click OK to continue" gate (v3.10.114) — reinforces gate-move-notice
+// (the banner above the login form) with something that has to be
+// actively dismissed, since a banner is easy to scroll past without
+// reading. Shares copy with the banner (gateMoveNoticeHtml, rendered into
+// #modal-gate-move-body by applyTenantBranding()) so there's one source
+// of truth for the message. Shown once per tab session — sessionStorage,
+// not localStorage, so it resurfaces on a fresh visit rather than being
+// dismissed forever on first contact. sks only; eq/demo unaffected
+// (brand.gateMoveNoticeHtml is unset for both).
+function _maybeShowGateMoveModal() {
+  const brand = (typeof TENANT_BRANDING !== 'undefined') ? TENANT_BRANDING[TENANT.ORG_SLUG] : null;
+  if (!brand || !brand.gateMoveNoticeHtml) return;
+  if (sessionStorage.getItem('eq_gate_move_modal_seen')) return;
+  sessionStorage.setItem('eq_gate_move_modal_seen', '1');
+  if (typeof openModal === 'function') openModal('modal-gate-move');
+}
+
+// Same pattern for the Timesheets stop notice. Manager grid and staff
+// self-entry share one flag/modal — they already share tsMoveNoticeHtml,
+// so there's nothing gained by tracking them separately. Triggered from
+// showPage() in index.html on entry to either 'timesheets' or 'staff-ts'.
+function _maybeShowTsMoveModal() {
+  const brand = (typeof TENANT_BRANDING !== 'undefined') ? TENANT_BRANDING[TENANT.ORG_SLUG] : null;
+  if (!brand || !brand.tsMoveNoticeHtml) return;
+  if (sessionStorage.getItem('eq_ts_move_modal_seen')) return;
+  sessionStorage.setItem('eq_ts_move_modal_seen', '1');
+  if (typeof openModal === 'function') openModal('modal-ts-move');
+}
+
 async function checkAccess() {
   _forceLogoutIfStale();
   if (sessionStorage.getItem(ACCESS_KEY) === '1') {
@@ -583,6 +612,7 @@ async function checkAccess() {
   }
   document.getElementById('access-gate').classList.remove('hidden');
   populateGateDropdown();
+  _maybeShowGateMoveModal();
   return false;
 }
 

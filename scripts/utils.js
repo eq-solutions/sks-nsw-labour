@@ -68,11 +68,13 @@ function closeModal(id) {
   if (el) el.classList.remove('open');
 }
 
-// Close modal on backdrop click
+// Close modal on backdrop click. modal-gate-move / modal-ts-move are
+// deliberate "click OK to continue" gates (v3.10.114) — exempt them so a
+// stray click outside the box can't silently dismiss them.
 document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('open');
-  }
+  if (!e.target.classList.contains('modal-overlay')) return;
+  if (e.target.id === 'modal-gate-move' || e.target.id === 'modal-ts-move') return;
+  e.target.classList.remove('open');
 });
 
 // ── CSV helpers ───────────────────────────────────────────────

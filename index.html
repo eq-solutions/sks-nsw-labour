@@ -639,7 +639,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.10.113
+  EQ Solves — Field  v3.10.114
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.10.76  (Safety: prestart form — remove redundant project fields)
@@ -3807,6 +3807,21 @@
 <!-- Supervisor password modal -->
 <div class="modal-overlay" id="modal-manager-pw"><div class="modal" style="max-width:380px"><div class="modal-header"><h3>🔓 Supervision Access</h3><button class="modal-close" onclick="closeModal('modal-manager-pw')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="manager-name-select" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Password</label><input class="form-input" id="manager-pw-input" type="password" placeholder="Enter supervision password" onkeydown="if(event.key==='Enter') submitManagerPassword()"></div><div id="manager-pw-error" style="display:none;color:#EF4444;font-size:12px;margin-top:6px">Incorrect password or no name selected.</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager-pw')">Cancel</button><button class="btn btn-primary" onclick="submitManagerPassword()">Unlock</button></div></div></div>
 
+<!-- v3.10.114 — SKS retirement notice, login gate. Body is filled from
+     TENANT_BRANDING.sks.gateMoveNoticeHtml by applyTenantBranding() in
+     app-state.js (same copy as the #gate-move-notice banner) and opened
+     once per tab session by _maybeShowGateMoveModal() in auth.js. No ✕ —
+     deliberately must be dismissed with the button, not clicked away
+     (see the modal-gate-move / modal-ts-move exclusion in utils.js). -->
+<div class="modal-overlay" id="modal-gate-move"><div class="modal" style="max-width:420px"><div class="modal-header"><h3>⚠️ Before you continue</h3></div><div class="modal-body" id="modal-gate-move-body" style="text-align:center;line-height:1.6"></div><div class="modal-footer" style="justify-content:center"><button class="btn btn-primary" onclick="closeModal('modal-gate-move')">OK, got it</button></div></div></div>
+
+<!-- v3.10.114 — SKS retirement notice, Timesheets. Shared by the manager
+     grid (#page-timesheets) and staff self-entry (#page-staff-ts) — both
+     already show the same tsMoveNoticeHtml banner, so one modal/flag
+     covers both. Opened by _maybeShowTsMoveModal() in auth.js, called
+     from showPage() below. No ✕ — same reasoning as modal-gate-move. -->
+<div class="modal-overlay" id="modal-ts-move"><div class="modal" style="max-width:420px"><div class="modal-header"><h3>🛑 Before you continue</h3></div><div class="modal-body" id="modal-ts-move-body" style="text-align:center;line-height:1.6"></div><div class="modal-footer" style="justify-content:center"><button class="btn btn-primary" onclick="closeModal('modal-ts-move')">OK, got it</button></div></div></div>
+
 <!-- Batch fill modal -->
 <div class="modal-overlay" id="modal-batch"><div class="modal" style="max-width:640px"><div class="modal-header"><h3>⚡ Batch Fill</h3><button class="modal-close" onclick="closeModal('modal-batch')">✕</button></div><div class="modal-body" style="padding-bottom:8px"><div class="form-group"><label class="form-label">Site / Status Code</label><input class="form-input" id="batch-code" list="site-datalist" placeholder="e.g. STG, A/L" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"><div class="form-hint">Code to apply to selected people on selected days</div></div><div class="form-group"><label class="form-label">Days</label><div style="display:flex;gap:6px;flex-wrap:wrap" id="batch-days"><label class="batch-day-lbl"><input type="checkbox" value="mon"> Mon</label><label class="batch-day-lbl"><input type="checkbox" value="tue"> Tue</label><label class="batch-day-lbl"><input type="checkbox" value="wed"> Wed</label><label class="batch-day-lbl"><input type="checkbox" value="thu"> Thu</label><label class="batch-day-lbl"><input type="checkbox" value="fri"> Fri</label><label class="batch-day-lbl"><input type="checkbox" value="sat"> Sat</label><label class="batch-day-lbl"><input type="checkbox" value="sun"> Sun</label><button class="btn btn-secondary btn-sm" onclick="batchSelectWeekdays()" style="margin-left:8px">Mon–Fri</button><button class="btn btn-secondary btn-sm" onclick="batchSelectAllDays()" style="margin-left:4px" id="batch-days-all-btn">All</button></div></div><div class="form-group" style="margin-bottom:4px"><label class="form-label" style="display:flex;align-items:center;justify-content:space-between"><span>People</span><span style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="batchToggleGroup('Direct')">⚡ Direct</button><button class="btn btn-secondary btn-sm" onclick="batchToggleGroup('Apprentice')">🎓 Apprentices</button><button class="btn btn-secondary btn-sm" onclick="batchToggleGroup('Labour Hire')">🔧 Labour Hire</button><button class="btn btn-secondary btn-sm" onclick="batchSelectAll()">Select All</button><button class="btn btn-secondary btn-sm" onclick="batchClearAll()">Clear</button></span></label><div id="batch-people-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 0"></div></div><div id="batch-selection-count" style="font-size:11px;color:var(--ink-3);padding:4px 0 8px">0 people selected</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-batch')">Cancel</button><button class="btn btn-primary" onclick="runBatchFill()">Apply</button></div></div></div>
 
@@ -4208,6 +4223,14 @@ function showPage(id) {
   // is no-op if scripts/teams.js hasn't loaded yet.
   if (typeof renderTeamPills === 'function') renderTeamPills();
   renderCurrentPage();
+
+  // v3.10.114 — SKS retirement notice: "click OK to continue" gate on
+  // Timesheets (manager grid + staff self-entry). No-op for eq/demo and
+  // a no-op after the first showing this tab session — see
+  // _maybeShowTsMoveModal() in auth.js.
+  if ((id === 'timesheets' || id === 'staff-ts') && typeof _maybeShowTsMoveModal === 'function') {
+    _maybeShowTsMoveModal();
+  }
   // v3.4.66: synthetic SPA pageview. URL doesn't change when navigating
   // between pages in this app — without this hook PostHog/Clarity see
   // everything under '/' and "Top pages" / heatmaps / funnels are useless.

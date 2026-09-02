@@ -1,5 +1,18 @@
 # EQ Solves Field — Changelog
 
+# v3.10.114 — "Click OK to continue" gate on the login screen + Timesheets
+
+**Date:** 2026-09-02
+**Scope:** `index.html`, `styles/base.css`, `scripts/app-state.js`, `scripts/auth.js`, `scripts/utils.js`
+
+The v3.10.112/.113 retirement notices were passive banners — easy to scroll past without reading. Added a blocking modal on top of each, using the same copy, that has to be dismissed with an "OK, got it" button before continuing:
+
+1. **Login gate.** A new `#modal-gate-move` overlay shows `TENANT_BRANDING.sks.gateMoveNoticeHtml` (same text as the existing `#gate-move-notice` banner — one source of truth, populated by `applyTenantBranding()`). Opened by `_maybeShowGateMoveModal()` right after `checkAccess()` reveals the gate for a real login, once per tab session (`sessionStorage`). Sits at `z-index: 9995` — above `#access-gate` (9990) — so it actually renders on top of the login card instead of behind it.
+2. **Timesheets.** A new `#modal-ts-move` overlay shows `TENANT_BRANDING.sks.tsMoveNoticeHtml`, shared by the manager grid and staff self-entry (they already show the same banner text). Opened by `_maybeShowTsMoveModal()` from `showPage()` on entry to either `timesheets` or `staff-ts`, once per tab session.
+3. Both modals are deliberately **not** dismissible by clicking the backdrop or a ✕ — only the button — so the existing global backdrop-click-close handler in `utils.js` now excludes these two IDs.
+
+`eq`/demo tenant unaffected (both new modal bodies stay empty — no brand copy configured for them, mirroring the existing banners). Login and timesheet entry themselves are untouched — message/gate only.
+
 # v3.10.113 — Force-logout everyone on SKS + "don't fill this out" timesheet notice
 
 **Date:** 2026-09-02

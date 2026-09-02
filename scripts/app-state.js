@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.10.113';
+const APP_VERSION = '3.10.114';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -333,6 +333,11 @@ function applyTenantBranding() {
       moveEl.innerHTML = brand.gateMoveNoticeHtml;
       moveEl.style.display = 'block';
     }
+    // Same copy, reinforced as a "click OK to continue" modal — a banner
+    // is easy to scroll past without reading. Shown once per tab session
+    // by _maybeShowGateMoveModal() in auth.js.
+    const moveModalBody = document.getElementById('modal-gate-move-body');
+    if (moveModalBody) moveModalBody.innerHTML = brand.gateMoveNoticeHtml;
   }
 
   // "Don't fill this out — moved to EQ Field" stop notice on both
@@ -345,6 +350,11 @@ function applyTenantBranding() {
         el.style.display = 'block';
       }
     });
+    // Same copy, reinforced as a "click OK to continue" modal, shown once
+    // per tab session by _maybeShowTsMoveModal() in auth.js. Both timesheet
+    // surfaces share one flag/modal — same message either way.
+    const tsModalBody = document.getElementById('modal-ts-move-body');
+    if (tsModalBody) tsModalBody.innerHTML = brand.tsMoveNoticeHtml;
   }
 
   // White gate card styling is handled via body.tenant-sks CSS in base.css.
