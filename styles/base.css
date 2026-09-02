@@ -827,6 +827,10 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   padding: 20px;
 }
 #access-gate.hidden { display: none !important; }
+/* "OK to continue" gate notice must sit above #access-gate (z-index 9990),
+   not the default .modal-overlay z-index (200), or it renders behind the
+   login card and is invisible. */
+#modal-gate-move { z-index: 9995; }
 .gate-card {
   background: rgba(255,255,255,.05);
   border: 1px solid rgba(255,255,255,.1);
