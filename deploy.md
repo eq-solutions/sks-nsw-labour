@@ -158,4 +158,4 @@ scripts/
 
 ## Security documentation
 
-See `EQ-Field-Security-Architecture.html` for the full security architecture document, suitable for SKS Technologies senior management.
+The April 2026 security architecture paper (EQ Solutions-authored, v1.1) is archived at `docs/archive/EQ-Field-Security-Architecture.html` — point-in-time only, see `docs/archive/README.md`. Live auth/CORS truth is in code (`netlify/functions/*`, `netlify.toml`).
